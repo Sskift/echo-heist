@@ -1,35 +1,12 @@
-import { expect, test, type Page } from '@playwright/test';
-
-// Control the animation clock in the test harness only. Input still travels
-// through real browser keyboard events; production code exposes no test hooks.
-async function clock(page: Page) {
-  await page.addInitScript(() => {
-    let callbacks: FrameRequestCallback[] = [];
-    let now = 0;
-    window.requestAnimationFrame = callback => { callbacks.push(callback); return callbacks.length; };
-    (window as unknown as { advance: (frames: number) => void }).advance = frames => {
-      if (!now) now = performance.now();
-      for (let frame = 0; frame < frames; frame++) {
-        now += 1000 / 60;
-        const pending = callbacks; callbacks = [];
-        pending.forEach(callback => callback(now));
-      }
-    };
-  });
-}
-async function advance(page: Page, frames = 1) {
-  await page.evaluate(count => (window as unknown as { advance: (n: number) => void }).advance(count), frames);
-}
-async function move(page: Page, key: string, frames: number) {
-  await page.keyboard.down(key); await advance(page, frames); await page.keyboard.up(key);
-}
+import { expect, test } from '@playwright/test';
+import { clock, advance, move } from './helpers.ts';
 
 test('desktop renders offline with no runtime errors; keyboard recording, pause and replay work', async ({ page }) => {
   const errors: string[] = [];
   const external: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('request', request => { if (!request.url().startsWith('http://127.0.0.1:5173')) external.push(request.url()); });
-  await clock(page); await page.goto('/'); await advance(page);
+  await clock(page); await page.goto('/?mode=training'); await advance(page);
   await expect(page.getByRole('heading', { name: '你的同伙，是过去的你。' })).toBeVisible();
   const canvasHasPixels = await page.locator('canvas').evaluate(canvas => {
     const c = canvas as HTMLCanvasElement;
@@ -63,7 +40,7 @@ test('desktop renders offline with no runtime errors; keyboard recording, pause 
 });
 
 test('help modal pauses and resumes; level selection updates the mission', async ({ page }) => {
-  await clock(page); await page.goto('/'); await advance(page);
+  await clock(page); await page.goto('/?mode=training'); await advance(page);
   await page.locator('#overlay-action').click(); await advance(page, 60);
   await page.locator('#help-button').click(); await advance(page);
   await expect(page.locator('#help-dialog')).toBeVisible();
@@ -81,7 +58,7 @@ test('help modal pauses and resumes; level selection updates the mission', async
 });
 
 test('a complete keyboard heist wins, saves the best result and advances to the next level', async ({ page }) => {
-  await clock(page); await page.goto('/'); await advance(page);
+  await clock(page); await page.goto('/?mode=training'); await advance(page);
   await page.locator('#overlay-action').click(); await advance(page);
   await move(page, 'd', 43); await move(page, 'w', 77);
   await page.keyboard.press('r'); await advance(page);
@@ -100,7 +77,7 @@ test('a complete keyboard heist wins, saves the best result and advances to the 
 test('mobile layout has no horizontal overflow and exposes touch controls', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
   const page = await context.newPage();
-  await page.goto('/');
+  await page.goto('/?mode=training');
   const dimensions = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth }));
   expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.width);
   await expect(page.locator('.touch-controls')).toBeVisible();
@@ -110,7 +87,7 @@ test('mobile layout has no horizontal overflow and exposes touch controls', asyn
 });
 
 test('rerecord, cancel and undo preserve teammates and only persist committed routes', async ({ page }) => {
-  await clock(page); await page.goto('/'); await advance(page);
+  await clock(page); await page.goto('/?mode=training'); await advance(page);
   await page.locator('#overlay-action').click(); await advance(page);
   await move(page, 'd', 43); await move(page, 'w', 77);
   await page.keyboard.press('r'); await advance(page);
@@ -142,7 +119,7 @@ test('rerecord, cancel and undo preserve teammates and only persist committed ro
 });
 
 test('plans survive reload and level switching; uncommitted edits retain the old save', async ({ page }) => {
-  await clock(page); await page.goto('/'); await advance(page);
+  await clock(page); await page.goto('/?mode=training'); await advance(page);
   await page.locator('#overlay-action').click(); await advance(page);
   await move(page, 'd', 25); await page.keyboard.press('r'); await advance(page);
   const original = await page.evaluate(() => localStorage.getItem('echo-heist-plans-v1'));
@@ -167,7 +144,7 @@ test('plans survive reload and level switching; uncommitted edits retain the old
 });
 
 test('holding Shift advances the whole simulation at 3x and releases at the loop boundary', async ({ page }) => {
-  await clock(page); await page.goto('/'); await advance(page);
+  await clock(page); await page.goto('/?mode=training'); await advance(page);
   const remaining = () => page.locator('.clock').innerText().then(text => Number(text.replace(/\s|s/g, '')));
   await page.keyboard.down('Shift'); await advance(page, 20);
   await expect(page.locator('#overlay')).toBeVisible();
@@ -198,7 +175,7 @@ test('holding Shift advances the whole simulation at 3x and releases at the loop
 });
 
 test('the fast-forward button works with pointer and keyboard without leaving a stuck hold', async ({ page }) => {
-  await clock(page); await page.goto('/'); await advance(page);
+  await clock(page); await page.goto('/?mode=training'); await advance(page);
   await page.locator('#overlay-action').click(); await advance(page);
   await page.locator('#fast-forward').hover(); await page.mouse.down(); await advance(page, 10);
   await expect(page.locator('#fast-forward')).toHaveAttribute('aria-pressed', 'true');
@@ -218,7 +195,7 @@ test('corrupt or unwritable local storage does not prevent recording a plan', as
     localStorage.setItem('echo-heist-plans-v1', '{broken');
     Storage.prototype.setItem = () => { throw new DOMException('Quota exceeded', 'QuotaExceededError'); };
   });
-  await page.goto('/'); await advance(page);
+  await page.goto('/?mode=training'); await advance(page);
   await page.locator('#overlay-action').click(); await advance(page);
   await move(page, 'd', 20); await page.keyboard.press('r'); await advance(page);
   await expect(page.locator('#echo-count')).toHaveText('1 / 3');
@@ -228,7 +205,7 @@ test('corrupt or unwritable local storage does not prevent recording a plan', as
 
 test('recorded echoes and edit controls remain usable at mobile width', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await clock(page); await page.goto('/'); await advance(page);
+  await clock(page); await page.goto('/?mode=training'); await advance(page);
   await page.locator('#overlay-action').click(); await advance(page);
   await move(page, 'd', 30); await page.keyboard.press('r'); await advance(page);
   await expect(page.getByRole('button', { name: '重录回声 1', exact: true })).toBeVisible();

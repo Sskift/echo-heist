@@ -8,9 +8,13 @@ export const MAX_ECHOES = 3;
 export const ECHO_COLORS = ['#8ed4ed', '#d2a0ef', '#efa886'];
 
 export type Point = { x: number; y: number };
-export type Door = { id: string; x: number; y: number; w: number; h: number; plate: string };
+export type Power = { id: string; on: boolean };
+export type Door = { id: string; x: number; y: number; w: number; h: number; plate?: string; power?: Power; window?: [number, number]; authorization?: string };
 export type Plate = Point & { id: string };
-export type GuardDefinition = { route: Point[]; speed: number; range: number };
+export type GuardDefinition = { route: Point[]; speed: number; range: number; kind?: 'sentry' | 'patrol'; power?: Power };
+export type Circuit = Point & { id: string; initial: boolean };
+export type Terminal = Point & { id: string; kind: 'source' | 'relay' | 'lock'; authorization?: string };
+export type Suppressor = { id: string; x: number; y: number; w: number; h: number; power?: Power };
 export type Level = {
   id: string;
   title: string;
@@ -25,6 +29,14 @@ export type Level = {
   spawn: Point;
   loot: Point;
   par: number;
+  exit?: Point;
+  objective?: 'collect' | 'reach';
+  objectiveLabel?: string;
+  lootLabel?: string;
+  district?: string;
+  circuits?: Circuit[];
+  terminals?: Terminal[];
+  suppressors?: Suppressor[];
 };
 
 function walls(doubleDoor: boolean): Point[] {

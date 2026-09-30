@@ -1,10 +1,18 @@
 import './style.css';
 import './planning.css';
 import { Game } from './engine.ts';
-import { ECHO_COLORS, FPS, LEVELS, LOOP_SECONDS, MAX_ECHOES } from './levels.ts';
+import { ECHO_COLORS, FPS, LEVELS, LOOP_SECONDS, MAX_ECHOES, type Level } from './levels.ts';
 import { Renderer } from './render.ts';
 import { Sound } from './audio.ts';
 import { decodePlan, encodePlan, PLAN_KEY, type SavedPlan } from './plans.ts';
+import { CAMPAIGN_LEVELS, MISSIONS } from './campaign-content.ts';
+import { Campaign, CAMPAIGN_KEY } from './campaign.ts';
+import { CampaignUI } from './campaign-ui.ts';
+
+const ALL_LEVELS = [...LEVELS, ...CAMPAIGN_LEVELS];
+let campaign: Campaign;
+try { campaign = new Campaign(JSON.parse(localStorage.getItem(CAMPAIGN_KEY) ?? 'null')); }
+catch { campaign = new Campaign(); }
 
 const icons = {
   echo: '<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M6 6h20v6H12v4h12v5H12v5h14" stroke="currentColor" stroke-width="3"/><path d="M2 11v19h19" stroke="currentColor" opacity=".4" stroke-width="2"/></svg>',
@@ -19,7 +27,7 @@ let saved: Record<string, { echoes: number; seconds: number }> = {};
 try {
   const raw = JSON.parse(localStorage.getItem('echo-heist-progress-v1') ?? '{}');
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-    for (const level of LEVELS) {
+    for (const level of ALL_LEVELS) {
       const record = raw[level.id];
       if (record && Number.isFinite(record.echoes) && Number.isFinite(record.seconds)) saved[level.id] = record;
     }
@@ -30,7 +38,7 @@ const plans: Record<string, SavedPlan> = {};
 try {
   const raw: unknown = JSON.parse(localStorage.getItem(PLAN_KEY) ?? '{}');
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-    for (const level of LEVELS) {
+    for (const level of ALL_LEVELS) {
       const echoes = decodePlan((raw as Record<string, unknown>)[level.id], level.id);
       if (echoes) plans[level.id] = encodePlan(level.id, echoes);
     }
@@ -78,6 +86,9 @@ $('#app').innerHTML = `
 `;
 
 let levelIndex = 0;
+let campaignMode = false;
+let previewGame: Game | null = null;
+let previewWasRunning = false;
 let game = new Game(LEVELS[0]);
 const renderer = new Renderer($('#game-canvas'));
 const sound = new Sound();
@@ -91,6 +102,53 @@ let helpWasRunning = false;
 let initialized = false;
 let pointerFastForward = false;
 const dialog = $<HTMLDialogElement>('#help-dialog');
+const campaignUI = new CampaignUI(campaign, {
+  mission: id => openMission(id),
+  stage: index => { if (campaign.returnTo(index)) { saveCampaign(); loadLevel(campaign.stage.level); } },
+  training: () => campaignMode ? setLevel(0) : openMission(campaign.data.selected, false),
+  preview: togglePreview,
+  scrub: frame => { previewGame = game.previewAt(frame); refreshUI(); },
+  delay: (index, delta) => {
+    if (game.setDelay(index, (game.echoes[index]?.delay ?? 0) + delta)) {
+      previewGame = null; clearInput(); accumulator = 0; uiKey = ''; overlayKey = '';
+      persistPlan(); refreshUI();
+    }
+  },
+});
+$('#mission-board').addEventListener('toggle', () => {
+  if ($<HTMLDetailsElement>('#mission-board').open && game.status === 'running') { game.togglePause(); clearInput(); refreshUI(); }
+});
+$('#touch-lure').insertAdjacentHTML('afterend', '<button class="touch-lure" id="touch-interact">E 操作设备</button>');
+$('.clock-panel').insertAdjacentElement('afterend', $('.mission-actions'));
+$('.version').textContent = 'VOL. 03';
+$('.manual-steps').insertAdjacentHTML('beforeend', '<li><strong>安排一场完整劫案</strong><p>行动档案中的序章会逐步解锁。每段成功后保存安全锚点，下一段重新录制同伙。点击阶段名称可以回退；之后的阶段需要重做。</p></li><li><strong>调整时序，先看结果</strong><p>回声下方的加减按钮以 0.25 秒调整出场；按 P 预演已保存的回声，拖动时间检查门禁与暴露。E 操作电源和凭据终端，录制会保留这次操作请求。</p></li>');
+
+function saveCampaign() {
+  try { localStorage.setItem(CAMPAIGN_KEY, JSON.stringify(campaign.export())); campaignUI.checkpointSaved(true); }
+  catch { campaignUI.checkpointSaved(false); }
+}
+
+function openMission(id: string, replay = true) {
+  if (!campaign.select(id)) return;
+  if (replay && campaign.cleared() === campaign.mission.stages.length) campaign.returnTo(0);
+  campaignMode = true; levelIndex = -1;
+  loadLevel(campaign.stage.level); saveCampaign();
+}
+
+function togglePreview() {
+  if (game.editingIndex !== null) return;
+  if (previewGame) {
+    previewGame = null;
+    if (previewWasRunning && game.status === 'paused') game.togglePause();
+    previewWasRunning = false; overlayKey = ''; uiKey = ''; refreshUI(); focusGame();
+  } else {
+    previewWasRunning = game.status === 'running';
+    if (previewWasRunning) game.togglePause();
+    clearInput(); previewGame = game.previewAt(0);
+    renderer.rewindFlash = 0; $('#toast').classList.remove('visible');
+    $<HTMLInputElement>('#preview-frame').value = '0'; refreshUI();
+  }
+}
 
 function clearInput() { keys.clear(); pointerFastForward = false; }
 function isFastForwarding() { return game.status === 'running' && (pointerFastForward || keys.has('ShiftLeft') || keys.has('ShiftRight')); }
@@ -113,9 +171,15 @@ function toast(text: string) {
 function focusGame() { $('#game-canvas').focus({ preventScroll: true }); }
 
 function setLevel(index: number) {
-  if (initialized) persistPlan();
+  campaignMode = false;
   levelIndex = index;
-  game = new Game(LEVELS[index]);
+  loadLevel(LEVELS[index]);
+}
+
+function loadLevel(level: Level) {
+  if (initialized) persistPlan();
+  previewGame = null; previewWasRunning = false;
+  game = new Game(level);
   const restored = decodePlan(plans[game.level.id], game.level.id);
   if (restored) game.restorePlan(restored);
   $('#plan-status').textContent = restored?.length ? `已恢复 ${restored.length} 条回声` : '录制后自动保存';
@@ -123,8 +187,9 @@ function setLevel(index: number) {
   clearInput(); accumulator = 0;
   uiKey = ''; overlayKey = '';
   $('#toast').classList.remove('visible');
-  const level = game.level;
   $('#mission-number').textContent = level.id;
+  if (campaignMode) $('#mission-number').textContent = `${campaign.mission.stages.findIndex(s => s.level.id === level.id) + 1} / ${campaign.mission.stages.length}`;
+  $('#mission-number').parentElement!.lastChild!.textContent = campaignMode ? '' : ' / 03';
   $('#mission-title').textContent = level.title;
   $('#mission-subtitle').textContent = level.subtitle;
   $('#mission-description').textContent = level.description;
@@ -132,8 +197,8 @@ function setLevel(index: number) {
   $('#map-code').textContent = `ANNEX_${level.id}`;
   $<HTMLDetailsElement>('.hint').open = false;
   document.querySelectorAll<HTMLButtonElement>('.level-tab').forEach((tab, i) => {
-    tab.classList.toggle('selected', i === index);
-    tab.setAttribute('aria-current', i === index ? 'step' : 'false');
+    tab.classList.toggle('selected', !campaignMode && i === levelIndex);
+    tab.setAttribute('aria-current', !campaignMode && i === levelIndex ? 'step' : 'false');
   });
   refreshUI();
 }
@@ -144,7 +209,15 @@ function primaryAction() {
   else if (game.status === 'paused') game.togglePause();
   else if (game.status === 'caught') game.restart();
   else if (game.status === 'won') {
-    if (levelIndex < LEVELS.length - 1) setLevel(levelIndex + 1);
+    if (campaignMode) {
+      if (campaign.cleared() < campaign.mission.stages.length) loadLevel(campaign.stage.level);
+      else {
+        const next = MISSIONS[MISSIONS.indexOf(campaign.mission) + 1];
+        if (next && next.chapter === campaign.mission.chapter) openMission(next.id);
+        else { campaign.returnTo(0); loadLevel(campaign.stage.level); saveCampaign(); }
+      }
+    }
+    else if (levelIndex < LEVELS.length - 1) setLevel(levelIndex + 1);
     else setLevel(0);
   }
   accumulator = 0;
@@ -163,7 +236,9 @@ function record() {
 }
 
 function refreshUI() {
-  const key = `${game.status}:${game.editingIndex}:${game.canUndo}:${game.echoes.length}:${game.echoes.map(e => `${e.colorIndex}-${e.frames.length}`).join(',')}:${game.attempts}:${game.hasLoot}:${[...game.openDoors].join('')}`;
+  campaignUI.render(game, campaignMode, previewGame);
+  $('.game-layout').classList.toggle('previewing', !!previewGame);
+  const key = `${game.status}:${game.editingIndex}:${game.canUndo}:${game.echoes.length}:${game.echoes.map(e => `${e.colorIndex}-${e.frames.length}-${e.delay ?? 0}`).join(',')}:${game.attempts}:${game.hasLoot}:${[...game.openDoors].join('')}`;
   if (uiKey !== key) {
     uiKey = key;
     $('#loop-number').textContent = `TAKE ${String(game.attempts).padStart(2, '0')}`;
@@ -178,11 +253,21 @@ function refreshUI() {
       const echo = game.echoes[i];
       return `<div class="track ${game.editingIndex === i ? 'editing-track' : ''}"><span class="track-label" style="color:${echo ? ECHO_COLORS[echo.colorIndex] : '#62766a'}">E${i + 1}</span><div class="track-line" style="--echo-color:${echo ? ECHO_COLORS[echo.colorIndex] : '#526153'}">${echo ? `<span class="recorded-segment" style="width:${echo.frames.length / FPS / LOOP_SECONDS * 100}%"></span><span class="hold-segment" style="left:${echo.frames.length / FPS / LOOP_SECONDS * 100}%"></span>` : '<span class="empty-track"></span>'}${game.editingIndex === i ? '<span class="draft-segment"></span>' : ''}<span class="track-playhead"></span></div></div>`;
     }).join('');
+    document.querySelectorAll<HTMLElement>('.track').forEach((track, i) => {
+      const echo = game.echoes[i];
+      if (!echo) return;
+      const start = (echo.delay ?? 0) / FPS / LOOP_SECONDS * 100;
+      const width = Math.min(100 - start, echo.frames.length / FPS / LOOP_SECONDS * 100);
+      const segment = track.querySelector<HTMLElement>('.recorded-segment')!;
+      segment.style.left = `${start}%`; segment.style.width = `${width}%`;
+      track.querySelector<HTMLElement>('.hold-segment')!.style.left = `${start + width}%`;
+    });
     const allDoors = game.openDoors.size === game.level.doors.length;
     $('#objective-doors').classList.toggle('done', allDoors);
     $('#objective-loot').classList.toggle('done', game.hasLoot);
     $('#door-status').textContent = allDoors ? '所有通道已打开' : `${game.openDoors.size} / ${game.level.doors.length} 道门已开启`;
-    $('#loot-status').textContent = game.editingIndex !== null ? '重录中：这一轮只录路线' : game.status === 'won' ? '安全撤离，行动完成' : game.hasLoot ? '已拿到藏品，返回左下角！' : '藏品位于右上角';
+    $('#loot-status').textContent = game.editingIndex !== null ? '重录中：这一轮只录路线' : game.status === 'won' ? '安全撤离，行动完成' : game.level.objectiveLabel ? (game.hasLoot ? '目标已取得，前往标记的撤离点' : game.level.objectiveLabel) : game.hasLoot ? '已拿到藏品，返回左下角！' : '藏品位于右上角';
+    $('#objective-loot > div').firstChild!.textContent = game.level.objective === 'reach' ? '抵达安全锚点' : '取得目标，安全撤离';
     const button = $<HTMLButtonElement>('#record-button');
     button.disabled = !['ready', 'running'].includes(game.status);
     button.querySelector('span')!.textContent = game.editingIndex !== null ? (game.status === 'ready' ? '开始重录' : '保存新路线') : game.status === 'ready' ? '开始行动' : '留下回声';
@@ -195,6 +280,9 @@ function refreshUI() {
     $('#edit-label').textContent = game.editingIndex === null ? '' : `重录回声 0${game.editingIndex + 1} · R 保存新路线`;
   }
   const fast = isFastForwarding();
+  if (previewGame) document.querySelectorAll<HTMLButtonElement>('#record-button, #retry-button, #undo-button, #reset-button, [data-delete], [data-rerecord]').forEach(button => { button.disabled = true; });
+  $<HTMLButtonElement>('#pause-button').disabled = !!previewGame;
+  $<HTMLButtonElement>('#fast-forward').disabled = !!previewGame;
   $('#speed-indicator').hidden = !fast;
   $('#fast-forward').classList.toggle('active', fast);
   $('#fast-forward').setAttribute('aria-pressed', String(fast));
@@ -204,15 +292,25 @@ function refreshUI() {
   });
   const draft = document.querySelector<HTMLElement>('.draft-segment');
   if (draft) draft.style.width = `${game.seconds / LOOP_SECONDS * 100}%`;
-  const seconds = game.remaining.toFixed(2).split('.');
+  const display = previewGame ?? game;
+  $('.clock-top > span:first-child').textContent = previewGame ? '预演剩余 · 只读' : '本轮剩余';
+  const seconds = display.remaining.toFixed(2).split('.');
   $('#seconds').textContent = seconds[0].padStart(2, '0');
   $('#fraction').textContent = `.${seconds[1]}`;
-  $('#clock-fill').style.transform = `scaleX(${game.remaining / LOOP_SECONDS})`;
+  $('#clock-fill').style.transform = `scaleX(${display.remaining / LOOP_SECONDS})`;
   $('.clock-panel').classList.toggle('urgent', game.status === 'running' && game.remaining <= 3);
   document.querySelectorAll<HTMLElement>('.track-playhead').forEach(el => el.style.left = `${game.seconds / LOOP_SECONDS * 100}%`);
 
-  if (overlayKey !== `${levelIndex}:${game.status}:${game.editingIndex}:${game.lastMessage}`) {
-    overlayKey = `${levelIndex}:${game.status}:${game.editingIndex}:${game.lastMessage}`;
+  if (previewGame) {
+    $('#overlay').hidden = true;
+    $('#record-label').textContent = 'REHEARSAL';
+    $('#door-status').textContent = previewGame.openDoors.size === previewGame.level.doors.length ? '所有通道已打开' : `${previewGame.openDoors.size} / ${previewGame.level.doors.length} 道门已开启`;
+    document.querySelectorAll<HTMLElement>('[data-echo-state]').forEach(el => { el.textContent = previewGame!.echoActivity(Number(el.dataset.echoState)); });
+    document.querySelectorAll<HTMLElement>('.track-playhead').forEach(el => el.style.left = `${previewGame!.seconds / LOOP_SECONDS * 100}%`);
+    return;
+  }
+  if (overlayKey !== `${game.level.id}:${game.status}:${game.editingIndex}:${game.lastMessage}`) {
+    overlayKey = `${game.level.id}:${game.status}:${game.editingIndex}:${game.lastMessage}`;
     const overlay = $('#overlay');
     overlay.hidden = game.status === 'running';
     if (game.status === 'running') return;
@@ -240,6 +338,16 @@ function refreshUI() {
       copy = `${game.echoes.length + 1} 个你 · ${game.seconds.toFixed(2)} 秒 · 藏品已安全撤离`;
       action = levelIndex === LEVELS.length - 1 ? '再来一场' : '下一场行动';
       extra = `<div class="win-stamp">${game.echoes.length <= game.level.par ? '◆ MASTER PLAN' : '◆ HEIST COMPLETE'}</div>`;
+      if (campaignMode) {
+        const mission = campaign.mission, stageIndex = mission.stages.findIndex(s => s.level.id === game.level.id);
+        const final = stageIndex === mission.stages.length - 1;
+        eyebrow = final ? 'EVIDENCE SECURED' : 'SAFE ANCHOR';
+        title = final ? `${mission.title} · 完成` : '这一段，已经安全了。';
+        copy = mission.stages[stageIndex].result;
+        const next = MISSIONS[MISSIONS.indexOf(mission) + 1];
+        action = !final ? '进入下一行动区' : next?.chapter === mission.chapter ? `下一任务：${next.title}` : '重玩这场行动';
+        extra = `<div class="win-stamp">${final ? `◇ ${mission.evidence}` : `✓ 安全锚点 ${stageIndex + 1} / ${mission.stages.length}`}</div>`;
+      }
     }
     $('#overlay-card').innerHTML = `<p class="overlay-eyebrow">${eyebrow}</p><h2>${title}</h2><p class="overlay-copy">${copy}</p>${extra}<button class="primary-button" id="overlay-action">${action} ${icons.arrow}</button>`;
     $('#overlay-action').addEventListener('click', primaryAction);
@@ -315,10 +423,12 @@ $('#close-help').addEventListener('click', closeHelp);
 $('.dialog-close').addEventListener('click', closeHelp);
 dialog.addEventListener('close', () => { if (helpWasRunning && game.status === 'paused') game.togglePause(); focusGame(); });
 
-const gameKeys = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyR', 'KeyZ', 'ShiftLeft', 'ShiftRight', 'Enter', 'Escape'];
+const gameKeys = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyE', 'KeyR', 'KeyZ', 'ShiftLeft', 'ShiftRight', 'Enter', 'Escape'];
 window.addEventListener('keydown', event => {
   if (dialog.open) return;
   if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.code === 'KeyP' || (previewGame && event.code === 'Escape')) { event.preventDefault(); if (!event.repeat) togglePreview(); return; }
+  if (previewGame) return;
   if (event.key === '?') { event.preventDefault(); showHelp(); return; }
   const onControl = event.target instanceof HTMLElement && event.target.closest('button, summary, a');
   if (onControl && ['Space', 'Enter'].includes(event.code)) return;
@@ -344,9 +454,10 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) pause
 $('#game-canvas').addEventListener('pointerdown', () => { sound.unlock(); focusGame(); });
 
 const touchCodes: Record<string, string> = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
-for (const button of document.querySelectorAll<HTMLButtonElement>('[data-direction], #touch-lure')) {
-  const code = button.id === 'touch-lure' ? 'Space' : touchCodes[button.dataset.direction!];
+for (const button of document.querySelectorAll<HTMLButtonElement>('[data-direction], #touch-lure, #touch-interact')) {
+  const code = button.id === 'touch-interact' ? 'KeyE' : button.id === 'touch-lure' ? 'Space' : touchCodes[button.dataset.direction!];
   button.addEventListener('pointerdown', event => {
+    if (previewGame) return;
     event.preventDefault(); button.setPointerCapture(event.pointerId); keys.add(code); sound.unlock();
     if (game.status === 'ready') game.start();
   });
@@ -364,7 +475,9 @@ function loop(now: number) {
         x: Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')),
         y: Number(keys.has('KeyS') || keys.has('ArrowDown')) - Number(keys.has('KeyW') || keys.has('ArrowUp')),
         lure: keys.has('Space'),
+        interact: keys.has('KeyE'),
       });
+      if (game.player.intent && game.signals.length) toast(game.signals.at(-1)!.text);
       accumulator -= 1 / FPS;
       if (game.status !== 'running' || game.frame < before) { accumulator = 0; clearInput(); break; }
     }
@@ -376,19 +489,21 @@ function loop(now: number) {
     if (event === 'loot') toast('藏品到手。回到左下角撤离点！');
     if (event === 'won' || event === 'caught') $('#toast').classList.remove('visible');
     if (event === 'won') {
+      if (campaignMode && campaign.commit(game)) saveCampaign();
       const record = { echoes: game.echoes.length, seconds: game.seconds };
       const previous = saved[game.level.id];
       if (!previous || record.echoes < previous.echoes || (record.echoes === previous.echoes && record.seconds < previous.seconds)) {
         saved[game.level.id] = record;
         try { localStorage.setItem('echo-heist-progress-v1', JSON.stringify(saved)); } catch { /* Best-effort local progress. */ }
       }
-      $(`[data-level="${levelIndex}"] .level-check`).textContent = '✓';
+      if (!campaignMode) $(`[data-level="${levelIndex}"] .level-check`).textContent = '✓';
     }
   }
-  renderer.draw(game, now / 1000);
+  renderer.draw(previewGame ?? game, now / 1000);
   refreshUI();
   requestAnimationFrame(loop);
 }
 
-setLevel(0);
+if (new URLSearchParams(location.search).get('mode') === 'training') setLevel(0);
+else openMission(campaign.data.selected, false);
 requestAnimationFrame(loop);

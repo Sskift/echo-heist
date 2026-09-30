@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "design-budget-not-runtime-content",
-  "status": "proposed",
+  "status": "in-development",
   "baseline": {
     "version": "0.2.0",
     "commit": "b7d00ef",
@@ -32,7 +32,10 @@
           "targetMinutes": 3,
           "requiredActionZones": 1,
           "mandatory": true,
-          "implemented": false
+          "implemented": true,
+          "runtimeStageIds": [
+            "C0-1-a"
+          ]
         },
         {
           "id": "C0-2",
@@ -42,7 +45,10 @@
           "targetMinutes": 4,
           "requiredActionZones": 1,
           "mandatory": true,
-          "implemented": false
+          "implemented": true,
+          "runtimeStageIds": [
+            "C0-2-a"
+          ]
         },
         {
           "id": "C0-3",
@@ -52,7 +58,10 @@
           "targetMinutes": 6,
           "requiredActionZones": 1,
           "mandatory": true,
-          "implemented": false
+          "implemented": true,
+          "runtimeStageIds": [
+            "C0-3-a"
+          ]
         },
         {
           "id": "C0-4",
@@ -62,7 +71,11 @@
           "targetMinutes": 8,
           "requiredActionZones": 2,
           "mandatory": true,
-          "implemented": false
+          "implemented": true,
+          "runtimeStageIds": [
+            "C0-4-a",
+            "C0-4-b"
+          ]
         },
         {
           "id": "C0-5",
@@ -72,7 +85,11 @@
           "targetMinutes": 10,
           "requiredActionZones": 2,
           "mandatory": true,
-          "implemented": false
+          "implemented": true,
+          "runtimeStageIds": [
+            "C0-5-a",
+            "C0-5-b"
+          ]
         },
         {
           "id": "C0-6",
@@ -82,7 +99,12 @@
           "targetMinutes": 14,
           "requiredActionZones": 3,
           "mandatory": true,
-          "implemented": false
+          "implemented": true,
+          "runtimeStageIds": [
+            "C0-6-a",
+            "C0-6-b",
+            "C0-6-c"
+          ]
         }
       ]
     },
@@ -562,5 +584,12 @@
         }
       ]
     }
-  ]
+  ],
+  "implementation": {
+    "version": "0.3.0",
+    "mainMissions": 6,
+    "mainActionZones": 10,
+    "mechanicProbes": 4,
+    "mainDurationMeasured": false
+  }
 }
