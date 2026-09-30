@@ -22,6 +22,32 @@ async function scrub(page: Page, frame: number) {
 }
 async function recordA(page: Page) { await move(page, 'd', 43); await move(page, 'w', 69); await record(page); }
 
+for (const final of [false, true]) test(`${final ? 'finale' : 'serial'} Q control is recorded before B, with time to save and adjust the switching time`, async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await load(page, final ? 'C5-6' : 'C5-3', final ? 1 : 2);
+  await move(page, 'd', 26); await move(page, 'w', 69); await record(page);
+  // Record Q before B exists. Restore half a second later than the nominal
+  // hint, then take a full second to save instead of racing the alert meter.
+  await operate(page); await advance(page, (final ? 250 : 210) + 26); await operate(page); await advance(page, 60); await record(page);
+  // Q is already handled by echo 2. Wait out of the tracker's view, then cross.
+  await move(page, 'd', 43); await advance(page, 60); await move(page, 'd', 69); await advance(page, 60); await record(page);
+  await expect(page.locator('#echo-count')).toHaveText('3 / 3');
+  await page.reload(); await advance(page); await start(page);
+  await move(page, 'd', 43); await advance(page, 60); await move(page, 'd', 77); await move(page, 'w', 34);
+  if (final) await operate(page);
+  await advance(page, final ? 130 : 140);
+  await move(page, 'd', 69); await move(page, 'w', 34); await move(page, 'd', 9); await move(page, 's', 69);
+  await expect(page.locator('#overlay')).toBeVisible();
+  await expect(page.locator('#overlay-card h2')).toHaveText(final ? '这一段，已经安全了。' : '给幽灵留条路 · 完成');
+  await expect(page.locator('#operation-log')).not.toContainText('相反请求');
+  const plans = await page.evaluate(() => JSON.parse(localStorage.getItem('echo-heist-plans-v1')!));
+  const zone = final ? 'C5-6-b' : 'C5-3-c';
+  expect(plans[zone].echoes[1].frames.flatMap((f: { intent?: unknown }) => f.intent ? [f.intent] : [])).toEqual([{ type: 'circuit', id: 'Q', on: false }, { type: 'circuit', id: 'Q', on: true }]);
+  expect(plans[zone].echoes[2].frames.some((f: { intent?: unknown }) => f.intent)).toBe(false);
+  await page.screenshot({ path: `.local/timing-${zone}.png`, fullPage: true });
+  expect(errors).toEqual([]);
+});
+
 test('the suppression pulse visibly releases the held echo, then a keyboard run saves the next checkpoint', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await load(page, 'C5-1'); await move(page, 'd', 43); await move(page, 'w', 34); await record(page);

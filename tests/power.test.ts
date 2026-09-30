@@ -9,6 +9,19 @@ const idle = { x: 0, y: 0, lure: false };
 const run = (game: Game, n: number, input = idle) => { for (let i = 0; i < n; i++) game.step(input); };
 const find = (id: string) => CHAPTER_THREE.flatMap(m => m.stages).find(s => s.level.id === id)!;
 
+test('C3-2-b cuts the shared camera before the alert boundary while retaining the return window', () => {
+  const stage = find('C3-2-b');
+  for (let offset = -6; offset <= 6; offset++) {
+    const witness = structuredClone(stage.witness);
+    const cut = witness[2]; assert.ok('wait' in cut); cut.wait += offset;
+    const win = playWitness({ ...stage, witness });
+    assert.ok(win.hasLoot); assert.equal(win.circuits.get('P'), true);
+  }
+  // The old hint placed this cut at the alert boundary: two extra frames lost.
+  const oldTiming = structuredClone(stage.witness); oldTiming[2] = { wait: 147 };
+  assert.throws(() => playWitness({ ...stage, witness: oldTiming }), /caught.*CAM/);
+});
+
 test('lighting changes vision immediately but darkness retains near vision and hearing', () => {
   const map = level('lighting-unit', '', { spawn: p(400, 304), circuits: [{ id: 'L', x: 400, y: 304, initial: true }], guards: [{ id: 'A', route: [p(560, 304)], facing: Math.PI, speed: 80, range: 260, hearing: 500, lighting: { id: 'L', on: true, darkRange: 80 } }] });
   const lit = new Game(map); lit.start(); run(lit, 40); assert.equal(lit.status, 'caught');

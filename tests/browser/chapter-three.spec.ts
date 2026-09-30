@@ -47,6 +47,18 @@ test('the recorded on-off plan powers both door and camera, previews determinist
   await expect(page.locator('#overlay-card h2')).toHaveText('这一段，已经安全了。');
 });
 
+test('the north-entry route still extracts after recording the camera cut a tenth of a second late', async ({ page }) => {
+  await load(page, 'C3-2', 1);
+  await move(page, 'd', 43); await operate(page); await advance(page, 139); await operate(page);
+  await advance(page, 187); await operate(page); await advance(page, 60); await page.keyboard.press('r'); await advance(page);
+  await move(page, 'w', 69); await move(page, 'd', 111); await advance(page, 6);
+  await expect(page.locator('#power-status')).toContainText('CAM 停机');
+  await move(page, 'd', 77); await move(page, 's', 69); await move(page, 'a', 111); await move(page, 'a', 77);
+  await expect(page.locator('#overlay-card h2')).toHaveText('亮着才危险 · 完成');
+  await expect(page.locator('#power-status')).toContainText('RETURN 开');
+  await page.screenshot({ path: '.local/timing-C3-2-b.png', fullPage: true });
+});
+
 test('core pickup visibly cuts civilian power; a blocked exit requires restoration before the saved checkpoint', async ({ page }) => {
   await load(page, 'C3-6', 2);
   await page.locator('#power-panel > summary').click(); await advance(page);

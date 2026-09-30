@@ -14,7 +14,9 @@ const lock = (x: number, y: number, extra: Partial<Terminal> = {}): Terminal => 
 const authorized = (x = 640, y = 256) => ({ id: 'PASS', x, y, w: 32, h: 64, authorization: 'L' });
 const east = { loot: p(816, 176), exit: p(848, 432) };
 const recordA = [g(272, 432), g(272, 176), r()];
-const serialPlan = [g(208, 432), g(208, 176), r(), e(), g(400, 432), g(528, 432), r()];
+// Record the controller before the inner keeper: reconnecting Q while recording
+// must not expose an already recorded B or require an instant R to escape alarm.
+const serialPlan = (restoreFrame: number) => [g(208, 432), g(208, 176), r(), e(), w(restoreFrame - 2), e(), r(), g(400, 432), g(528, 432), r()];
 const decoy = [g(112, 176), g(656, 176), noise(), g(848, 176), g(848, 80), r()];
 const cargoRoute = [g(400, 432), w(180), g(816, 432), g(400, 432), g(112, 432)];
 function action(id: string, title: string, props: Partial<Level>, story: string, result: string, hints: [string, string, string], witness: WitnessAction[], previous?: string): Stage {
@@ -59,9 +61,9 @@ export const CHAPTER_FIVE: Mission[] = [
       ['A 同时处于 N1 与 N2；任意一层开启都让投影失效。', '真人断 P 处理 N1，再等 N2 的 2–4 秒空档。', '录 A 留守。真人去 P 断开，再到中央门前等待；在第 2–4 秒通过后沿东侧取件。'],
       [...recordA, g(112, 304), e(), g(400, 304), w(40), g(816, 304), g(816, 176), g(848, 176), g(848, 432)], 'C5-3-a'),
     action('C5-3-c', '没有同时亮起的同伙', { ...east, par: 3, walls: room([[10, [12, 13]], [20, [8, 9]]]), plates: [plate('A', 208, 176), plate('B', 528, 432)], doors: [gate('ENTRY', 320, 384, 'A'), gate('INNER', 640, 256, 'B')], circuits: [panel('Q', 112, 432, true, '两区抑制分流')], suppressors: [field('N1', 160, 128, 96, 96, { power: power('Q') }), field('N2', 480, 384, 96, 96, { power: power('Q', false) })], lootLabel: '分流控制原件', objectiveLabel: '先让 A 生效通过外门，再让 B 生效通过内门' },
-      '联络员：Q 的两侧不能同时停机。先让第一名同伙开门，再让第二名接班，控制分流的人最后才录。', '三段录像在不同时间起作用。你不需要所有同伙一直有效。',
-      ['Q 断开时 A 有效，接通时 B 有效。', '先录 A，再亲自断 Q 进入录 B，最后录一条先断、后接的控制录像。', '第一条停 A。第二条出生处断 Q，经下门停 B。第三条出生处断 Q，等 3.5 秒再接通。真人先走下门，到中区中央等 B 恢复后穿内门取件。'],
-      [...serialPlan, e(), w(210), e(), r(), g(560, 432), g(560, 304), w(110), g(816, 304), g(816, 176), g(848, 176), g(848, 432)], 'C5-3-b'),
+      '联络员：Q 的两侧不能同时停机。先录外侧留守与分流控制，再借它们的配合进入内侧，录下接班的人。', '三段录像在不同时间起作用。你不需要所有同伙一直有效。',
+      ['Q 断开时 A 有效，接通时 B 有效。', '先录 A，再录 Q 先断后接的控制，最后借外门进入录 B。录 B 时由控制回声操作 Q，真人不要重复拨动。', '第一条停 A。第二条在出生处断 Q，等到第 3.5 秒接通并录制。第三条等 A 开门，沿下侧进入停 B；不再操作 Q。真人先穿外门，到中区等 B 恢复后穿内门取件。'],
+      [...serialPlan(210), g(560, 432), g(560, 304), w(110), g(816, 304), g(816, 176), g(848, 176), g(848, 432)], 'C5-3-b'),
   ] },
   { id: 'C5-4', chapter: '专门抓鬼的人', title: '被盯上的搭档', summary: '追踪器只识别投影，会追向最后看见的位置；路线、声响响应和记忆时间都可预演。', evidence: '审计员部署的投影追踪记录', stages: [
     action('C5-4-a', '它在看另一个你', { objective: 'reach', exit: p(784, 432), walls: room([[14, [12, 13]]]), plates: [plate('A', 400, 432)], doors: [gate('ENTRY', 448, 384, 'A')], guards: [tracker()], objectiveLabel: '让回声错开追踪器的巡逻朝向，再通过它面前' },
@@ -98,8 +100,8 @@ export const CHAPTER_FIVE: Mission[] = [
       [...recordA, g(112, 304), e(), g(112, 432), g(528, 432), e(), g(656, 432), r(), g(112, 304), e(), g(112, 432), g(528, 432), e(), g(656, 432), g(656, 176), g(816, 176), g(848, 176), g(848, 432)]),
     action('C5-6-b', '先停追踪，再恢复同伙', { ...east, par: 3, walls: room([[10, [12, 13]], [20, [8, 9]]]), plates: [plate('A', 208, 176), plate('B', 528, 432)], doors: [gate('ENTRY', 320, 384, 'A'), gate('INNER', 640, 256, 'B')], circuits: [panel('Q', 112, 432, true, '两区抑制分流'), panel('T', 560, 304, true, '内侧追踪器')], suppressors: [field('N1', 160, 128, 96, 96, { power: power('Q') }), field('N2', 352, 384, 224, 96, { power: power('Q', false) })], guards: [tracker({ route: [p(592, 432)], facing: Math.PI, power: power('T') })], lootLabel: '抹除供电图', objectiveLabel: '先穿外门切断 T，再让控制回声把 Q 切回去恢复 B' },
       '你：B 现在失效，反而没被看到。先停掉 T，再给它恢复作用，顺序不能反过来。', '分流切换发生时，追踪器已经断电。抹除供电图暴露了存放批准书的位置。',
-      ['Q 断开使 A 有效、B 受抑制；Q 接通时交换。T 能看见恢复后的 B。', '沿用三名同伙的接班计划，把接回 Q 留到第 4 秒之后，真人先在中区断 T。', '先录 A，再亲自断 Q 进门录 B。第三条断 Q、等约 4.2 秒后接通。真人经下门进入中区，去 T 断开，再等内门开放取件。'],
-      [...serialPlan, e(), w(250), e(), r(), g(560, 432), g(560, 304), e(), w(100), g(816, 304), g(816, 176), g(848, 176), g(848, 432)], 'C5-6-a'),
+      ['Q 断开使 A 有效、B 受抑制；Q 接通时交换。T 能看见恢复后的 B。', '先录 A 和分流控制，最后录 B；录控制时还没有 B 回声，不会因恢复它而暴露。正式行动时真人先断 T，再恢复 B。', '第一条停 A。第二条出生处断 Q，到约第 4.2 秒接通并录制。第三条不操作 Q，等外门开启后沿下侧到 B 留守。真人经下门去 T 断开，赶在控制回声接回 Q 之前停掉追踪器，再等内门开放取件。'],
+      [...serialPlan(250), g(560, 432), g(560, 304), e(), w(100), g(816, 304), g(816, 176), g(848, 176), g(848, 432)], 'C5-6-a'),
     action('C5-6-c', '取件之后，别急着唤醒他们', { loot: p(816, 432), exit: p(112, 432), par: 2, walls: room([[14, [8, 9]], [22, [12, 13]]]), plates: [plate('A', 272, 176), plate('B', 592, 176)], doors: [gate('ENTRY', 448, 256, 'A'), gate('INNER', 704, 384, 'B')], circuits: [panel('T', 848, 464, false, '追踪器'), panel('N', 848, 240, false, '双区抑制')], suppressors: [field('N1', 224, 128, 96, 96, { power: power('N') }), field('N2', 544, 128, 96, 96, { power: power('N') })], guards: [tracker({ route: [p(688, 176)], facing: Math.PI, power: power('T') })], onLoot: { power: [power('N'), power('T')], message: '取件启动 N 与 T：同伙失效、回程门关闭。先断 T，再断 N，恢复同伙后带原件返回。' }, exitPower: [power('N', false), power('T', false)], lootLabel: '抹除程序备份' },
       '联络员：提取会唤醒 T，也会抑制两名留守者。趁他们还不可见，先停 T，再恢复 N 两端。……这套取件程序，我认识。', '你：你不只是认识程序。备份里的签字人，是你。',
       ['取件后两门会关闭；失效的回声暂时也不会被追踪器识别。', '先安排 A、B 留守，再取件。取件后先关旁边 T，再北上关 N，避免恢复 B 时被追踪。', '第一条守 A，第二条穿中央外门去 B。真人同路入内，改从南侧内门取件；在右下 T 断电，再去右中 N 断电。沿南侧内门、中央外门返回左下入口。'],

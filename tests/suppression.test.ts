@@ -105,6 +105,23 @@ test('all 18 C5 references and the alternate stay within 12 seconds and the thre
   assert.equal(playWitness(find('C5-6-b')).echoes.length, 3);
 });
 
+for (const id of ['C5-3-c', 'C5-6-b']) test(`${id}: the controller is recorded before B, with half-second timing margin and no rushed recording`, () => {
+  const stage = find(id);
+  const restoreWait = stage.witness.findIndex(a => 'wait' in a);
+  for (const offset of [-30, -12, -6, -1, 0, 1, 6, 12, 30]) {
+    const witness = structuredClone(stage.witness);
+    const wait = witness[restoreWait]; assert.ok('wait' in wait); wait.wait += offset;
+    // A full second to save the controller and the inner keeper must be safe.
+    for (let i = witness.length - 1; i >= 0; i--) if ('record' in witness[i]) witness.splice(i, 0, { wait: 60 });
+    const win = playWitness({ ...stage, witness });
+    const requests = win.echoes.map(e => e.frames.flatMap(f => f.intent ? [f.intent] : []));
+    assert.deepEqual(requests[1], [{ type: 'circuit', id: 'Q', on: false }, { type: 'circuit', id: 'Q', on: true }]);
+    assert.deepEqual(requests[2], []);
+    assert.equal(win.circuits.get('Q'), true); assert.equal(win.echoes.length, 3);
+    if (id === 'C5-6-b') assert.equal(win.circuits.get('T'), false);
+  }
+});
+
 test('retiming is necessary on the selected routes and a missing diversion exposes the keeper', () => {
   for (const id of ['C5-1-b', 'C5-4-a', 'C5-5-b']) {
     const stage = find(id); assert.throws(() => playWitness({ ...stage, witness: stage.witness.filter(a => !('delay' in a)) }), id);
