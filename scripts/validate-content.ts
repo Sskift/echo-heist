@@ -1,20 +1,33 @@
 import assert from 'node:assert/strict';
-import { MISSIONS } from '../src/campaign-content.ts';
+import { MISSIONS, stageVersions } from '../src/campaign-content.ts';
 import { Game } from '../src/engine.ts';
 import { playWitness } from '../src/witness.ts';
 import { doorPlates, WIDTH, HEIGHT, TILE } from '../src/levels.ts';
 
 const ids = new Set<string>();
-let zones = 0;
+let zones = 0, layouts = 0;
 for (const mission of MISSIONS) {
   const facts = new Set<string>();
-  for (const stage of mission.stages) {
+  for (const base of mission.stages) {
+    for (const variant of base.variants ?? []) {
+      assert.ok(facts.has(variant.when), `Unknown branch prerequisite ${variant.when}`);
+      assert.ok(!variant.stage.variants?.length, 'Nested stage variants are not supported');
+      assert.deepEqual(variant.stage.grants, base.grants, 'Branches must preserve the shared checkpoint facts');
+      assert.equal(variant.stage.requires, base.requires, 'Branches must preserve the shared prerequisite');
+    }
+    for (const stage of stageVersions(base)) {
     const level = stage.level;
     assert.ok(!ids.has(level.id), `Duplicate action zone ${level.id}`); ids.add(level.id);
     if (stage.requires) assert.ok(facts.has(stage.requires), `Unavailable prerequisite ${stage.requires}`);
-    stage.grants.forEach(flag => facts.add(flag));
     const unique = (values: { id: string }[]) => assert.equal(new Set(values.map(v => v.id)).size, values.length, `Duplicate entity in ${level.id}`);
-    unique(level.plates); unique(level.doors); unique(level.circuits ?? []); unique(level.terminals ?? []); unique(level.scanners ?? []); unique(level.glass ?? []); unique(level.soundMarkers ?? []);
+    unique(level.plates); unique(level.doors); unique(level.circuits ?? []); unique(level.terminals ?? []); unique(level.scanners ?? []); unique(level.suppressors ?? []); unique(level.glass ?? []); unique(level.soundMarkers ?? []);
+    if (stage.outcomes) {
+      unique(stage.outcomes);
+      assert.equal(stage.outcomes.length, 2, `A circuit decision needs two outcomes in ${level.id}`);
+      assert.equal(stage.outcomes[0].power.id, stage.outcomes[1].power.id, `Outcomes must inspect the same circuit in ${level.id}`);
+      assert.notEqual(stage.outcomes[0].power.on, stage.outcomes[1].power.on, `Outcomes must cover opposite states in ${level.id}`);
+      for (const outcome of stage.outcomes) assert.ok(level.circuits?.some(c => c.id === outcome.power.id) && /^[a-zA-Z0-9-]+$/.test(outcome.id) && outcome.label.trim() && outcome.consequence.trim(), `Invalid outcome in ${level.id}`);
+    }
     unique(level.guards.filter(g => g.id !== undefined) as { id: string }[]);
     if (level.noiseResponse === 'nearest') assert.ok(level.guards.every(g => g.id), `Stable guard IDs required in ${level.id}`);
     for (const guard of level.guards) {
@@ -56,7 +69,10 @@ for (const mission of MISSIONS) {
     const win = playWitness(stage);
     for (const witness of stage.alternatives ?? []) playWitness({ ...stage, witness });
     console.log(`${level.id.padEnd(14)} ${win.seconds.toFixed(2)}s / ${win.echoes.length} echoes / validated`);
+    layouts++;
+    }
+    stageVersions(base).forEach(s => { s.grants.forEach(f => facts.add(f)); s.outcomes?.forEach(o => facts.add(o.id)); });
     zones++;
   }
 }
-console.log(`${MISSIONS.length} missions / ${zones} action zones: references and executable solutions passed. This does not measure first-play duration.`);
+console.log(`${MISSIONS.length} missions / ${zones} action zones / ${layouts} branch layouts: references and executable solutions passed. This does not measure first-play duration.`);

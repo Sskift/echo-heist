@@ -5,7 +5,7 @@ import { ECHO_COLORS, FPS, LEVELS, LOOP_SECONDS, MAX_ECHOES, type Level } from '
 import { Renderer } from './render.ts';
 import { Sound } from './audio.ts';
 import { decodePlan, encodePlan, PLAN_KEY, type SavedPlan } from './plans.ts';
-import { CAMPAIGN_LEVELS, MISSIONS } from './campaign-content.ts';
+import { CAMPAIGN_LEVELS, MISSIONS, canonicalZoneId } from './campaign-content.ts';
 import { Campaign, CAMPAIGN_KEY } from './campaign.ts';
 import { CampaignUI } from './campaign-ui.ts';
 import { PlaytestUI } from './playtest-ui.ts';
@@ -143,9 +143,9 @@ function renderHint() {
   $('#more-hint').hidden = hintStep >= hints.length - 1;
   $('#more-hint').textContent = `再给一点提示（${hintStep + 1} / ${hints.length}）`;
 }
-$('.version').textContent = 'VOL. 08';
+$('.version').textContent = 'VOL. 08.1';
 $('.manual-steps').insertAdjacentHTML('beforeend', '<li><strong>安排一场完整劫案</strong><p>行动档案中的序章会逐步解锁。每段成功后保存安全锚点，下一段重新录制同伙。点击阶段名称可以回退；之后的阶段需要重做。</p></li><li><strong>调整时序，先看结果</strong><p>回声下方的加减按钮以 0.25 秒调整出场；按 P 预演已保存的回声，拖动时间检查门禁与暴露。E 操作电源和凭据终端，录制会保留这次操作请求。</p></li>');
-const playtesting = new PlaytestUI(() => ({ zoneId: game.level.id, missionId: campaignMode ? campaign.mission.id : game.level.id, phase: dialog.open ? 'help' : previewGame ? 'rehearsal' : game.status === 'running' ? 'execution' : 'planning' }), () => { if (game.status === 'running') game.togglePause(); clearInput(); });
+const playtesting = new PlaytestUI(() => ({ zoneId: canonicalZoneId(game.level.id), missionId: campaignMode ? campaign.mission.id : game.level.id, phase: dialog.open ? 'help' : previewGame ? 'rehearsal' : game.status === 'running' ? 'execution' : 'planning' }), () => { if (game.status === 'running') game.togglePause(); clearInput(); });
 $('.hint').addEventListener('toggle', () => { if ($<HTMLDetailsElement>('.hint').open) playtesting.event('hint', `tier ${hintStep + 1}`); });
 
 function saveCampaign() {
@@ -213,7 +213,7 @@ function loadLevel(level: Level) {
   uiKey = ''; overlayKey = '';
   $('#toast').classList.remove('visible');
   $('#mission-number').textContent = level.id;
-  if (campaignMode) $('#mission-number').textContent = `${campaign.mission.stages.findIndex(s => s.level.id === level.id) + 1} / ${campaign.mission.stages.length}`;
+  if (campaignMode) $('#mission-number').textContent = `${campaign.indexOf(level.id) + 1} / ${campaign.mission.stages.length}`;
   $('#mission-number').parentElement!.lastChild!.textContent = campaignMode ? '' : ' / 03';
   $('#mission-title').textContent = level.title;
   $('#mission-subtitle').textContent = level.subtitle;
@@ -371,11 +371,11 @@ function refreshUI() {
       action = levelIndex === LEVELS.length - 1 ? '再来一场' : '下一场行动';
       extra = `<div class="win-stamp">${game.echoes.length <= game.level.par ? '◆ MASTER PLAN' : '◆ HEIST COMPLETE'}</div>`;
       if (campaignMode) {
-        const mission = campaign.mission, stageIndex = mission.stages.findIndex(s => s.level.id === game.level.id);
+        const mission = campaign.mission, stageIndex = campaign.indexOf(game.level.id);
         const final = stageIndex === mission.stages.length - 1;
         eyebrow = final ? 'EVIDENCE SECURED' : 'SAFE ANCHOR';
         title = final ? `${mission.title} · 完成` : '这一段，已经安全了。';
-        copy = mission.stages[stageIndex].result;
+        copy = campaign.stageAt(stageIndex).result;
         const next = campaign.nextMission;
         action = !final ? '进入下一行动区' : next ? `下一任务：${next.title}` : '重玩这场行动';
         extra = `<div class="win-stamp">${final ? `◇ ${mission.evidence}` : `✓ 安全锚点 ${stageIndex + 1} / ${mission.stages.length}`}</div>`;
@@ -529,7 +529,10 @@ function loop(now: number) {
     if (event === 'loot') toast(game.level.onLoot?.message ?? (!game.exitReady ? `目标已取得；撤离前需 ${game.powerRequirements(game.unmetPower(game.level.exitPower))}。` : '目标已取得。前往标记的撤离点！'));
     if (event === 'won' || event === 'caught') $('#toast').classList.remove('visible');
     if (event === 'won') {
-      if (campaignMode && campaign.commit(game)) saveCampaign();
+      if (campaignMode && campaign.commit(game)) {
+        saveCampaign();
+        playtesting.event('checkpoint', `${game.level.id}; ${campaign.data.outcomes?.[canonicalZoneId(game.level.id)] ?? 'linear'}`);
+      }
       const record = { echoes: game.echoes.length, seconds: game.seconds };
       const previous = saved[game.level.id];
       if (!previous || record.echoes < previous.echoes || (record.echoes === previous.echoes && record.seconds < previous.seconds)) {

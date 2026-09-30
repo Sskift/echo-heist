@@ -41,7 +41,7 @@ export class PlaytestUI {
     window.addEventListener('pagehide', () => { this.tick(); this.save(); });
     this.render();
   }
-  event(kind: string, detail = '') { this.recorder.event(kind, this.context().zoneId, detail); if (kind === 'won') this.save(); }
+  event(kind: string, detail = '') { this.recorder.event(kind, this.context().zoneId, detail); if (kind === 'won' || kind === 'checkpoint') this.save(); }
   tick() {
     const context = this.context(), now = performance.now();
     this.recorder.tick(now, { ...context, phase: document.hidden || !document.hasFocus() ? 'away' : context.phase });

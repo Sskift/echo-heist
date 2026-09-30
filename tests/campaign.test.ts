@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Campaign } from '../src/campaign.ts';
-import { MISSIONS } from '../src/campaign-content.ts';
+import { MISSIONS, stageVersions } from '../src/campaign-content.ts';
 import { playWitness } from '../src/witness.ts';
 
-for (const mission of MISSIONS) for (const stage of mission.stages) {
+for (const mission of MISSIONS) for (const stage of mission.stages.flatMap(stageVersions)) {
   test(`${stage.level.id}: authored reference inputs complete the action zone in 12 seconds`, () => {
     const game = playWitness(stage);
     assert.equal(game.status, 'won'); assert.ok(game.seconds <= 12);

@@ -14,6 +14,7 @@ export class CampaignUI {
   private powerKey = '';
   private relayKey = '';
   private suppressionKey = '';
+  private consequenceKey = '';
   constructor(private campaign: Campaign, actions: Actions) {
     $('.intro').insertAdjacentHTML('afterend', `
       <section class="campaign-shell" aria-label="行动档案">
@@ -21,6 +22,7 @@ export class CampaignUI {
         <div id="story-strip" class="story-strip"><div><p class="eyebrow" id="chapter-label"></p><h2 id="operation-title"></h2></div><p id="story-line"></p></div>
         <div class="stage-bar" id="stage-bar"><nav id="stage-rail" aria-label="任务阶段"></nav><span id="checkpoint-note" role="status">锚点自动保存在本机</span></div>
       </section>`);
+    $('.stage-bar').insertAdjacentHTML('afterend', '<section id="consequence-panel" class="consequence-panel" hidden aria-label="下一阶段后果"><strong>给下一段留下什么</strong><p>以下是成功抵达锚点时才提交的结果。操作电路可改变选择；回退到本阶段可重新决定。</p><ul id="consequence-options"></ul></section>');
     $('.timeline').insertAdjacentHTML('afterend', `
       <div class="rehearsal-toolbar"><button id="preview-button" aria-pressed="false">◇ 预演回声</button><span id="interaction-tip">E 操作设备 · P 预演已保存的计划</span></div>
       <section id="preview-panel" class="preview-panel" hidden aria-label="回声预演"><div><strong>只读预演</strong><output id="preview-time">0.00s</output></div><p>仅播放已保存回声；真人不参与，也不会保存进度。拖动时间，检查门与设备。</p><input id="preview-frame" type="range" min="0" max="720" step="1" value="0" aria-label="预演时间"><ol id="preview-log"></ol></section>`);
@@ -112,8 +114,20 @@ export class CampaignUI {
       $('#security-status').replaceChildren(...security.map(text => { const item = document.createElement('li'); item.textContent = text; return item; }));
     }
     const mission = this.campaign.mission;
-    const stageIndex = mission.stages.findIndex(s => s.level.id === game.level.id);
-    const key = `${campaignMode}:${mission.id}:${stageIndex}:${game.status}:${this.campaign.data.completed.join(',')}:${this.campaign.cleared()}`;
+    const stageIndex = this.campaign.indexOf(game.level.id);
+    const current = stageIndex >= 0 ? this.campaign.stageAt(stageIndex) : undefined;
+    const consequenceKey = `${campaignMode}:${world.level.id}:${[...world.circuits].join(',')}:${game.status}:${!!preview}`;
+    if (consequenceKey !== this.consequenceKey) {
+      this.consequenceKey = consequenceKey;
+      $('#consequence-panel').hidden = !campaignMode || !current?.outcomes?.length;
+      $('#consequence-options').replaceChildren(...(current?.outcomes ?? []).map(o => {
+        const item = document.createElement('li'), selected = world.powered(o.power);
+        item.dataset.selected = String(selected);
+        item.textContent = `${selected ? preview ? '预演状态' : game.status === 'won' ? '已提交' : '当前结果' : '另一方案'} · ${o.label}（${o.power.id} ${world.circuitState(o.power.id, o.power.on)}）：${o.consequence}`;
+        return item;
+      }));
+    }
+    const key = `${campaignMode}:${mission.id}:${game.level.id}:${stageIndex}:${game.status}:${this.campaign.data.completed.join(',')}:${this.campaign.cleared()}:${JSON.stringify(this.campaign.data.outcomes)}`;
     if (key !== this.key) {
       this.key = key;
       $('.level-nav').hidden = campaignMode;
@@ -126,11 +140,11 @@ export class CampaignUI {
         return `<button class="mission-card ${m.id === mission.id && campaignMode ? 'current' : ''}" data-mission="${m.id}" ${!available ? 'disabled' : ''}><span>${complete ? '✓ 已完成' : available ? `${m.stages.length} 段行动` : '完成前一任务解锁'}</span><strong>${m.title}</strong><small>${m.summary}</small></button>`;
       }).join('')}</div></details>`).join('');
       if (campaignMode && stageIndex >= 0) {
-        const stage = mission.stages[stageIndex];
+        const stage = this.campaign.stageAt(stageIndex);
         $('#chapter-label').textContent = `${mission.chapter} / ${String(MISSIONS.indexOf(mission) + 1).padStart(2, '0')} · 第 ${stageIndex + 1} / ${mission.stages.length} 段`;
         $('#operation-title').textContent = mission.title;
         $('#story-line').textContent = game.status === 'won' ? stage.result : stage.story;
-        $('#stage-rail').innerHTML = mission.stages.map((s, i) => `<button data-stage="${i}" ${i > this.campaign.stageIndex ? 'disabled' : ''} ${i === stageIndex ? 'aria-current="step"' : ''} title="回到该锚点；其后阶段将重新规划"><span>${i < this.campaign.cleared() ? '✓' : String(i + 1).padStart(2, '0')}</span>${s.level.title}</button>`).join('');
+        $('#stage-rail').innerHTML = mission.stages.map((s, i) => `<button data-stage="${i}" ${i > this.campaign.stageIndex ? 'disabled' : ''} ${i === stageIndex ? 'aria-current="step"' : ''} title="回到该锚点；其后阶段将重新规划"><span>${i < this.campaign.cleared() ? '✓' : String(i + 1).padStart(2, '0')}</span>${i > this.campaign.stageIndex && s.variants?.length ? '下一段 · 依所选方案' : this.campaign.stageAt(i).level.title}</button>`).join('');
       }
       $('#evidence-list').innerHTML = MISSIONS.filter(m => m.chapter !== '机制试验' && this.campaign.data.completed.includes(m.id)).map(m => `<p>◇ ${m.evidence}</p>`).join('') || '<p>完成主线任务后，线索会保存在这里。</p>';
     }
