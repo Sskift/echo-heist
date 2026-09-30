@@ -10,6 +10,7 @@ import { Campaign, CAMPAIGN_KEY } from './campaign.ts';
 import { CampaignUI } from './campaign-ui.ts';
 import { PlaytestUI } from './playtest-ui.ts';
 import { EndingUI } from './ending-ui.ts';
+import { OperationUI, operationText } from './operation-ui.ts';
 
 const ALL_LEVELS = [...LEVELS, ...CAMPAIGN_LEVELS];
 let campaign: Campaign;
@@ -121,6 +122,7 @@ const campaignUI = new CampaignUI(campaign, {
     }
   },
 });
+const operationUI = new OperationUI(() => { clearInput(); if (game.status === 'running') { game.togglePause(); refreshUI(); } });
 $('#mission-board').addEventListener('toggle', () => {
   if ($<HTMLDetailsElement>('#mission-board').open && game.status === 'running') { game.togglePause(); clearInput(); refreshUI(); }
 });
@@ -150,8 +152,8 @@ function renderHint() {
   $('#more-hint').hidden = hintStep >= hints.length - 1;
   $('#more-hint').textContent = `再给一点提示（${hintStep + 1} / ${hints.length}）`;
 }
-$('.version').textContent = 'VOL. 11';
-$('.manual-steps').insertAdjacentHTML('beforeend', '<li><strong>安排一场完整劫案</strong><p>行动档案中的序章会逐步解锁。每段成功后保存安全锚点，下一段重新录制同伙。点击阶段名称可以回退；之后的阶段需要重做。</p></li><li><strong>调整时序，先看结果</strong><p>回声下方的加减按钮以 0.25 秒调整出场；按 P 预演已保存的回声，拖动时间检查门禁与暴露。E 操作电源和凭据终端，录制会保留这次操作请求。</p></li>');
+$('.version').textContent = 'VOL. 12';
+$('.manual-steps').insertAdjacentHTML('beforeend', '<li><strong>安排一场完整劫案</strong><p>行动档案中的序章会逐步解锁。每段成功后保存安全锚点，下一段重新录制同伙。点击阶段名称可以回退；之后的阶段需要重做。</p></li><li><strong>调整时序，先看结果</strong><p>回声下方的加减按钮以 0.25 秒调整出场；按 P 预演已保存的回声，拖动时间检查门禁与暴露。E 操作电源和凭据终端，录制会保留这次操作请求。轨道上的 ✓ 表示完成，× 表示受阻或留候取消；点击标记会暂停并显示时间、操作者和原因。「操作记录」保留本轮结果，可只看问题项。预演没有真人送件，结果可能与实际行动不同。</p></li>');
 const playtesting = new PlaytestUI(() => ({ zoneId: canonicalZoneId(game.level.id), missionId: campaignMode ? campaign.mission.id : game.level.id, phase: dialog.open ? 'help' : previewGame ? 'rehearsal' : game.status === 'running' ? 'execution' : 'planning' }), () => { if (game.status === 'running') game.togglePause(); clearInput(); });
 $('.hint').addEventListener('toggle', () => { if ($<HTMLDetailsElement>('.hint').open) playtesting.event('hint', `tier ${hintStep + 1}`); });
 
@@ -318,6 +320,7 @@ function refreshUI() {
     $('#edit-banner').hidden = game.editingIndex === null;
     $('#edit-label').textContent = game.editingIndex === null ? '' : `重录回声 0${game.editingIndex + 1} · R 保存新路线`;
   }
+  operationUI.render(game, previewGame);
   const fast = isFastForwarding();
   if (previewGame) document.querySelectorAll<HTMLButtonElement>('#record-button, #retry-button, #undo-button, #reset-button, [data-delete], [data-rerecord]').forEach(button => { button.disabled = true; });
   $<HTMLButtonElement>('#pause-button').disabled = !!previewGame;
@@ -530,13 +533,15 @@ function loop(now: number) {
     accumulator += elapsed * (isFastForwarding() ? 3 : 1);
     while (accumulator >= 1 / FPS) {
       const before = game.frame;
+      const operationCount = game.operationLog.length;
       game.step({
         x: Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')),
         y: Number(keys.has('KeyS') || keys.has('ArrowDown')) - Number(keys.has('KeyW') || keys.has('ArrowUp')),
         lure: keys.has('Space'),
         interact: keys.has('KeyE'),
       });
-      if (game.player.intent && game.signals.length) toast(game.signals.at(-1)!.text);
+      const feedback = game.operationLog.slice(operationCount).filter(op => op.actor === 'player').at(-1);
+      if (feedback) toast(operationText(feedback));
       accumulator -= 1 / FPS;
       if (game.status !== 'running' || game.frame < before) { accumulator = 0; clearInput(); break; }
     }

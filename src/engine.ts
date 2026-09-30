@@ -6,6 +6,9 @@ export type Input = { x: number; y: number; lure: boolean; interact?: boolean };
 export type Frame = Point & { angle: number; lure: boolean; intent?: Intent };
 export type Echo = { frames: Frame[]; colorIndex: number; delay?: number };
 export type Status = 'ready' | 'running' | 'paused' | 'caught' | 'won';
+export type OperationResult = 'success' | 'blocked' | 'waiting' | 'cancelled' | 'ignored';
+export type OperationRecord = { frame: number; actor: string; label: string; intent: Intent; result: OperationResult; reason: string; point: Point };
+type OperationRequest = { id: string; label: string; at: Frame; intent: Intent };
 export type Guard = Point & { angle: number; waypoint: number; investigate: Point | null; attention: number; suspicion: number; path?: Point[]; pathKey?: string; seenActor?: string; searching?: boolean; trace?: { at: Point; actor: string; label: string; remaining: number } };
 export type GameEvent = 'start' | 'rewind' | 'door' | 'loot' | 'deposit' | 'receipt' | 'lure' | 'caught' | 'won' | 'tick' | 'full' | 'plan';
 
@@ -43,6 +46,8 @@ export class Game {
   tokenOwner: string | null = null;
   waitingReceivers = new Map<string, string>();
   signals: { frame: number; text: string }[] = [];
+  // Observations only: rebuilt each round/preview and never stored in a plan.
+  operationLog: OperationRecord[] = [];
   failure: { frame: number; actor: string; guard: number; point: Point; scanner?: string } | null = null;
   scanExposure = new Map<string, number>();
   spectator = false;
@@ -141,9 +146,10 @@ export class Game {
     if (this.level.objective !== 'deliver' || !d || this.spectator || this.editingIndex !== null) return;
     if (!this.evidenceDeposited && this.player.intent?.type === 'deposit' && this.player.intent.id === d.id && distance(this.player, d) < 30) {
       const blockers = this.deliveryBlockers();
-      if (blockers.length) this.signal(`${d.id} 植入未满足：${blockers.join('、')}`);
+      if (blockers.length) { this.signal(`${d.id} 植入未满足：${blockers.join('、')}`); this.tracePlayerDeposit('blocked', blockers.join('、')); }
       else {
         this.evidenceDeposited = true; this.events.push('deposit'); this.signal(`${d.id} 已植入 ${d.label}`);
+        this.tracePlayerDeposit('success', `实体证据已植入${d.receivers?.length ? '；仍需独立回执' : ''}`);
         if (d.onDeposit) {
           for (const p of d.onDeposit.power) this.circuits.set(p.id, p.on);
           this.signal(d.onDeposit.message); this.updatePlates();
@@ -211,15 +217,21 @@ export class Game {
   suppressed(at: Point): boolean {
     return this.suppressionFields(at).length > 0;
   }
-  private actors() {
+  private actors(includeSuppressed = false) {
     return [
       ...(!this.spectator ? [{ id: 'player', label: '当前的你', at: this.player }] : []),
-      ...this.activeEchoes.filter(({ echo }) => !this.suppressed(this.echoAt(echo))).map(({ echo, index }) => ({ id: `echo:${echo.colorIndex}`, label: `回声 ${index + 1}`, at: this.echoAt(echo) })),
+      ...this.activeEchoes.filter(({ echo }) => includeSuppressed || !this.suppressed(this.echoAt(echo))).map(({ echo, index }) => ({ id: `echo:${echo.colorIndex}`, label: `回声 ${index + 1}`, at: this.echoAt(echo) })),
     ];
   }
   private signal(text: string) {
     this.signals.push({ frame: this.frame, text });
     if (this.signals.length > 100) this.signals.shift();
+  }
+  private traceOperation(request: OperationRequest, result: OperationResult, reason: string) {
+    this.operationLog.push({ frame: this.frame, actor: request.id, label: request.label, intent: { ...request.intent }, result, reason, point: { x: request.at.x, y: request.at.y } });
+  }
+  private tracePlayerDeposit(result: OperationResult, reason: string) {
+    if (this.player.intent?.type === 'deposit') this.traceOperation({ id: 'player', label: '当前的你', at: this.player, intent: this.player.intent }, result, reason);
   }
 
   interaction(): Intent | undefined {
@@ -256,7 +268,7 @@ export class Game {
   }
 
   private resolveIntents() {
-    const collect = () => this.actors().flatMap(actor => {
+    const collect = (includeSuppressed = false): OperationRequest[] => this.actors(includeSuppressed).flatMap(actor => {
       if (!actor.at.intent) return [];
       if (actor.id !== 'player') {
         const echo = this.echoes.find(e => `echo:${e.colorIndex}` === actor.id)!;
@@ -265,14 +277,39 @@ export class Game {
       return [{ ...actor, intent: actor.at.intent }];
     });
     let requests = collect();
+    // Circuit requests see the suppression state BEFORE power is resolved.
+    for (const request of collect(true).filter(r => r.intent.type === 'circuit')) {
+      const target = this.level.circuits?.find(c => c.id === request.intent.id);
+      if (request.id !== 'player' && this.suppressed(request.at)) this.traceOperation(request, 'blocked', '操作当刻投影受抑制，恢复后不会补发');
+      else if (!target) this.traceOperation(request, 'blocked', '这个电路不在当前行动区');
+      else if (distance(request.at, target) >= 30) this.traceOperation(request, 'blocked', '操作位置已超出设备范围');
+    }
     for (const circuit of this.level.circuits ?? []) {
       const group = requests.filter(r => r.intent.type === 'circuit' && r.intent.id === circuit.id && distance(r.at, circuit) < 30);
       if (!group.length) continue;
       const values = new Set(group.map(r => (r.intent as Extract<Intent, { type: 'circuit' }>).on));
-      if (values.size > 1) this.signal(`${circuit.id} 操作冲突：保持原供电状态`);
-      else { this.circuits.set(circuit.id, [...values][0]); this.signal(`${circuit.id} 电源${circuit.states ? '：' : ''}${this.circuitState(circuit.id)}`); }
+      if (values.size > 1) {
+        this.signal(`${circuit.id} 操作冲突：保持原供电状态`);
+        group.forEach(r => this.traceOperation(r, 'blocked', `同帧出现相反请求，${circuit.id} 保持原状态`));
+      } else {
+        this.circuits.set(circuit.id, [...values][0]); this.signal(`${circuit.id} 电源${circuit.states ? '：' : ''}${this.circuitState(circuit.id)}`);
+        group.forEach(r => this.traceOperation(r, 'success', `${circuit.id} 已${this.circuitState(circuit.id)}`));
+      }
     }
     requests = collect(); // Transfers see suppression after this tick's power requests.
+    for (const request of collect(true).filter(r => r.intent.type !== 'circuit')) {
+      if (request.id !== 'player' && this.suppressed(request.at)) { this.traceOperation(request, 'blocked', '交互当刻投影受抑制，恢复后不会补发'); continue; }
+      if (request.intent.type === 'deposit') {
+        if (request.id !== 'player') this.traceOperation(request, 'ignored', '回声只重放请求，实体证据必须由真人植入');
+        else if (this.editingIndex !== null) this.traceOperation(request, 'ignored', '重录只保存请求，不提交实体证据');
+        else if (this.evidenceDeposited) this.traceOperation(request, 'ignored', '实体证据已经植入，不会重复提交');
+        continue;
+      }
+      const target = this.level.terminals?.find(t => t.id === request.intent.id);
+      if (!target) this.traceOperation(request, 'blocked', '这个终端不在当前行动区');
+      else if (distance(request.at, target) >= 30) this.traceOperation(request, 'blocked', '操作位置已超出终端范围');
+      else if ((request.intent.type === 'authorize') !== (target.kind === 'lock')) this.traceOperation(request, 'blocked', '请求类型与终端用途不符');
+    }
     // Only marked terminals retain a take request. Leaving range, suppression,
     // or a new request cancels it; end-pose holding can wait but never reissues E.
     for (const [actor, id] of this.waitingReceivers) {
@@ -280,6 +317,8 @@ export class Game {
       const terminal = this.level.terminals?.find(t => t.id === id);
       if (!at || !terminal || distance(at, terminal) >= 30 || requests.some(r => r.id === actor)) {
         this.waitingReceivers.delete(actor);
+        const receiver = this.actors(true).find(a => a.id === actor);
+        if (receiver) this.traceOperation({ ...receiver, intent: { type: 'take', id } }, 'cancelled', !at ? '投影受抑制，留候取消；恢复后需要新的接收请求' : requests.some(r => r.id === actor) ? '新的操作替换了这次留候' : '离开接收范围，留候取消');
         if (!requests.some(r => r.id === actor)) this.signal(`${actor === 'player' ? '当前的你' : `回声 ${this.echoes.findIndex(e => `echo:${e.colorIndex}` === actor) + 1}`} 在 ${id} 的等候已取消：${!at ? '投影不可用' : '已离开接收范围'}`);
       }
     }
@@ -289,6 +328,7 @@ export class Game {
       if (terminal?.waitForDelivery && distance(request.at, terminal) < 30) {
         this.waitingReceivers.set(request.id, terminal.id);
         this.signal(`${request.label} 在 ${terminal.id} 等候接收；离开终端会取消`);
+        this.traceOperation(request, 'waiting', `已登记留候：${[...this.terminalBlockers(terminal), ...(this.tokenOwner !== `terminal:${terminal.id}` ? ['等待凭据送达'] : [])].join('、') || '等待本帧接收结算'}；离开或受抑制会取消`);
       }
     }
     for (const [actor, id] of this.waitingReceivers) {
@@ -306,7 +346,10 @@ export class Game {
         const blockers = this.terminalBlockers(terminal);
         const waiting = phase === 'take' && terminal.waitForDelivery;
         if (blockers.length) {
-          if (!waiting) this.signal(`${terminal.id} ${phase === 'authorize' ? '授权' : phase === 'give' ? '交付' : '接收'}未满足：${blockers.join('、')}`);
+          if (!waiting) {
+            this.signal(`${terminal.id} ${phase === 'authorize' ? '授权' : phase === 'give' ? '交付' : '接收'}未满足：${blockers.join('、')}`);
+            group.forEach(r => this.traceOperation(r, 'blocked', blockers.join('、')));
+          }
           continue;
         }
         if (waiting && this.tokenOwner !== `terminal:${terminal.id}`) continue;
@@ -314,15 +357,24 @@ export class Game {
           const sender = group.find(r => r.id === this.tokenOwner);
           if (sender) { this.tokenOwner = `terminal:${terminal.id}`; this.signal(`${sender.label} 将凭据交给 ${terminal.id}`); }
           else this.signal(`${terminal.id} 交付未满足：没有持有凭据`);
+          group.forEach(r => this.traceOperation(r, r === sender ? 'success' : 'blocked', r === sender ? `凭据已交到 ${terminal.id}` : '你不是这份凭据的持有人'));
         } else if (phase === 'take') {
           group.forEach(r => this.waitingReceivers.delete(r.id));
-          if (group.length > 1) this.signal(`${terminal.id} 接收冲突：凭据留在终端`);
-          else if (this.tokenOwner === `terminal:${terminal.id}`) { this.tokenOwner = group[0].id; this.signal(`${group[0].label} 收到 ${terminal.id} 的凭据`); }
-          else this.signal(`${group[0].label} 接收未满足：${terminal.id} 尚无凭据`);
+          if (group.length > 1) {
+            this.signal(`${terminal.id} 接收冲突：凭据留在终端`);
+            group.forEach(r => this.traceOperation(r, 'blocked', '多人同时接收，本次请求全部取消'));
+          } else if (this.tokenOwner === `terminal:${terminal.id}`) {
+            this.tokenOwner = group[0].id; this.signal(`${group[0].label} 收到 ${terminal.id} 的凭据`);
+            this.traceOperation(group[0], 'success', `已收到 ${terminal.id} 的唯一凭据`);
+          } else {
+            this.signal(`${group[0].label} 接收未满足：${terminal.id} 尚无凭据`);
+            this.traceOperation(group[0], 'blocked', `${terminal.id} 尚无凭据；当前持有者：${this.credentialOwner()}`);
+          }
         } else {
           const holder = group.find(r => r.id === this.tokenOwner);
           if (holder && terminal.authorization) { this.authorized.add(terminal.authorization); this.signal(`${holder.label} 完成 ${terminal.id} 授权`); }
           else this.signal(`${terminal.id} 授权未满足：需要凭据`);
+          group.forEach(r => this.traceOperation(r, r === holder && terminal.authorization ? 'success' : 'blocked', r === holder && terminal.authorization ? `已签 ${terminal.authorization}，凭据仍由你保管` : '授权需要由凭据持有人发出请求'));
         }
       }
     }
@@ -383,6 +435,7 @@ export class Game {
     this.failure = null;
     this.scanExposure.clear();
     this.signals = [];
+    this.operationLog = [];
     this.circuits = new Map((this.level.circuits ?? []).map(c => [c.id, c.initial]));
     this.authorized.clear();
     const source = this.level.terminals?.find(t => t.kind === 'source');
@@ -634,9 +687,9 @@ export class Game {
     this.recording.push(cloneFrame(this.player));
     this.updatePlates();
     this.updateGuards();
-    if (this.alarm >= 1) return;
+    if (this.alarm >= 1) { if (!this.evidenceDeposited && this.editingIndex === null) this.tracePlayerDeposit('blocked', '本帧已触发警报，实体植入未执行'); return; }
     this.updateScanners();
-    if (this.alarm >= 1) return;
+    if (this.alarm >= 1) { if (!this.evidenceDeposited && this.editingIndex === null) this.tracePlayerDeposit('blocked', '本帧已触发扫描警报，实体植入未执行'); return; }
     this.updateDelivery();
     if (!this.spectator && this.level.objective !== 'reach' && this.level.objective !== 'deliver' && this.editingIndex === null && !this.hasLoot && this.canCollect && distance(this.player, this.level.loot) < 25) {
       this.hasLoot = true;

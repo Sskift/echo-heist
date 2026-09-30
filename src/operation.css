@@ -1,0 +1,16 @@
+.operation-panel{padding:13px 20px;background:#142019;border-top:1px solid #354730;color:#becbae;font-size:12px}
+.operation-panel summary{display:flex;justify-content:space-between;gap:12px;cursor:pointer;font-size:12px;min-height:32px;align-items:center}
+#operation-count{color:#9eb685;font-size:11px}.operation-panel p{font-size:12px;line-height:1.85;color:#b6c5aa;margin:12px 0}
+.operation-panel #operation-detail{padding:12px;border-left:3px solid #c3ed82;background:#253326;color:#e3eccc;outline-offset:2px}
+.operation-filter{display:flex;align-items:center;gap:9px;margin:15px 0;font-size:12px;min-height:32px}
+.operation-filter input{accent-color:#b8d987;width:16px;height:16px}
+#operation-log{list-style:none;padding:0;margin:0;max-height:260px;overflow:auto;overscroll-behavior:contain}
+#operation-log li{font-size:12px;line-height:1.8;border-bottom:1px solid #30402d}
+#operation-log button{display:block;width:100%;text-align:left;background:transparent;border:0;padding:10px 5px;min-height:44px;color:#bdd0a8;font-size:12px;line-height:1.8}
+#operation-log button:hover{background:#233225}#operation-log button[data-result="blocked"],#operation-log button[data-result="cancelled"],#operation-log button[data-result="truncated"]{color:#f0b49c}
+#operation-log button[data-result="pending"],#operation-log button[data-result="ignored"]{color:#a6b4a0}
+.timeline.has-operations .track{height:29px}.timeline.has-operations .track-label{width:23px}.operation-marks{position:absolute;inset:0;pointer-events:none}
+.operation-marker{position:absolute;top:-11px;transform:translateX(-50%);width:24px;height:27px;padding:0;background:#203126;border:1px solid #759b61;color:#d9eec4;font:12px var(--mono);z-index:2;pointer-events:auto}
+.operation-marker:not(:disabled):active{transform:translateX(-50%)}.operation-marker[data-result="blocked"],.operation-marker[data-result="cancelled"],.operation-marker[data-result="truncated"]{border-color:#d99a7f;color:#ffd0b8;background:#462c23}
+.operation-marker[data-result="pending"],.operation-marker[data-result="ignored"]{background:#1c281f;border-color:#6b8065;color:#a9b79f}.operation-marker[data-result="waiting"]{border-color:#c4b074;color:#e0ce90}
+@media(max-width:550px){.operation-panel{padding:12px}.timeline.has-operations .track{height:32px}.operation-marker{height:29px;top:-12px}}
