@@ -69,7 +69,11 @@ test('help modal pauses and resumes; level selection updates the mission', async
   await expect(page.locator('#help-dialog')).toBeVisible();
   const time = await page.locator('#seconds').textContent();
   await advance(page, 120); await expect(page.locator('#seconds')).toHaveText(time!);
-  await page.locator('#close-help').click(); await advance(page);
+  await page.locator('#close-help').click();
+  // The queued dialog close event resumes the game and restores canvas focus.
+  // Let it finish before stepping our manually controlled animation clock.
+  await expect(page.locator('#game-canvas')).toBeFocused();
+  await advance(page);
   await expect(page.locator('#overlay')).toBeHidden();
   await page.locator('[data-level="2"]').click(); await advance(page);
   await expect(page.locator('#mission-title')).toHaveText('别惊动过去');
