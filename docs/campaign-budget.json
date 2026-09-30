@@ -1,0 +1,566 @@
+{
+  "schemaVersion": 1,
+  "kind": "design-budget-not-runtime-content",
+  "status": "proposed",
+  "baseline": {
+    "version": "0.2.0",
+    "commit": "b7d00ef",
+    "implementedLevels": 3
+  },
+  "assumption": "用户已确认：潜入解谜为主，重视精妙配合与剧情；采用手工主线，系统化重玩为辅。",
+  "duration": {
+    "unit": "minutes",
+    "plannedMainMinutes": 750,
+    "minimumMainTargetMinutes": 600,
+    "conservativeSensitivityMultiplier": 0.8,
+    "measured": false,
+    "definition": "正常首次无外部攻略完成主线的有效游玩时间；排除挂机、强制等待、刷取、支线和通关后模式。",
+    "releaseGate": "盲测主线中位数 720–840 分钟，P25 >= 600 分钟；实际不足则追加有新解题点的必经内容并重测。"
+  },
+  "chapters": [
+    {
+      "id": "C0",
+      "title": "昨天的搭档",
+      "mechanicFamily": "基础回声协作",
+      "newQuestion": "谁应该留下，谁应该前进？",
+      "missions": [
+        {
+          "id": "C0-1",
+          "title": "缺席的搭档",
+          "role": "认识",
+          "hook": "让一次过去的行动为现在开门；第一次体验一人合作。",
+          "targetMinutes": 3,
+          "requiredActionZones": 1,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C0-2",
+          "title": "有人留守",
+          "role": "变化",
+          "hook": "利用录制终点待命，把同伙固定在开关上；识别路线与终点的差别。",
+          "targetMinutes": 4,
+          "requiredActionZones": 1,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C0-3",
+          "title": "第二扇门",
+          "role": "迁移",
+          "hook": "先安排 A 再安排 B；学会观察依赖关系而不是同时乱跑。",
+          "targetMinutes": 6,
+          "requiredActionZones": 1,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C0-4",
+          "title": "留一条退路",
+          "role": "组合",
+          "hook": "拿到目标后走另一出口；规划进入与撤离两条路线。",
+          "targetMinutes": 8,
+          "requiredActionZones": 2,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C0-5",
+          "title": "替你被听见",
+          "role": "反转",
+          "hook": "录下声响，把巡逻者引向另一侧；回声第一次承担开门以外的职责。",
+          "targetMinutes": 10,
+          "requiredActionZones": 2,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C0-6",
+          "title": "旧馆最后一班",
+          "role": "章末劫案",
+          "hook": "三段行动区组成第一场完整劫案，利用安全锚点保存已完成阶段。",
+          "targetMinutes": 14,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        }
+      ]
+    },
+    {
+      "id": "C1",
+      "title": "错峰作案",
+      "mechanicFamily": "时序与相位",
+      "newQuestion": "同一个动作，应该发生在第几秒？",
+      "missions": [
+        {
+          "id": "C1-1",
+          "title": "晚到三秒",
+          "role": "认识",
+          "hook": "在时间轨道上延迟一条回声的出场，避开周期扫描。",
+          "targetMinutes": 10,
+          "requiredActionZones": 2,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C1-2",
+          "title": "两个绿灯",
+          "role": "变化",
+          "hook": "让两个响应窗口重叠一秒；理解同时满足而不是先后触碰。",
+          "targetMinutes": 12,
+          "requiredActionZones": 2,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C1-3",
+          "title": "扫光之间",
+          "role": "迁移",
+          "hook": "把移动路线插入扫描空档；时序投影提前显示风险。",
+          "targetMinutes": 13,
+          "requiredActionZones": 2,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C1-4",
+          "title": "别同时松手",
+          "role": "组合",
+          "hook": "两个回声交替维持通道，不能把所有同伙都停在终点。",
+          "targetMinutes": 14,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C1-5",
+          "title": "两次开门",
+          "role": "反转",
+          "hook": "同一个回声先离开再回到开关，给取物和撤离分别开窗。",
+          "targetMinutes": 15,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C1-6",
+          "title": "十二秒的宴会",
+          "role": "章末劫案",
+          "hook": "四段会场行动，各自组合延迟、窗口与回程，完成第一次精确合拍。",
+          "targetMinutes": 21,
+          "requiredActionZones": 4,
+          "mandatory": true,
+          "implemented": false
+        }
+      ]
+    },
+    {
+      "id": "C2",
+      "title": "替保安排班",
+      "mechanicFamily": "可预测的敌人行为",
+      "newQuestion": "怎样让别人主动走到我需要的位置？",
+      "missions": [
+        {
+          "id": "C2-1",
+          "title": "敲错的门",
+          "role": "认识",
+          "hook": "把巡逻者引入侧廊，再利用调查后的返回路径。",
+          "targetMinutes": 12,
+          "requiredActionZones": 2,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C2-2",
+          "title": "玻璃那一侧",
+          "role": "变化",
+          "hook": "玻璃阻挡身体但不遮挡视线；用隔墙声响改变暴露角度。",
+          "targetMinutes": 13,
+          "requiredActionZones": 2,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C2-3",
+          "title": "永不回头的人",
+          "role": "迁移",
+          "hook": "哨兵不理会普通噪声；沿其视野背面绕行，同时把侧廊巡逻者调离必经路线。",
+          "targetMinutes": 14,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C2-4",
+          "title": "替保安排班",
+          "role": "组合",
+          "hook": "两个守卫听见同一声响，按公开的响应规则分配调查者。",
+          "targetMinutes": 15,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C2-5",
+          "title": "诱饵的诱饵",
+          "role": "反转",
+          "hook": "前一声噪声是为了改变后一声噪声的效果，形成两步行为链。",
+          "targetMinutes": 16,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C2-6",
+          "title": "馆长的保镖",
+          "role": "章末劫案",
+          "hook": "分开不同感知类型的守卫，在移动安保圈中取走证物并撤离。",
+          "targetMinutes": 25,
+          "requiredActionZones": 4,
+          "mandatory": true,
+          "implemented": false
+        }
+      ]
+    },
+    {
+      "id": "C3",
+      "title": "停电之夜",
+      "mechanicFamily": "电路与场景状态",
+      "newQuestion": "给这扇门供电，会让什么东西重新启动？",
+      "missions": [
+        {
+          "id": "C3-1",
+          "title": "借一盏灯",
+          "role": "认识",
+          "hook": "用一个分流器在照明与门禁间分配电源，第一次改变场景状态。",
+          "targetMinutes": 12,
+          "requiredActionZones": 2,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C3-2",
+          "title": "亮着才危险",
+          "role": "变化",
+          "hook": "开门的电力也会开启摄像头，需要规划开关的先后顺序。",
+          "targetMinutes": 14,
+          "requiredActionZones": 2,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C3-3",
+          "title": "没有免费的黑暗",
+          "role": "迁移",
+          "hook": "断电让视觉变弱，同时使某条安全门失效，必须权衡两条路线。",
+          "targetMinutes": 15,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C3-4",
+          "title": "回声会接线",
+          "role": "组合",
+          "hook": "录下对指定开关的操作，让同伙在合适的时刻改接电路。",
+          "targetMinutes": 16,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C3-5",
+          "title": "只留一条供电线",
+          "role": "反转",
+          "hook": "有限电源需要按序服务多个目标，避免让关键设施同时掉线。",
+          "targetMinutes": 17,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C3-6",
+          "title": "全城停电之前",
+          "role": "章末劫案",
+          "hook": "四段配电站劫案；在取走核心之后重新接通民用系统才算完成。",
+          "targetMinutes": 26,
+          "requiredActionZones": 4,
+          "mandatory": true,
+          "implemented": false
+        }
+      ]
+    },
+    {
+      "id": "C4",
+      "title": "把现在交给过去",
+      "mechanicFamily": "信息接力",
+      "newQuestion": "怎样让一个已录好的自己拿到这轮才出现的信息？",
+      "missions": [
+        {
+          "id": "C4-1",
+          "title": "空手的信使",
+          "role": "认识",
+          "hook": "先录下接收请求，再由当前角色提供密钥；回放操作可以得到新的结果。",
+          "targetMinutes": 13,
+          "requiredActionZones": 2,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C4-2",
+          "title": "只有一个副本",
+          "role": "变化",
+          "hook": "密钥在同伙间转移，不能复制；决定谁去送、谁来开门。",
+          "targetMinutes": 15,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C4-3",
+          "title": "擦肩而过",
+          "role": "迁移",
+          "hook": "在明确标记的接力终端交接，结合延迟出场扩大有效交接窗口。",
+          "targetMinutes": 16,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C4-4",
+          "title": "先到的人等一下",
+          "role": "组合",
+          "hook": "收件者必须在终端停留，发件者同时维持另一条通路。",
+          "targetMinutes": 17,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C4-5",
+          "title": "一道门，两次身份",
+          "role": "反转",
+          "hook": "将同一凭据先后送往两处终端，改变通道授权。",
+          "targetMinutes": 18,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C4-6",
+          "title": "不存在的列车票",
+          "role": "章末劫案",
+          "hook": "在车站的四段行动中完成多次凭据接力，真正藏品仍由当前角色撤离。",
+          "targetMinutes": 26,
+          "requiredActionZones": 4,
+          "mandatory": true,
+          "implemented": false
+        }
+      ]
+    },
+    {
+      "id": "C5",
+      "title": "专门抓鬼的人",
+      "mechanicFamily": "反回声安保",
+      "newQuestion": "如果过去的自己暂时失效，计划哪里会先断？",
+      "missions": [
+        {
+          "id": "C5-1",
+          "title": "消失的一秒",
+          "role": "认识",
+          "hook": "回声经过公开的抑制场会暂时失去交互能力，离场后按原时间继续。",
+          "targetMinutes": 14,
+          "requiredActionZones": 2,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C5-2",
+          "title": "过去走得过去",
+          "role": "变化",
+          "hook": "普通人能通过但回声无法压住场内开关，重新分配当前角色的职责。",
+          "targetMinutes": 15,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C5-3",
+          "title": "给幽灵留条路",
+          "role": "迁移",
+          "hook": "改接电路为回声关闭一段抑制场，同时处理另一侧安保。",
+          "targetMinutes": 17,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C5-4",
+          "title": "被盯上的搭档",
+          "role": "组合",
+          "hook": "追踪器沿可预览的路径搜寻回声，用声响与电路制造空档。",
+          "targetMinutes": 18,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C5-5",
+          "title": "带着密钥消失",
+          "role": "反转",
+          "hook": "携带的信息在抑制期间不可使用，但不复制、不丢失，考验交接时序。",
+          "targetMinutes": 19,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C5-6",
+          "title": "审计员巡夜",
+          "role": "章末劫案",
+          "hook": "分阶段拆掉安保系统的感知、供电与抑制网络；用系统解法取代血条战。",
+          "targetMinutes": 27,
+          "requiredActionZones": 4,
+          "mandatory": true,
+          "implemented": false
+        }
+      ]
+    },
+    {
+      "id": "C6",
+      "title": "自己写作案计划",
+      "mechanicFamily": "有后果的多阶段路线",
+      "newQuestion": "这一步的选择，会给下一段行动留下什么局面？",
+      "missions": [
+        {
+          "id": "C6-1",
+          "title": "正门还是检修口",
+          "role": "认识",
+          "hook": "同一行动区提供两种可验证入口，路线选择改变后续可用设施。",
+          "targetMinutes": 14,
+          "requiredActionZones": 2,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C6-2",
+          "title": "先救谁的时间",
+          "role": "变化",
+          "hook": "按不同顺序解锁两个互相帮助的目标，路线汇合而非复制整条剧情。",
+          "targetMinutes": 16,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C6-3",
+          "title": "留灯还是留门",
+          "role": "迁移",
+          "hook": "把一个明确的电路结果带入下一行动区，进入前可查看后果并撤回。",
+          "targetMinutes": 17,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C6-4",
+          "title": "计划赶不上自己",
+          "role": "组合",
+          "hook": "取物触发已预告的撤离状态，使用准备好的备用路线。",
+          "targetMinutes": 18,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C6-5",
+          "title": "不只一种完美",
+          "role": "反转",
+          "hook": "至少两种不同原理的通关解；分别鼓励少回声与低暴露。",
+          "targetMinutes": 19,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C6-6",
+          "title": "市政厅不眠夜",
+          "role": "章末劫案",
+          "hook": "四段开放路线劫案，让玩家自己选择进入、调度、取物与撤离方案。",
+          "targetMinutes": 26,
+          "requiredActionZones": 4,
+          "mandatory": true,
+          "implemented": false
+        }
+      ]
+    },
+    {
+      "id": "C7",
+      "title": "最后一个自己",
+      "mechanicFamily": "反向目标与综合收束",
+      "newQuestion": "怎样把偷走的东西送回去，并让所有环节同时成立？",
+      "missions": [
+        {
+          "id": "C7-1",
+          "title": "偷回入口",
+          "role": "认识",
+          "hook": "利用已掌握的时序与反回声规则打开最终地点，不再教学新按钮。",
+          "targetMinutes": 11,
+          "requiredActionZones": 2,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C7-2",
+          "title": "把证据放回去",
+          "role": "变化",
+          "hook": "目标从取走改成在正确位置植入证据，反转熟悉的进出路线。",
+          "targetMinutes": 13,
+          "requiredActionZones": 2,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C7-3",
+          "title": "让他们看见真相",
+          "role": "迁移",
+          "hook": "把安保的调查行为变成证据传播渠道，改变对守卫的利用方式。",
+          "targetMinutes": 15,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C7-4",
+          "title": "没有多余的自己",
+          "role": "组合",
+          "hook": "三个槽位在不同任务间轮换，依靠角色分工完成综合行动。",
+          "targetMinutes": 16,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C7-5",
+          "title": "给昨天留一条路",
+          "role": "反转",
+          "hook": "同时解决当前撤离与后续阶段的通道状态，不依赖未预告的突袭。",
+          "targetMinutes": 18,
+          "requiredActionZones": 3,
+          "mandatory": true,
+          "implemented": false
+        },
+        {
+          "id": "C7-6",
+          "title": "回声劫案",
+          "role": "章末劫案",
+          "hook": "五段终局行动，每段有独立新解题点和安全锚点，完成公开全部档案或公开证据并归还私人记忆的选择。",
+          "targetMinutes": 27,
+          "requiredActionZones": 5,
+          "mandatory": true,
+          "implemented": false
+        }
+      ]
+    }
+  ]
+}
