@@ -18,6 +18,7 @@ export type Terminal = Point & { id: string; kind: 'source' | 'relay' | 'lock'; 
 export type Cycle = { period: number; active: [number, number]; phase?: number };
 export type Suppressor = { id: string; x: number; y: number; w: number; h: number; power?: Power; cycle?: Cycle };
 export type Scanner = { id: string; x: number; y: number; w: number; h: number; period: number; active: [number, number]; phase?: number; power?: Power };
+export type Delivery = Point & { id: string; label: string; power?: Power[]; plate?: string; authorization?: string; window?: [number, number]; receivers?: { guard: string; at: Point; label: string }[]; onDeposit?: { power: Power[]; message: string } };
 export type Level = {
   id: string;
   title: string;
@@ -34,7 +35,8 @@ export type Level = {
   loot: Point;
   par: number;
   exit?: Point;
-  objective?: 'collect' | 'reach';
+  objective?: 'collect' | 'reach' | 'deliver';
+  delivery?: Delivery;
   objectiveLabel?: string;
   lootLabel?: string;
   district?: string;

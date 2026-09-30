@@ -17,7 +17,7 @@ function isFrame(value: unknown): value is Frame {
     Number.isFinite(f.y) && f.y >= 0 && f.y <= HEIGHT &&
     Number.isFinite(f.angle) && Math.abs(f.angle) <= Math.PI * 2 && typeof f.lure === 'boolean' &&
     (f.intent === undefined || (!!f.intent && typeof f.intent === 'object' && typeof f.intent.id === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(f.intent.id) &&
-      (f.intent.type === 'circuit' ? typeof f.intent.on === 'boolean' : ['take', 'give', 'authorize'].includes(f.intent.type))));
+      (f.intent.type === 'circuit' ? typeof f.intent.on === 'boolean' : ['take', 'give', 'authorize', 'deposit'].includes(f.intent.type))));
 }
 
 export function decodePlan(value: unknown, levelId: string): Echo[] | null {

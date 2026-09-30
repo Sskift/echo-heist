@@ -8,7 +8,9 @@ export async function clock(page: Page) {
     (window as unknown as { advance: (frames: number) => void }).advance = frames => {
       if (!now) now = performance.now();
       for (let frame = 0; frame < frames; frame++) {
-        now += 1000 / 60;
+        // Stay just above the fixed-step boundary: floating-point cancellation
+        // must not drop a simulated frame at a keyboard rendezvous.
+        now += 1000 / 60 + 1e-6;
         const pending = callbacks; callbacks = [];
         pending.forEach(callback => callback(now));
       }

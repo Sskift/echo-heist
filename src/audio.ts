@@ -26,7 +26,7 @@ export class Sound {
   play(event: GameEvent) {
     if (event === 'rewind') this.tone(700, 0.28, 'sine', 0.07, 0, 100);
     if (event === 'door') { this.tone(220, 0.1, 'triangle'); this.tone(330, 0.1, 'triangle', 0.035, 0.07); }
-    if (event === 'loot') { this.tone(660, 0.22); this.tone(990, 0.3, 'sine', 0.05, 0.1); }
+    if (event === 'loot' || event === 'deposit' || event === 'receipt') { this.tone(660, 0.22); this.tone(990, 0.3, 'sine', 0.05, 0.1); }
     if (event === 'lure') this.tone(950, 0.14, 'triangle', 0.04, 0, 350);
     if (event === 'tick') this.tone(440, 0.06, 'sine', 0.025);
     if (event === 'caught' || event === 'full') this.tone(160, 0.3, 'sawtooth', 0.025, 0, 65);

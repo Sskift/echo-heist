@@ -94,7 +94,8 @@ export class Renderer {
     c.stroke();
 
     // Pools of light are procedural and independent of external assets.
-    for (const [x, y, r, tint] of [[game.level.spawn.x, game.level.spawn.y, 160, '139,187,132'], [game.level.loot.x, game.level.loot.y, 215, '188,154,88']] as const) {
+    const goal = game.level.delivery ?? game.level.loot;
+    for (const [x, y, r, tint] of [[game.level.spawn.x, game.level.spawn.y, 160, '139,187,132'], [goal.x, goal.y, 215, game.level.delivery ? '142,212,237' : '188,154,88']] as const) {
       const light = c.createRadialGradient(x, y, 0, x, y, r);
       light.addColorStop(0, `rgba(${tint},0.09)`); light.addColorStop(1, `rgba(${tint},0)`);
       c.fillStyle = light; c.fillRect(x - r, y - r, r * 2, r * 2);
@@ -102,7 +103,7 @@ export class Renderer {
 
     this.text(game.level.district ?? 'WEST ANNEX', 65, 76, '#718578', 12);
     this.text(game.level.title, 65, 94, '#75927e', 10);
-    this.text(game.level.doors.length > 1 ? 'SECURE ARCHIVE' : 'PRIVATE COLLECTION', 520, 76, '#718578', 12);
+    this.text(game.level.delivery ? 'EVIDENCE REGISTRY' : game.level.doors.length > 1 ? 'SECURE ARCHIVE' : 'PRIVATE COLLECTION', 520, 76, '#718578', 12);
     this.text('NIGHT SHIFT  ·  02:14 AM', 520, 94, '#475e50', 9);
     this.text('AUTHORIZED PERSONNEL ONLY', 510, 523, '#40584a', 9);
 
@@ -131,9 +132,9 @@ export class Renderer {
     // Evacuation hatch.
     const exit = game.level.exit ?? game.level.spawn;
     c.save();
-    c.fillStyle = game.hasLoot ? '#c3ed8220' : '#8cae9212';
+    c.fillStyle = game.objectiveComplete ? '#c3ed8220' : '#8cae9212';
     c.fillRect(exit.x - 30, exit.y - 30, 60, 60);
-    c.strokeStyle = game.hasLoot ? C.lime : '#68937a'; c.lineWidth = 1.5;
+    c.strokeStyle = game.objectiveComplete ? C.lime : '#68937a'; c.lineWidth = 1.5;
     c.setLineDash([7, 5]); c.strokeRect(exit.x - 30, exit.y - 30, 60, 60); c.setLineDash([]);
     this.line([{ x: exit.x + 12, y: exit.y }, { x: exit.x - 12, y: exit.y }, { x: exit.x - 4, y: exit.y - 8 }], '#95bca0', 2);
     this.text(!game.exitReady ? '供电未就绪 / WAIT' : game.level.objective === 'reach' ? '安全锚点 / ANCHOR' : '撤离点 / EXIT', exit.x, exit.y + 49, !game.exitReady ? C.amber : game.hasLoot ? C.lime : '#9bbca4', 10, 'center');
@@ -260,7 +261,19 @@ export class Renderer {
       if (inputs.length > 1 || door.plateMode === 'none') this.text(`${inputs.join('+')} ${door.plateMode === 'one' ? '恰好一个' : door.plateMode === 'none' ? '全部松开' : door.plateMode === 'any' ? '至少一个' : '同时满足'}`, door.x + door.w / 2, door.y - 29, '#b5cfa1', 9, 'center');
     }
 
-    if (game.level.objective !== 'reach') {
+    if (game.level.objective === 'deliver' && game.level.delivery) {
+      const d = game.level.delivery;
+      c.fillStyle = game.evidenceDeposited ? '#8ed4ed30' : '#8ed4ed10'; c.fillRect(d.x - 25, d.y - 25, 50, 50);
+      c.strokeStyle = '#8ed4ed'; c.lineWidth = 2; c.strokeRect(d.x - 25, d.y - 25, 50, 50);
+      this.line([{ x: d.x, y: d.y - 13 }, { x: d.x, y: d.y + 9 }, { x: d.x - 7, y: d.y + 2 }, { x: d.x, y: d.y + 9 }, { x: d.x + 7, y: d.y + 2 }], '#8ed4ed', 2);
+      this.text(`${d.id} / ${game.evidenceDeposited ? '已植入' : 'E 植入证据'}`, d.x, d.y + 43, '#8ed4ed', 10, 'center');
+      if (d.window) this.text(`${d.window.join('–')}s 提交`, d.x, d.y + 59, C.amber, 9, 'center');
+      for (const receipt of d.receivers ?? []) {
+        const received = game.evidenceReceipts.has(receipt.guard);
+        this.circle(receipt.at, 18, '#8ed4ed10', received ? C.lime : '#8ed4ed');
+        this.text(`${receipt.guard} 回执${received ? ' ✓' : '待登记'}`, receipt.at.x, receipt.at.y + 43, received ? C.lime : '#8ed4ed', 10, 'center');
+      }
+    } else if (game.level.objective !== 'reach') {
     const loot = game.level.loot;
     c.fillStyle = '#3a352780'; c.fillRect(loot.x - 25, loot.y - 25, 50, 50);
     c.strokeStyle = '#93795350'; c.lineWidth = 1; c.strokeRect(loot.x - 25, loot.y - 25, 50, 50);
@@ -317,6 +330,7 @@ export class Renderer {
         this.circle(guard.investigate, 9, '#efbd7210', '#efbd72');
       }
       this.actor({ ...guard, lure: false }, !enabled ? '#526153' : guard.suspicion > 0.2 ? '#ed947c' : C.amber, time, false, label);
+      if (game.evidenceReaders.has(game.guardName(index))) this.circle({ x: guard.x + 16, y: guard.y + 10 }, 5, '#8ed4ed');
       if (guard.suspicion > 0) {
         c.fillStyle = '#100e0a'; c.fillRect(guard.x - 15, guard.y + 21, 30, 3);
         c.fillStyle = '#ef957e'; c.fillRect(guard.x - 15, guard.y + 21, guard.suspicion * 30, 3);
@@ -328,6 +342,7 @@ export class Renderer {
     }
     if (!game.spectator) this.actor(game.player, game.editingIndex === null ? '#eff3df' : ECHO_COLORS[game.echoes[game.editingIndex].colorIndex], time, false, game.editingIndex === null ? 'YOU' : `REC ECHO 0${game.editingIndex + 1}`);
     if (game.hasLoot) this.circle({ x: game.player.x - 13, y: game.player.y + 9 }, 4, C.amber);
+    if (!game.spectator && game.level.objective === 'deliver' && !game.evidenceDeposited) this.circle({ x: game.player.x - 13, y: game.player.y + 9 }, 5, '#8ed4ed');
     if (game.tokenOwner === 'player') this.circle({ x: game.player.x + 16, y: game.player.y + 10 }, 5, C.amber);
     if (game.failure) {
       this.circle(game.failure.point, 28, '#ed947c15', '#ed947c');

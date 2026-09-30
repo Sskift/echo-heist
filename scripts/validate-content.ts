@@ -57,14 +57,30 @@ for (const mission of MISSIONS) {
     for (const entity of [...level.doors, ...level.guards, ...level.suppressors ?? [], ...level.scanners ?? [], ...level.terminals ?? []]) {
       if (entity.power) assert.ok(level.circuits?.some(c => c.id === entity.power!.id), `Unknown circuit in ${level.id}`);
     }
-    for (const powers of [level.lootPower, level.exitPower, level.onLoot?.power]) {
+    for (const powers of [level.lootPower, level.exitPower, level.onLoot?.power, level.delivery?.power, level.delivery?.onDeposit?.power]) {
       unique(powers ?? []);
       for (const p of powers ?? []) assert.ok(level.circuits?.some(c => c.id === p.id) && typeof p.on === 'boolean', `Invalid objective power in ${level.id}`);
     }
-    if (level.onLoot) assert.ok(level.objective !== 'reach' && level.onLoot.message.trim(), `Pickup consequence needs a collectible and warning in ${level.id}`);
+    if (level.onLoot) assert.ok(level.objective !== 'reach' && level.objective !== 'deliver' && level.onLoot.message.trim(), `Pickup consequence needs a collectible and warning in ${level.id}`);
+    assert.equal(!!level.delivery, level.objective === 'deliver', `Delivery objective needs its target in ${level.id}`);
+    if (level.delivery) {
+      const d = level.delivery;
+      assert.ok(/^[A-Za-z0-9_-]{1,32}$/.test(d.id) && d.label.trim(), `Invalid delivery in ${level.id}`);
+      assert.ok(!level.lootPower?.length, `Use delivery power for ${level.id}`);
+      assert.ok([...(level.circuits ?? []), ...(level.terminals ?? [])].every(t => Math.hypot(t.x - d.x, t.y - d.y) >= 60), `Overlapping interaction targets in ${level.id}`);
+      if (d.window) assert.ok(d.window[0] >= 0 && d.window[1] > d.window[0] && d.window[1] <= 12, `Invalid delivery window in ${level.id}`);
+      if (d.plate) assert.ok(level.plates.some(p => p.id === d.plate), `Unknown delivery plate in ${level.id}`);
+      if (d.authorization) assert.ok(level.terminals?.some(t => t.authorization === d.authorization), `Unknown delivery authorization in ${level.id}`);
+      if (d.onDeposit) assert.ok(d.onDeposit.message.trim(), `Missing deposit consequence warning in ${level.id}`);
+      unique((d.receivers ?? []).map(r => ({ id: r.guard })));
+      for (const receiver of d.receivers ?? []) {
+        const guard = level.guards.find(g => g.id === receiver.guard);
+        assert.ok(guard && (!guard.kind || guard.kind === 'patrol') && guard.speed > 0 && guard.searchSeconds && guard.route.some(p => p.x === receiver.at.x && p.y === receiver.at.y) && receiver.label.trim(), `Invalid delivery witness in ${level.id}`);
+      }
+    }
     for (const wall of level.walls) assert.ok(wall.x >= 0 && wall.y >= 0 && wall.x + TILE <= WIDTH && wall.y + TILE <= HEIGHT, `Wall outside ${level.id}`);
     const game = new Game(level);
-    for (const point of [level.spawn, level.exit ?? level.spawn, ...level.plates, ...level.circuits ?? [], ...level.terminals ?? [], ...(level.objective === 'reach' ? [] : [level.loot])]) {
+    for (const point of [level.spawn, level.exit ?? level.spawn, ...level.plates, ...level.circuits ?? [], ...level.terminals ?? [], ...(level.delivery ? [level.delivery, ...level.delivery.receivers?.map(r => r.at) ?? []] : level.objective === 'reach' ? [] : [level.loot])]) {
       assert.ok(!game.blocked(point.x, point.y), `Entity inside obstacle: ${level.id} at ${point.x},${point.y}`);
     }
     const win = playWitness(stage);

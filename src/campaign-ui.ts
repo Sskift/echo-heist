@@ -15,6 +15,7 @@ export class CampaignUI {
   private relayKey = '';
   private suppressionKey = '';
   private consequenceKey = '';
+  private deliveryKey = '';
   constructor(private campaign: Campaign, actions: Actions) {
     $('.intro').insertAdjacentHTML('afterend', `
       <section class="campaign-shell" aria-label="行动档案">
@@ -27,6 +28,7 @@ export class CampaignUI {
       <div class="rehearsal-toolbar"><button id="preview-button" aria-pressed="false">◇ 预演回声</button><span id="interaction-tip">E 操作设备 · P 预演已保存的计划</span></div>
       <section id="preview-panel" class="preview-panel" hidden aria-label="回声预演"><div><strong>只读预演</strong><output id="preview-time">0.00s</output></div><p>仅播放已保存回声；真人不参与，也不会保存进度。拖动时间，检查门与设备。</p><input id="preview-frame" type="range" min="0" max="720" step="1" value="0" aria-label="预演时间"><ol id="preview-log"></ol></section>`);
     $('#echo-slots').insertAdjacentHTML('afterend', '<div id="echo-delays" class="echo-delays"></div>');
+    $('.rehearsal-toolbar').insertAdjacentHTML('afterend', '<details id="delivery-panel" class="security-panel power-panel" hidden><summary>证据植入与送达回执 <span>＋</span></summary><p>真人携带证据到植入点按 E，提交时检查列出的条件。回声可以配合开门、授权和引导调查，但不能替代真人植入。需要回执时，指定守卫必须到植入点搜索发现副本，再返回标记的登记点；巡逻路过、远处听见或只读预演均不算送达。</p><p id="delivery-status" role="status"></p><ul id="delivery-requirements" aria-label="植入条件与回执"></ul><p id="delivery-consequence"></p></details>');
     $('.rehearsal-toolbar').insertAdjacentHTML('afterend', '<div id="credential-strip" class="credential-strip" hidden><strong id="credential-owner"></strong><span id="credential-event"></span></div><details id="relay-panel" class="security-panel relay-panel" hidden><summary>凭据与交接时段 <span>＋</span></summary><p>凭据只有一份，金色标记表示持有者。先交付、再接收、最后授权；授权后仍持有凭据。普通终端只处理按键那一刻，留候终端可按一次 E 后站在圈内等送件；离开或投影受抑制就取消。多人同时接收会取消本次请求，不会复制凭据。</p><ul id="relay-status" aria-label="交接状态"></ul><p>实体原件仍需真人取走。预演只播放已保存回声，不包含真人送件。</p></details>');
     $('.hint').insertAdjacentHTML('afterend', '<details class="hint evidence"><summary>已取得的线索 <span>＋</span></summary><div id="evidence-list"></div></details>');
     $('#preview-panel').insertAdjacentHTML('afterend', '<details id="security-panel" class="security-panel" hidden><summary>安保响应规则 <span>＋</span></summary><p id="security-rule"></p><ul id="security-status" aria-label="守卫状态"></ul><p>地图圆圈为参考响点；其他位置同样可以发声。方框标记的固定哨兵不响应诱饵。单位格与地图网格一致。</p></details>');
@@ -59,6 +61,25 @@ export class CampaignUI {
 
   render(game: Game, campaignMode: boolean, preview: Game | null) {
     const world = preview ?? game;
+    const delivery = world.level.delivery;
+    $('#delivery-panel').hidden = world.level.objective !== 'deliver' || !delivery;
+    if (delivery) {
+      const rules = [
+        `${delivery.id} · ${delivery.label} · 真人按 E 植入${delivery.window ? ` · 时段 ${delivery.window.join('–')} 秒` : ''}`,
+        ...(delivery.power ?? []).map(p => `${p.id} 需${world.circuitState(p.id, p.on)} ${world.powered(p) ? '✓' : '·'}`),
+        ...(delivery.plate ? [`需守 ${delivery.plate} ${world.activePlates.has(delivery.plate) ? '✓' : '·'}`] : []),
+        ...(delivery.authorization ? [`先签 ${delivery.authorization} ${world.authorized.has(delivery.authorization) ? '✓' : '·'}`] : []),
+        ...(delivery.receivers ?? []).map(r => `${r.guard} → ${r.label}：${world.evidenceReceipts.has(r.guard) ? '回执已登记' : world.evidenceReaders.has(r.guard) ? '已发现，待返回登记点' : '待到场搜索发现'}`),
+      ];
+      const status = preview ? '预演仅核对同伙与安保路线；真人植入及送达回执需在实际行动中确认。' : game.editingIndex !== null ? '重录中：只录路线，不能植入实体证据。' : world.deliveryStatus();
+      const key = JSON.stringify([delivery, rules, status]);
+      if (key !== this.deliveryKey) {
+        this.deliveryKey = key;
+        $('#delivery-status').textContent = status;
+        $('#delivery-requirements').replaceChildren(...rules.map(text => { const item = document.createElement('li'); item.textContent = text; return item; }));
+        $('#delivery-consequence').textContent = delivery.onDeposit ? `${world.evidenceDeposited ? '已经发生' : '植入后预告'}：${delivery.onDeposit.message}` : '';
+      }
+    }
     const suppression = (world.level.suppressors ?? []).map(field => {
       const on = world.suppressionActive(field), powered = world.powered(field.power);
       const affected = world.activeEchoes.filter(({ echo }) => world.suppressionFields(world.echoAt(echo)).some(s => s.id === field.id)).map(({ index }) => `回声 ${index + 1}`);
@@ -158,7 +179,7 @@ export class CampaignUI {
       if (preview) document.querySelectorAll<HTMLButtonElement>('[data-delay]').forEach(button => { button.disabled = true; });
     }
     const intent = game.interaction();
-    const tip = intent ? `E：${intent.type === 'circuit' ? `将 ${intent.id} 设为${game.circuitState(intent.id, intent.on)}` : intent.type === 'take' ? `在 ${intent.id} 接收凭据` : intent.type === 'give' ? `向 ${intent.id} 交付凭据` : `在 ${intent.id} 请求授权`}` : game.tokenOwner === 'player' ? '你持有唯一凭据 · 到终端按 E 交付' : 'E 操作设备 · P 预演已保存的计划';
+    const tip = intent?.type === 'deposit' ? game.evidenceDeposited ? `${intent.id} 已植入 · ${game.objectiveComplete ? '前往撤离点' : '等待送达回执'}` : `E：在 ${intent.id} 植入实体证据` : intent ? `E：${intent.type === 'circuit' ? `将 ${intent.id} 设为${game.circuitState(intent.id, intent.on)}` : intent.type === 'take' ? `在 ${intent.id} 接收凭据` : intent.type === 'give' ? `向 ${intent.id} 交付凭据` : `在 ${intent.id} 请求授权`}` : game.tokenOwner === 'player' ? '你持有唯一凭据 · 到终端按 E 交付' : 'E 操作设备 · P 预演已保存的计划';
     const terminal = intent && game.level.terminals?.find(t => t.id === intent.id && intent.type !== 'circuit');
     const waiting = game.waitingReceivers.get('player') === terminal?.id;
     const blockers = terminal ? game.terminalBlockers(terminal) : [];

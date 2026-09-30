@@ -132,6 +132,9 @@ $('#relay-panel').addEventListener('toggle', () => {
 $('#suppression-panel').addEventListener('toggle', () => {
   if ($<HTMLDetailsElement>('#suppression-panel').open && game.status === 'running') { game.togglePause(); clearInput(); refreshUI(); }
 });
+$('#delivery-panel').addEventListener('toggle', () => {
+  if ($<HTMLDetailsElement>('#delivery-panel').open && game.status === 'running') { game.togglePause(); clearInput(); refreshUI(); }
+});
 $('#touch-lure').insertAdjacentHTML('afterend', '<button class="touch-lure" id="touch-interact">E 操作设备</button>');
 $('.clock-panel').insertAdjacentElement('afterend', $('.mission-actions'));
 $('#hint-text').insertAdjacentHTML('afterend', '<button id="more-hint" class="more-hint" hidden>再给一点提示</button>');
@@ -143,7 +146,7 @@ function renderHint() {
   $('#more-hint').hidden = hintStep >= hints.length - 1;
   $('#more-hint').textContent = `再给一点提示（${hintStep + 1} / ${hints.length}）`;
 }
-$('.version').textContent = 'VOL. 09';
+$('.version').textContent = 'VOL. 10';
 $('.manual-steps').insertAdjacentHTML('beforeend', '<li><strong>安排一场完整劫案</strong><p>行动档案中的序章会逐步解锁。每段成功后保存安全锚点，下一段重新录制同伙。点击阶段名称可以回退；之后的阶段需要重做。</p></li><li><strong>调整时序，先看结果</strong><p>回声下方的加减按钮以 0.25 秒调整出场；按 P 预演已保存的回声，拖动时间检查门禁与暴露。E 操作电源和凭据终端，录制会保留这次操作请求。</p></li>');
 const playtesting = new PlaytestUI(() => ({ zoneId: canonicalZoneId(game.level.id), missionId: campaignMode ? campaign.mission.id : game.level.id, phase: dialog.open ? 'help' : previewGame ? 'rehearsal' : game.status === 'running' ? 'execution' : 'planning' }), () => { if (game.status === 'running') game.togglePause(); clearInput(); });
 $('.hint').addEventListener('toggle', () => { if ($<HTMLDetailsElement>('.hint').open) playtesting.event('hint', `tier ${hintStep + 1}`); });
@@ -289,10 +292,10 @@ function refreshUI() {
     });
     const allDoors = game.openDoors.size === game.level.doors.length;
     $('#objective-doors').classList.toggle('done', allDoors);
-    $('#objective-loot').classList.toggle('done', game.hasLoot);
+    $('#objective-loot').classList.toggle('done', game.level.objective === 'deliver' ? game.objectiveComplete : game.hasLoot);
     $('#door-status').textContent = allDoors ? '所有通道已打开' : `${game.openDoors.size} / ${game.level.doors.length} 道门已开启`;
     $('#loot-status').textContent = game.editingIndex !== null ? '重录中：这一轮只录路线' : game.status === 'won' ? '安全撤离，行动完成' : game.level.objectiveLabel ? (game.hasLoot ? '目标已取得，前往标记的撤离点' : game.level.objectiveLabel) : game.hasLoot ? '已拿到藏品，返回左下角！' : '藏品位于右上角';
-    $('#objective-loot > div').firstChild!.textContent = game.level.objective === 'reach' ? '抵达安全锚点' : '取得目标，安全撤离';
+    $('#objective-loot > div').firstChild!.textContent = game.level.objective === 'deliver' ? '植入证据，确认送达' : game.level.objective === 'reach' ? '抵达安全锚点' : '取得目标，安全撤离';
     if (!game.exitReady && (game.hasLoot || game.level.objective === 'reach')) $('#loot-status').textContent = `撤离前需：${game.powerRequirements(game.unmetPower(game.level.exitPower))}`;
     else if (!game.hasLoot && !game.canCollect) $('#loot-status').textContent = `取物前需：${game.powerRequirements(game.unmetPower(game.level.lootPower))}`;
     if (game.level.circuits?.length) {
@@ -324,6 +327,15 @@ function refreshUI() {
   const draft = document.querySelector<HTMLElement>('.draft-segment');
   if (draft) draft.style.width = `${game.seconds / LOOP_SECONDS * 100}%`;
   const display = previewGame ?? game;
+  if (game.level.objective === 'deliver') {
+    $('#objective-loot').classList.toggle('done', !previewGame && game.objectiveComplete);
+    $('#loot-status').textContent = previewGame ? '预演不含实体植入与回执' : game.editingIndex !== null ? '重录中：只录路线，不能植入证据' : game.status === 'won' ? '送达确认，安全撤离' : game.objectiveComplete && !game.exitReady ? `撤离前需：${game.powerRequirements(game.unmetPower(game.level.exitPower))}` : game.deliveryStatus();
+    if (!game.level.doors.length && game.level.delivery?.receivers?.length) {
+      $('#objective-doors > div').firstChild!.textContent = '让见证人带回回执';
+      $('#door-status').textContent = `已发现 ${display.evidenceReaders.size} · 已登记 ${display.evidenceReceipts.size} / ${game.level.delivery.receivers.length}`;
+      $('#objective-doors').classList.toggle('done', !previewGame && game.objectiveComplete);
+    }
+  }
   $('.clock-top > span:first-child').textContent = previewGame ? '预演剩余 · 只读' : '本轮剩余';
   const seconds = display.remaining.toFixed(2).split('.');
   $('#seconds').textContent = seconds[0].padStart(2, '0');
@@ -335,7 +347,7 @@ function refreshUI() {
   if (previewGame) {
     $('#overlay').hidden = true;
     $('#record-label').textContent = 'REHEARSAL';
-    if (game.level.circuits?.length) $('#loot-status').textContent = '仅预演回声操作；取物及其后果需要真人执行。';
+    if (game.level.circuits?.length && game.level.objective !== 'deliver') $('#loot-status').textContent = '仅预演回声操作；取物及其后果需要真人执行。';
     $('#door-status').textContent = previewGame.level.circuits?.length ? `${previewGame.openDoors.size} / ${previewGame.level.doors.length} 道门开启 · 可以分时通过` : previewGame.openDoors.size === previewGame.level.doors.length ? '所有通道已打开' : `${previewGame.openDoors.size} / ${previewGame.level.doors.length} 道门已开启`;
     document.querySelectorAll<HTMLElement>('[data-echo-state]').forEach(el => { el.textContent = previewGame!.echoActivity(Number(el.dataset.echoState)); });
     document.querySelectorAll<HTMLElement>('.track-playhead').forEach(el => el.style.left = `${previewGame!.seconds / LOOP_SECONDS * 100}%`);
@@ -373,7 +385,7 @@ function refreshUI() {
       if (campaignMode) {
         const mission = campaign.mission, stageIndex = campaign.indexOf(game.level.id);
         const final = stageIndex === mission.stages.length - 1;
-        eyebrow = final ? 'EVIDENCE SECURED' : 'SAFE ANCHOR';
+        eyebrow = final ? game.level.objective === 'deliver' ? 'DELIVERY CONFIRMED' : 'EVIDENCE SECURED' : 'SAFE ANCHOR';
         title = final ? `${mission.title} · 完成` : '这一段，已经安全了。';
         copy = campaign.stageAt(stageIndex).result;
         const next = campaign.nextMission;
@@ -524,6 +536,7 @@ function loop(now: number) {
   for (const event of game.drainEvents()) {
     if (['start', 'rewind', 'plan', 'caught', 'won'].includes(event)) playtesting.event(event, event === 'caught' ? game.lastMessage : `take ${game.attempts}; echoes ${game.echoes.length}; frame ${game.frame}`);
     sound.play(event);
+    if (event === 'deposit' || event === 'receipt') toast(game.signals.at(-1)?.text ?? game.deliveryStatus());
     if (event === 'plan') persistPlan();
     if (event === 'rewind') renderer.rewindFlash = 1;
     if (event === 'loot') toast(game.level.onLoot?.message ?? (!game.exitReady ? `目标已取得；撤离前需 ${game.powerRequirements(game.unmetPower(game.level.exitPower))}。` : '目标已取得。前往标记的撤离点！'));

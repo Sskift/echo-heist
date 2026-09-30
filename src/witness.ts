@@ -22,8 +22,8 @@ export function playWitness(stage: Stage, observe?: (game: Game) => void): Game 
         const dx = x - game.player.x, dy = y - game.player.y;
         step(Math.abs(dx) > 2 ? Math.sign(dx) : 0, Math.abs(dy) > 2 ? Math.sign(dy) : 0);
       }
-    } else if ('wait' in action) { for (let n = 0; n < action.wait; n++) step(); }
-    else if ('press' in action) { step(0, 0, action.press === 'interact', action.press === 'lure'); step(); }
+    } else if ('wait' in action) { for (let n = 0; n < action.wait && (game.status as string) !== 'won'; n++) step(); }
+    else if ('press' in action) { step(0, 0, action.press === 'interact', action.press === 'lure'); if ((game.status as string) !== 'won') step(); }
     else if ('record' in action) { if (!game.rewind()) throw new Error(`${stage.level.id}: cannot record`); }
     else if (!game.setDelay(action.echo, action.delay)) throw new Error(`${stage.level.id}: invalid delay`);
   }

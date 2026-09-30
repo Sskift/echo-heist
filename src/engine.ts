@@ -1,13 +1,13 @@
 import { doorPlates, FPS, LOOP_SECONDS, MAX_ECHOES, MAX_FRAMES, TILE, type Cycle, type Level, type Point, type Power, type Scanner, type Suppressor, type Terminal } from './levels.ts';
 import { findRoute } from './navigation.ts';
 
-export type Intent = { type: 'circuit'; id: string; on: boolean } | { type: 'take' | 'give' | 'authorize'; id: string };
+export type Intent = { type: 'circuit'; id: string; on: boolean } | { type: 'take' | 'give' | 'authorize' | 'deposit'; id: string };
 export type Input = { x: number; y: number; lure: boolean; interact?: boolean };
 export type Frame = Point & { angle: number; lure: boolean; intent?: Intent };
 export type Echo = { frames: Frame[]; colorIndex: number; delay?: number };
 export type Status = 'ready' | 'running' | 'paused' | 'caught' | 'won';
 export type Guard = Point & { angle: number; waypoint: number; investigate: Point | null; attention: number; suspicion: number; path?: Point[]; pathKey?: string; seenActor?: string; searching?: boolean; trace?: { at: Point; actor: string; label: string; remaining: number } };
-export type GameEvent = 'start' | 'rewind' | 'door' | 'loot' | 'lure' | 'caught' | 'won' | 'tick' | 'full' | 'plan';
+export type GameEvent = 'start' | 'rewind' | 'door' | 'loot' | 'deposit' | 'receipt' | 'lure' | 'caught' | 'won' | 'tick' | 'full' | 'plan';
 
 const SPEED = 224;
 const RADIUS = 10;
@@ -29,6 +29,9 @@ export class Game {
   status: Status = 'ready';
   frame = 0;
   hasLoot = false;
+  evidenceDeposited = false;
+  evidenceReaders = new Set<string>();
+  evidenceReceipts = new Set<string>();
   alarm = 0;
   attempts = 1;
   lureCooldown = 0;
@@ -111,6 +114,55 @@ export class Game {
   powerRequirements(requirements: Power[] = []): string { return requirements.map(p => `${p.id} ${this.circuitState(p.id, p.on)}`).join('、'); }
   get canCollect(): boolean { return !this.unmetPower(this.level.lootPower).length; }
   get exitReady(): boolean { return !this.unmetPower(this.level.exitPower).length; }
+  get objectiveComplete(): boolean {
+    return this.level.objective === 'deliver' ? !!this.level.delivery && this.evidenceDeposited && (this.level.delivery.receivers ?? []).every(r => this.evidenceReceipts.has(r.guard)) : this.level.objective === 'reach' || this.hasLoot;
+  }
+  deliveryBlockers(): string[] {
+    const d = this.level.delivery;
+    if (!d) return [];
+    return [
+      ...this.unmetPower(d.power).map(p => `${p.id} 需${this.circuitState(p.id, p.on)}`),
+      ...(d.plate && !this.activePlates.has(d.plate) ? [`需有人守住 ${d.plate}`] : []),
+      ...(d.authorization && !this.authorized.has(d.authorization) ? [`需先取得 ${d.authorization} 授权`] : []),
+      ...(d.window && (this.frame < Math.round(d.window[0] * FPS) || this.frame >= Math.round(d.window[1] * FPS)) ? [`提交时段 ${d.window.join('–')} 秒`] : []),
+    ];
+  }
+  deliveryStatus(): string {
+    if (!this.level.delivery) return '';
+    if (this.objectiveComplete) return '证据送达已确认，前往撤离点';
+    if (this.evidenceDeposited) return `证据已植入；回执 ${this.evidenceReceipts.size} / ${this.level.delivery.receivers?.length ?? 0}`;
+    const blockers = this.deliveryBlockers();
+    return blockers.length ? `携带证据 · ${blockers.join('、')}` : `携带证据 · 到 ${this.level.delivery.id} 按 E 植入`;
+  }
+  private updateDelivery() {
+    const d = this.level.delivery;
+    // Physical evidence belongs to the live operation. Replays may open its
+    // conditions but cannot deposit it, including an old recorded E request.
+    if (this.level.objective !== 'deliver' || !d || this.spectator || this.editingIndex !== null) return;
+    if (!this.evidenceDeposited && this.player.intent?.type === 'deposit' && this.player.intent.id === d.id && distance(this.player, d) < 30) {
+      const blockers = this.deliveryBlockers();
+      if (blockers.length) this.signal(`${d.id} 植入未满足：${blockers.join('、')}`);
+      else {
+        this.evidenceDeposited = true; this.events.push('deposit'); this.signal(`${d.id} 已植入 ${d.label}`);
+        if (d.onDeposit) {
+          for (const p of d.onDeposit.power) this.circuits.set(p.id, p.on);
+          this.signal(d.onDeposit.message); this.updatePlates();
+        }
+      }
+    }
+    if (!this.evidenceDeposited) return;
+    for (const receiver of d.receivers ?? []) {
+      const i = this.level.guards.findIndex(g => g.id === receiver.guard);
+      const guard = this.guards[i], def = this.level.guards[i];
+      if (!guard || !this.powered(def.power)) continue;
+      if (!this.evidenceReaders.has(receiver.guard) && guard.investigate && guard.searching && distance(guard, d) < 24 && this.canWalk(guard, d)) {
+        this.evidenceReaders.add(receiver.guard); this.signal(`${receiver.guard} 搜索发现证据，携带核验副本返回 ${receiver.label}`);
+      }
+      if (this.evidenceReaders.has(receiver.guard) && !this.evidenceReceipts.has(receiver.guard) && !guard.investigate && !guard.trace && distance(guard, receiver.at) < 20 && this.canWalk(guard, receiver.at)) {
+        this.evidenceReceipts.add(receiver.guard); this.events.push('receipt'); this.signal(`${receiver.guard} 已在 ${receiver.label} 登记回执`);
+      }
+    }
+  }
   visionRange(index: number): number {
     const def = this.level.guards[index];
     return def.lighting && !this.powered(def.lighting) ? def.lighting.darkRange : def.range;
@@ -171,6 +223,8 @@ export class Game {
   }
 
   interaction(): Intent | undefined {
+    const delivery = this.level.delivery;
+    if (this.level.objective === 'deliver' && delivery && distance(delivery, this.player) < 30) return { type: 'deposit', id: delivery.id };
     const circuit = this.level.circuits?.find(c => distance(c, this.player) < 30);
     if (circuit) return { type: 'circuit', id: circuit.id, on: !this.circuits.get(circuit.id) };
     const terminal = this.level.terminals?.find(t => distance(t, this.player) < 30);
@@ -318,6 +372,8 @@ export class Game {
     this.player = { ...this.level.spawn, angle: -Math.PI / 2, lure: false };
     this.frame = 0;
     this.hasLoot = false;
+    this.evidenceDeposited = false;
+    this.evidenceReaders.clear(); this.evidenceReceipts.clear();
     this.alarm = 0;
     this.lureCooldown = 0;
     this.recording = [];
@@ -581,7 +637,8 @@ export class Game {
     if (this.alarm >= 1) return;
     this.updateScanners();
     if (this.alarm >= 1) return;
-    if (!this.spectator && this.level.objective !== 'reach' && this.editingIndex === null && !this.hasLoot && this.canCollect && distance(this.player, this.level.loot) < 25) {
+    this.updateDelivery();
+    if (!this.spectator && this.level.objective !== 'reach' && this.level.objective !== 'deliver' && this.editingIndex === null && !this.hasLoot && this.canCollect && distance(this.player, this.level.loot) < 25) {
       this.hasLoot = true;
       this.events.push('loot');
       if (this.level.onLoot) {
@@ -592,7 +649,7 @@ export class Game {
     }
     this.frame++;
     this.noise = this.noise.map(n => ({ ...n, life: n.life - DT * 1.3 })).filter(n => n.life > 0);
-    if (!this.spectator && this.editingIndex === null && this.exitReady && (this.hasLoot || this.level.objective === 'reach') && distance(this.player, this.level.exit ?? this.level.spawn) < 30) {
+    if (!this.spectator && this.editingIndex === null && this.exitReady && this.objectiveComplete && distance(this.player, this.level.exit ?? this.level.spawn) < 30) {
       this.status = 'won';
       this.events.push('won');
       return;
