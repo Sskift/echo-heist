@@ -37,6 +37,12 @@ export class CampaignUI {
       const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-delay]');
       if (button && !button.disabled) actions.delay(Number(button.dataset.echo), Number(button.dataset.delay));
     });
+    $('#echo-delays').addEventListener('change', event => {
+      const input = event.target as HTMLInputElement;
+      if (!input.matches('[data-delay-input]')) return;
+      if (!input.checkValidity()) { input.reportValidity(); input.value = (Number(input.dataset.current) / FPS).toFixed(2); return; }
+      actions.delay(Number(input.dataset.delayInput), Math.round(Number(input.value) * FPS) - Number(input.dataset.current));
+    });
   }
 
   checkpointSaved(ok: boolean) { $('#checkpoint-note').textContent = ok ? '安全锚点已保存到本机' : '仅本次有效 · 本机存档不可用'; }
@@ -52,10 +58,10 @@ export class CampaignUI {
       $('#stage-bar').hidden = !campaignMode;
       $('#training-mode').textContent = campaignMode ? '基础演习' : '返回主线';
       $('#campaign-summary').textContent = campaignMode ? `${mission.chapter} · ${mission.title}` : '原型演习 · 三种基本配合';
-      $('#mission-cards').innerHTML = ['序章', '机制试验'].map(chapter => `<div class="chapter-group"><p>${chapter === '序章' ? 'C0 / 昨天的搭档' : '机制试验 / 后续章节的可玩样例'}</p><div class="mission-grid">${MISSIONS.filter(m => m.chapter === chapter).map(m => {
+      $('#mission-cards').innerHTML = [...new Set(MISSIONS.map(m => m.chapter))].map(chapter => `<details class="chapter-group" ${chapter === mission.chapter ? 'open' : ''}><summary>${chapter === '序章' ? 'C0 / 昨天的搭档' : chapter === '机制试验' ? '机制试验 / 后续章节的可玩样例' : `${MISSIONS.find(m => m.chapter === chapter)!.id.split('-')[0]} / ${chapter}`}<span>${MISSIONS.filter(m => m.chapter === chapter && this.campaign.data.completed.includes(m.id)).length} / ${MISSIONS.filter(m => m.chapter === chapter).length}</span></summary><div class="mission-grid">${MISSIONS.filter(m => m.chapter === chapter).map(m => {
         const complete = this.campaign.data.completed.includes(m.id), available = this.campaign.available(m.id);
         return `<button class="mission-card ${m.id === mission.id && campaignMode ? 'current' : ''}" data-mission="${m.id}" ${!available ? 'disabled' : ''}><span>${complete ? '✓ 已完成' : available ? `${m.stages.length} 段行动` : '完成前一任务解锁'}</span><strong>${m.title}</strong><small>${m.summary}</small></button>`;
-      }).join('')}</div></div>`).join('');
+      }).join('')}</div></details>`).join('');
       if (campaignMode && stageIndex >= 0) {
         const stage = mission.stages[stageIndex];
         $('#chapter-label').textContent = `${mission.chapter} / ${String(MISSIONS.indexOf(mission) + 1).padStart(2, '0')} · 第 ${stageIndex + 1} / ${mission.stages.length} 段`;
@@ -63,14 +69,14 @@ export class CampaignUI {
         $('#story-line').textContent = game.status === 'won' ? stage.result : stage.story;
         $('#stage-rail').innerHTML = mission.stages.map((s, i) => `<button data-stage="${i}" ${i > this.campaign.stageIndex ? 'disabled' : ''} ${i === stageIndex ? 'aria-current="step"' : ''} title="回到该锚点；其后阶段将重新规划"><span>${i < this.campaign.cleared() ? '✓' : String(i + 1).padStart(2, '0')}</span>${s.level.title}</button>`).join('');
       }
-      $('#evidence-list').innerHTML = MISSIONS.filter(m => m.chapter === '序章' && this.campaign.data.completed.includes(m.id)).map(m => `<p>◇ ${m.evidence}</p>`).join('') || '<p>完成主线任务后，线索会保存在这里。</p>';
+      $('#evidence-list').innerHTML = MISSIONS.filter(m => m.chapter !== '机制试验' && this.campaign.data.completed.includes(m.id)).map(m => `<p>◇ ${m.evidence}</p>`).join('') || '<p>完成主线任务后，线索会保存在这里。</p>';
     }
     const delayKey = `${!!preview}:${game.level.id}:${game.editingIndex}:${game.echoes.map(e => `${e.colorIndex}:${e.frames.length}:${e.delay ?? 0}`).join(',')}`;
     if (delayKey !== this.delayKey) {
       this.delayKey = delayKey;
       $('#echo-delays').innerHTML = game.echoes.map((echo, index) => {
         const delay = echo.delay ?? 0, cut = Math.max(0, delay + echo.frames.length - MAX_FRAMES);
-        return `<div class="delay-row"><span>E${index + 1} 出场 <strong>${(delay / FPS).toFixed(2)}s</strong></span><button data-echo="${index}" data-delay="-15" aria-label="提前回声 ${index + 1} 四分之一秒" ${delay === 0 || game.editingIndex !== null ? 'disabled' : ''}>−</button><button data-echo="${index}" data-delay="15" aria-label="延迟回声 ${index + 1} 四分之一秒" ${delay === 360 || game.editingIndex !== null ? 'disabled' : ''}>＋</button>${cut ? `<small>末尾 ${(cut / FPS).toFixed(2)}s 不会播放</small>` : ''}</div>`;
+        return `<div class="delay-row"><span>E${index + 1} 出场 <strong>${(delay / FPS).toFixed(2)}s</strong></span><input type="number" min="0" max="6" step="0.25" value="${(delay / FPS).toFixed(2)}" data-current="${delay}" data-delay-input="${index}" aria-label="回声 ${index + 1} 出场秒数" ${game.editingIndex !== null || preview ? 'disabled' : ''}><button data-echo="${index}" data-delay="-15" aria-label="提前回声 ${index + 1} 四分之一秒" ${delay === 0 || game.editingIndex !== null ? 'disabled' : ''}>−</button><button data-echo="${index}" data-delay="15" aria-label="延迟回声 ${index + 1} 四分之一秒" ${delay === 360 || game.editingIndex !== null ? 'disabled' : ''}>＋</button>${cut ? `<small>末尾 ${(cut / FPS).toFixed(2)}s 不会播放</small>` : ''}</div>`;
       }).join('') + (game.echoes.length ? '<p>每格 0.25s · 调整后从本轮起点重新规划</p>' : '');
       if (preview) document.querySelectorAll<HTMLButtonElement>('[data-delay]').forEach(button => { button.disabled = true; });
     }

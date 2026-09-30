@@ -106,3 +106,41 @@ test('noise investigation can route around a wall instead of walking into it', (
   game.step({ ...idle, lure: true }); run(game, 120);
   assert.ok(game.guards[0].y > 380, 'guard should take the southern opening');
 });
+
+test('scanner phases are deterministic; delayed appearances avoid the original failure', () => {
+  const level = MISSIONS.find(m => m.id === 'C1-1')!.stages[0].level;
+  const game = new Game(level); game.restorePlan([echo(272, 176)]);
+  assert.equal(game.scanning(level.scanners![0], 179), false);
+  assert.equal(game.scanning(level.scanners![0], 180), true);
+  assert.equal(game.scanning(level.scanners![0], 270), false);
+  const caught = game.previewAt(360);
+  assert.equal(caught.failure?.scanner, 'S1'); assert.equal(caught.failure?.actor, '回声 1');
+  game.setDelay(0, 300);
+  const safe = game.previewAt(600); assert.equal(safe.failure, null); assert.ok(safe.openDoors.size === 0);
+  assert.equal(game.frame, 0);
+});
+
+test('scanner exposure is continuous per actor and interrupted by suppression', () => {
+  const level: Level = { ...relayLevel(), scanners: [{ id: 'S', x: 200, y: 128, w: 128, h: 128, period: 12, active: [0, 12] }], circuits: [{ id: 'N', x: 80, y: 80, initial: false }], suppressors: [{ id: 'N', x: 200, y: 128, w: 128, h: 128, power: { id: 'N', on: true } }] };
+  const game = new Game(level); game.restorePlan([echo(272, 176)]); game.start(); run(game, 12);
+  assert.equal(game.status, 'running');
+  game.circuits.set('N', true); run(game, 5);
+  game.circuits.set('N', false); run(game, 12);
+  assert.equal(game.status, 'running'); run(game, 6);
+  assert.equal(game.status, 'caught'); assert.equal(game.failure?.scanner, 'S');
+});
+
+test('AND, exactly-one and released gates respond to distinct shared switch states', () => {
+  const level: Level = { ...relayLevel(), plates: [{ id: 'A', x: 272, y: 176 }, { id: 'B', x: 336, y: 176 }], doors: ['all', 'one', 'none'].map((mode, i) => ({ id: mode, x: 600 + i * 40, y: 200, w: 32, h: 64, plates: ['A', 'B'], plateMode: mode as 'all' | 'one' | 'none' })) };
+  const game = new Game(level); assert.deepEqual([...game.openDoors], ['none']);
+  game.restorePlan([echo(272, 176)]); assert.deepEqual([...game.openDoors], ['one']);
+  game.restorePlan([echo(272, 176), echo(336, 176, 1)]); assert.deepEqual([...game.openDoors], ['all']);
+});
+
+test('plate response windows and multiple door windows intersect without latching', () => {
+  const level: Level = { ...relayLevel(), plates: [{ id: 'A', x: 272, y: 176, window: [2, 8] }], doors: [{ id: 'D', x: 448, y: 256, w: 32, h: 64, plate: 'A', windows: [[1, 3], [7, 9]] }] };
+  const game = new Game(level); game.restorePlan([echo(272, 176)]); game.start();
+  for (const [frame, open] of [[119, false], [120, true], [179, true], [180, false], [420, true], [480, false]] as const) {
+    game.frame = frame; game.updatePlates(); assert.equal(game.openDoors.has('D'), open);
+  }
+});

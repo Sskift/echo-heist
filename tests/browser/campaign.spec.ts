@@ -3,6 +3,8 @@ import { advance, clock, move } from './helpers.ts';
 
 async function select(page: Page, id: string) {
   await page.locator('#mission-board > summary').click();
+  const group = page.locator(`.chapter-group:has([data-mission="${id}"])`);
+  if ((await group.getAttribute('open')) === null) await group.locator('summary').click();
   await page.locator(`[data-mission="${id}"]`).click(); await advance(page);
 }
 async function start(page: Page) { await page.locator('#overlay-action').click(); await advance(page); }

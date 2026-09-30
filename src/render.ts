@@ -1,5 +1,5 @@
 import { Game, type Frame } from './engine.ts';
-import { ECHO_COLORS, HEIGHT, TILE, WIDTH, type Point } from './levels.ts';
+import { doorPlates, ECHO_COLORS, HEIGHT, TILE, WIDTH, type Point } from './levels.ts';
 
 const C = { floor: '#17221e', grid: '#203029', wall: '#36443b', wallTop: '#465247', lime: '#c3ed82', ink: '#0c1712', muted: '#718578', amber: '#efbd72' };
 
@@ -81,12 +81,13 @@ export class Renderer {
 
   draw(game: Game, time: number) {
     const c = this.ctx;
+    const palette = game.level.theme === 'gala' ? { floor: '#24221e', grid: '#343129', wall: '#4a473b', wallTop: '#66634d' } : C;
     const dt = Math.min(0.1, time - this.lastTime);
     this.lastTime = time;
     c.clearRect(0, 0, WIDTH, HEIGHT);
-    c.fillStyle = C.floor; c.fillRect(0, 0, WIDTH, HEIGHT);
+    c.fillStyle = palette.floor; c.fillRect(0, 0, WIDTH, HEIGHT);
     // A deliberately quiet blueprint grid keeps routes and silhouettes legible.
-    c.strokeStyle = C.grid; c.lineWidth = 0.6;
+    c.strokeStyle = palette.grid; c.lineWidth = 0.6;
     c.beginPath();
     for (let x = 0; x <= WIDTH; x += TILE) { c.moveTo(x, 0); c.lineTo(x, HEIGHT); }
     for (let y = 0; y <= HEIGHT; y += TILE) { c.moveTo(0, y); c.lineTo(WIDTH, y); }
@@ -109,7 +110,7 @@ export class Renderer {
     for (const plate of game.level.plates) {
       const lit = game.activePlates.has(plate.id);
       const color = lit ? `${C.lime}80` : '#53684665';
-      for (const door of game.level.doors.filter(d => d.plate === plate.id)) {
+      for (const door of game.level.doors.filter(d => doorPlates(d).includes(plate.id))) {
         const end = { x: door.x + door.w / 2, y: door.y + door.h / 2 };
         this.line([plate, { x: plate.x, y: end.y }, end], color, 1, lit ? [] : [3, 5]);
       }
@@ -118,6 +119,7 @@ export class Renderer {
       c.strokeStyle = lit ? C.lime : '#738558'; c.lineWidth = 1.5; c.strokeRect(plate.x - 18, plate.y - 18, 36, 36);
       this.text(plate.id, plate.x, plate.y + 5, lit ? C.lime : '#acbc84', 16, 'center');
       this.text(lit ? `SWITCH ${plate.id} / ACTIVE` : `SWITCH ${plate.id}`, plate.x, plate.y + 43, lit ? C.lime : '#899c74', 9, 'center');
+      if (plate.window) this.text(`${plate.window[0]}–${plate.window[1]}s 响应`, plate.x, plate.y + 58, C.amber, 9, 'center');
     }
 
     // Evacuation hatch.
@@ -150,6 +152,15 @@ export class Renderer {
       c.closePath(); c.fill();
     });
 
+    for (const scanner of game.level.scanners ?? []) {
+      const active = game.scanning(scanner);
+      const phase = (game.seconds + (scanner.phase ?? 0)) % scanner.period;
+      const next = active ? scanner.active[1] - phase : phase < scanner.active[0] ? scanner.active[0] - phase : scanner.period - phase + scanner.active[0];
+      c.fillStyle = active ? '#ef947c28' : '#efbd7208'; c.fillRect(scanner.x, scanner.y, scanner.w, scanner.h);
+      c.strokeStyle = active ? '#ef947caa' : '#efbd7260'; c.lineWidth = 1; c.setLineDash(active ? [] : [5, 5]); c.strokeRect(scanner.x, scanner.y, scanner.w, scanner.h); c.setLineDash([]);
+      if (active) for (let y = scanner.y + 6; y < scanner.y + scanner.h; y += 12) this.line([{ x: scanner.x, y }, { x: scanner.x + scanner.w, y }], '#ef947c55');
+      this.text(`${scanner.id} / ${active ? '扫描' : '空档'} ${Math.max(0, next).toFixed(1)}s`, scanner.x + scanner.w / 2, scanner.y - 12, active ? '#ef947c' : '#efbd72', 10, 'center');
+    }
     for (const field of game.level.suppressors ?? []) {
       const active = game.powered(field.power);
       c.fillStyle = active ? '#ba91e322' : '#ba91e306'; c.fillRect(field.x, field.y, field.w, field.h);
@@ -180,9 +191,9 @@ export class Renderer {
     }
     for (const wall of game.level.walls) {
       const border = wall.x === 0 || wall.x === WIDTH - TILE || wall.y === 0 || wall.y === HEIGHT - TILE;
-      c.fillStyle = border ? '#2b382e' : C.wall;
+      c.fillStyle = border ? '#2b382e' : palette.wall;
       c.fillRect(wall.x, wall.y, TILE, TILE);
-      c.fillStyle = border ? '#354336' : C.wallTop; c.fillRect(wall.x, wall.y, TILE, 2);
+      c.fillStyle = border ? '#354336' : palette.wallTop; c.fillRect(wall.x, wall.y, TILE, 2);
       c.strokeStyle = '#1b291f70'; c.lineWidth = 1; c.strokeRect(wall.x + 0.5, wall.y + 0.5, TILE - 1, TILE - 1);
       if (!border) {
         c.fillStyle = '#52604760'; c.fillRect(wall.x + 6, wall.y + 8, 20, 2);
@@ -204,7 +215,10 @@ export class Renderer {
         if (!open) for (let x = door.x + 8; x < door.x + door.w; x += 8) this.line([{ x, y: door.y + 3 }, { x: x - 4, y: door.y + door.h - 3 }], '#b1c68185', 2);
       }
       this.text(`${door.id} ${open ? 'OPEN' : 'LOCKED'}`, door.x + door.w / 2, door.y - 13, open ? C.lime : '#a5b28d', 9, 'center');
-      if (door.window) this.text(`${door.window[0]}–${door.window[1]}s`, door.x + door.w / 2, door.y + door.h + 18, C.amber, 10, 'center');
+      const windows = door.windows ?? (door.window ? [door.window] : []);
+      if (windows.length) this.text(windows.map(([start, end]) => `${start}–${end}s`).join(' / '), door.x + door.w / 2, door.y + door.h + 18, C.amber, 10, 'center');
+      const inputs = doorPlates(door);
+      if (inputs.length > 1 || door.plateMode === 'none') this.text(`${inputs.join('+')} ${door.plateMode === 'one' ? '恰好一个' : door.plateMode === 'none' ? '全部松开' : door.plateMode === 'any' ? '至少一个' : '同时满足'}`, door.x + door.w / 2, door.y - 29, '#b5cfa1', 9, 'center');
     }
 
     if (game.level.objective !== 'reach') {

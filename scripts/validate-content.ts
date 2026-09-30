@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { MISSIONS } from '../src/campaign-content.ts';
 import { Game } from '../src/engine.ts';
 import { playWitness } from '../src/witness.ts';
-import { WIDTH, HEIGHT, TILE } from '../src/levels.ts';
+import { doorPlates, WIDTH, HEIGHT, TILE } from '../src/levels.ts';
 
 const ids = new Set<string>();
 let zones = 0;
@@ -17,10 +17,13 @@ for (const mission of MISSIONS) {
     unique(level.plates); unique(level.doors); unique(level.circuits ?? []); unique(level.terminals ?? []);
     assert.ok((level.terminals ?? []).filter(t => t.kind === 'source').length <= 1, `Multiple credentials in ${level.id}`);
     for (const door of level.doors) {
-      if (door.plate) assert.ok(level.plates.some(p => p.id === door.plate), `Unknown plate in ${level.id}`);
+      for (const plate of doorPlates(door)) assert.ok(level.plates.some(p => p.id === plate), `Unknown plate in ${level.id}`);
       if (door.authorization) assert.ok(level.terminals?.some(t => t.authorization === door.authorization), `Missing authorization in ${level.id}`);
     }
-    for (const entity of [...level.doors, ...level.guards, ...level.suppressors ?? []]) {
+    for (const scanner of level.scanners ?? []) {
+      assert.ok(scanner.period > 0 && scanner.period <= 12 && scanner.active[0] >= 0 && scanner.active[1] > scanner.active[0] && scanner.active[1] <= scanner.period, `Invalid scanner cycle ${level.id}`);
+    }
+    for (const entity of [...level.doors, ...level.guards, ...level.suppressors ?? [], ...level.scanners ?? []]) {
       if (entity.power) assert.ok(level.circuits?.some(c => c.id === entity.power!.id), `Unknown circuit in ${level.id}`);
     }
     for (const wall of level.walls) assert.ok(wall.x >= 0 && wall.y >= 0 && wall.x + TILE <= WIDTH && wall.y + TILE <= HEIGHT, `Wall outside ${level.id}`);
@@ -29,6 +32,7 @@ for (const mission of MISSIONS) {
       assert.ok(!game.blocked(point.x, point.y), `Entity inside obstacle: ${level.id} at ${point.x},${point.y}`);
     }
     const win = playWitness(stage);
+    for (const witness of stage.alternatives ?? []) playWitness({ ...stage, witness });
     console.log(`${level.id.padEnd(14)} ${win.seconds.toFixed(2)}s / ${win.echoes.length} echoes / validated`);
     zones++;
   }

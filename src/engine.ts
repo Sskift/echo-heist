@@ -1,4 +1,4 @@
-import { FPS, LOOP_SECONDS, MAX_ECHOES, MAX_FRAMES, TILE, type Level, type Point } from './levels.ts';
+import { doorPlates, FPS, LOOP_SECONDS, MAX_ECHOES, MAX_FRAMES, TILE, type Level, type Point, type Scanner } from './levels.ts';
 import { findRoute } from './navigation.ts';
 
 export type Intent = { type: 'circuit'; id: string; on: boolean } | { type: 'take' | 'give' | 'authorize'; id: string };
@@ -39,7 +39,8 @@ export class Game {
   authorized = new Set<string>();
   tokenOwner: string | null = null;
   signals: { frame: number; text: string }[] = [];
-  failure: { frame: number; actor: string; guard: number; point: Point } | null = null;
+  failure: { frame: number; actor: string; guard: number; point: Point; scanner?: string } | null = null;
+  scanExposure = new Map<string, number>();
   spectator = false;
   private interactHeld = false;
 
@@ -89,6 +90,33 @@ export class Game {
   }
 
   powered(power?: { id: string; on: boolean }): boolean { return !power || this.circuits.get(power.id) === power.on; }
+  scanning(scanner: Scanner, frame = this.frame): boolean {
+    const period = Math.round(scanner.period * FPS);
+    const time = ((frame + Math.round((scanner.phase ?? 0) * FPS)) % period + period) % period;
+    return this.powered(scanner.power) && time >= Math.round(scanner.active[0] * FPS) && time < Math.round(scanner.active[1] * FPS);
+  }
+
+  private updateScanners() {
+    const actors = this.actors();
+    for (const scanner of this.level.scanners ?? []) {
+      const on = this.scanning(scanner);
+      if (on !== this.scanning(scanner, this.frame - 1)) this.signal(`${scanner.id} 扫描${on ? '开始' : '结束'}`);
+      for (const key of this.scanExposure.keys()) if (key.startsWith(`${scanner.id}:`) && !actors.some(actor => key === `${scanner.id}:${actor.id}`)) this.scanExposure.set(key, 0);
+      for (const actor of actors) {
+        const key = `${scanner.id}:${actor.id}`;
+        const inside = on && actor.at.x >= scanner.x && actor.at.x <= scanner.x + scanner.w && actor.at.y >= scanner.y && actor.at.y <= scanner.y + scanner.h;
+        const exposure = inside ? (this.scanExposure.get(key) ?? 0) + 1 : 0;
+        this.scanExposure.set(key, exposure);
+        this.alarm = Math.max(this.alarm, Math.min(1, exposure / 18));
+        if (exposure >= 18) {
+          this.failure = { frame: this.frame, actor: actor.label, guard: -1, scanner: scanner.id, point: { x: actor.at.x, y: actor.at.y } };
+          this.status = 'caught';
+          this.lastMessage = `${this.seconds.toFixed(2)} 秒：${actor.label}进入 ${scanner.id} 扫描区。调整路线或出场时刻；扫描周期可在预演中查看。`;
+          this.signal(this.lastMessage); this.events.push('caught'); return;
+        }
+      }
+    }
+  }
   suppressed(at: Point): boolean {
     return (this.level.suppressors ?? []).some(s => this.powered(s.power) && at.x >= s.x && at.x <= s.x + s.w && at.y >= s.y && at.y <= s.y + s.h);
   }
@@ -186,7 +214,7 @@ export class Game {
     const actor = this.echoAt(echo);
     if (this.suppressed(actor)) return '投影受抑制';
     const plate = this.level.plates.find(p => distance(p, actor) < 23);
-    if (plate) return `守住 ${plate.id} 开关`;
+    if (plate) return this.activePlates.has(plate.id) || !plate.window ? `守住 ${plate.id} 开关` : `在 ${plate.id} 等待响应`;
     if (this.frame - (echo.delay ?? 0) >= echo.frames.length - 1) return '终点待命';
     return distance(actor, this.echoAt(echo, Math.max(0, this.frame - 1))) < 0.1 ? '等待中' : '移动中';
   }
@@ -201,6 +229,7 @@ export class Game {
     this.noise = [];
     this.interactHeld = false;
     this.failure = null;
+    this.scanExposure.clear();
     this.signals = [];
     this.circuits = new Map((this.level.circuits ?? []).map(c => [c.id, c.initial]));
     this.authorized.clear();
@@ -289,8 +318,13 @@ export class Game {
   updatePlates() {
     const actors = this.actors().map(a => a.at);
     const previous = this.openDoors;
-    this.activePlates = new Set(this.level.plates.filter(p => actors.some(a => distance(a, p) < 23)).map(p => p.id));
-    this.openDoors = new Set(this.level.doors.filter(d => (!d.plate || this.activePlates.has(d.plate)) && this.powered(d.power) && (!d.window || (this.seconds >= d.window[0] && this.seconds < d.window[1])) && (!d.authorization || this.authorized.has(d.authorization))).map(d => d.id));
+    this.activePlates = new Set(this.level.plates.filter(p => (!p.window || (this.seconds >= p.window[0] && this.seconds < p.window[1])) && actors.some(a => distance(a, p) < 23)).map(p => p.id));
+    this.openDoors = new Set(this.level.doors.filter(d => {
+      const plates = doorPlates(d), count = plates.filter(p => this.activePlates.has(p)).length;
+      const pressed = !plates.length || (d.plateMode === 'none' ? count === 0 : d.plateMode === 'one' ? count === 1 : d.plateMode === 'any' ? count > 0 : count === plates.length);
+      const windows = d.windows ?? (d.window ? [d.window] : []);
+      return pressed && this.powered(d.power) && (!windows.length || windows.some(([start, end]) => this.seconds >= start && this.seconds < end)) && (!d.authorization || this.authorized.has(d.authorization));
+    }).map(d => d.id));
     for (const door of this.level.doors) if (previous.has(door.id) !== this.openDoors.has(door.id)) this.signal(`${door.id} 门${this.openDoors.has(door.id) ? '开启' : '关闭'}`);
     if (this.openDoors.size > previous.size) this.events.push('door');
   }
@@ -377,6 +411,8 @@ export class Game {
     this.recording.push(cloneFrame(this.player));
     this.updatePlates();
     this.updateGuards();
+    if (this.alarm >= 1) return;
+    this.updateScanners();
     if (this.alarm >= 1) return;
     if (!this.spectator && this.level.objective !== 'reach' && this.editingIndex === null && !this.hasLoot && distance(this.player, this.level.loot) < 25) {
       this.hasLoot = true;

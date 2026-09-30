@@ -20,6 +20,10 @@ export class Campaign {
     if (MISSIONS.some(m => m.id === save.selected) && this.available(save.selected)) this.data.selected = save.selected;
   }
   get mission(): Mission { return MISSIONS.find(m => m.id === this.data.selected)!; }
+  get nextMission(): Mission | undefined {
+    const next = MISSIONS[MISSIONS.indexOf(this.mission) + 1];
+    return next && next.id.startsWith('LAB-') === this.mission.id.startsWith('LAB-') ? next : undefined;
+  }
   cleared(id = this.mission.id): number { return this.data.runs[id]?.length ?? 0; }
   get stageIndex(): number { return Math.min(this.cleared(), this.mission.stages.length - 1); }
   get stage() { return this.mission.stages[this.stageIndex]; }

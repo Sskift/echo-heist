@@ -9,18 +9,20 @@ export const ECHO_COLORS = ['#8ed4ed', '#d2a0ef', '#efa886'];
 
 export type Point = { x: number; y: number };
 export type Power = { id: string; on: boolean };
-export type Door = { id: string; x: number; y: number; w: number; h: number; plate?: string; power?: Power; window?: [number, number]; authorization?: string };
-export type Plate = Point & { id: string };
+export type Door = { id: string; x: number; y: number; w: number; h: number; plate?: string; plates?: string[]; plateMode?: 'all' | 'any' | 'one' | 'none'; power?: Power; window?: [number, number]; windows?: [number, number][]; authorization?: string };
+export type Plate = Point & { id: string; window?: [number, number] };
 export type GuardDefinition = { route: Point[]; speed: number; range: number; kind?: 'sentry' | 'patrol'; power?: Power };
 export type Circuit = Point & { id: string; initial: boolean };
 export type Terminal = Point & { id: string; kind: 'source' | 'relay' | 'lock'; authorization?: string };
 export type Suppressor = { id: string; x: number; y: number; w: number; h: number; power?: Power };
+export type Scanner = { id: string; x: number; y: number; w: number; h: number; period: number; active: [number, number]; phase?: number; power?: Power };
 export type Level = {
   id: string;
   title: string;
   subtitle: string;
   description: string;
   hint: string;
+  hints?: string[];
   briefing: string[];
   walls: Point[];
   doors: Door[];
@@ -34,10 +36,14 @@ export type Level = {
   objectiveLabel?: string;
   lootLabel?: string;
   district?: string;
+  theme?: 'archive' | 'gala' | 'industrial' | 'clockwork';
   circuits?: Circuit[];
   terminals?: Terminal[];
   suppressors?: Suppressor[];
+  scanners?: Scanner[];
 };
+
+export const doorPlates = (door: Door): string[] => door.plates ?? (door.plate ? [door.plate] : []);
 
 function walls(doubleDoor: boolean): Point[] {
   const occupied = new Set<string>();

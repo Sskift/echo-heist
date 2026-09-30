@@ -8,6 +8,7 @@ import { decodePlan, encodePlan, PLAN_KEY, type SavedPlan } from './plans.ts';
 import { CAMPAIGN_LEVELS, MISSIONS } from './campaign-content.ts';
 import { Campaign, CAMPAIGN_KEY } from './campaign.ts';
 import { CampaignUI } from './campaign-ui.ts';
+import { PlaytestUI } from './playtest-ui.ts';
 
 const ALL_LEVELS = [...LEVELS, ...CAMPAIGN_LEVELS];
 let campaign: Campaign;
@@ -101,6 +102,7 @@ let toastTimer = 0;
 let helpWasRunning = false;
 let initialized = false;
 let pointerFastForward = false;
+let hintStep = 0;
 const dialog = $<HTMLDialogElement>('#help-dialog');
 const campaignUI = new CampaignUI(campaign, {
   mission: id => openMission(id),
@@ -120,8 +122,19 @@ $('#mission-board').addEventListener('toggle', () => {
 });
 $('#touch-lure').insertAdjacentHTML('afterend', '<button class="touch-lure" id="touch-interact">E 操作设备</button>');
 $('.clock-panel').insertAdjacentElement('afterend', $('.mission-actions'));
-$('.version').textContent = 'VOL. 03';
+$('#hint-text').insertAdjacentHTML('afterend', '<button id="more-hint" class="more-hint" hidden>再给一点提示</button>');
+$('#more-hint').addEventListener('click', () => { hintStep++; renderHint(); playtesting.event('hint', `tier ${hintStep + 1}`); });
+function renderHint() {
+  const hints = game.level.hints ?? [game.level.hint];
+  hintStep = Math.min(hintStep, hints.length - 1);
+  $('#hint-text').textContent = hints[hintStep];
+  $('#more-hint').hidden = hintStep >= hints.length - 1;
+  $('#more-hint').textContent = `再给一点提示（${hintStep + 1} / ${hints.length}）`;
+}
+$('.version').textContent = 'VOL. 04';
 $('.manual-steps').insertAdjacentHTML('beforeend', '<li><strong>安排一场完整劫案</strong><p>行动档案中的序章会逐步解锁。每段成功后保存安全锚点，下一段重新录制同伙。点击阶段名称可以回退；之后的阶段需要重做。</p></li><li><strong>调整时序，先看结果</strong><p>回声下方的加减按钮以 0.25 秒调整出场；按 P 预演已保存的回声，拖动时间检查门禁与暴露。E 操作电源和凭据终端，录制会保留这次操作请求。</p></li>');
+const playtesting = new PlaytestUI(() => ({ zoneId: game.level.id, missionId: campaignMode ? campaign.mission.id : game.level.id, phase: dialog.open ? 'help' : previewGame ? 'rehearsal' : game.status === 'running' ? 'execution' : 'planning' }), () => { if (game.status === 'running') game.togglePause(); clearInput(); });
+$('.hint').addEventListener('toggle', () => { if ($<HTMLDetailsElement>('.hint').open) playtesting.event('hint', `tier ${hintStep + 1}`); });
 
 function saveCampaign() {
   try { localStorage.setItem(CAMPAIGN_KEY, JSON.stringify(campaign.export())); campaignUI.checkpointSaved(true); }
@@ -193,7 +206,7 @@ function loadLevel(level: Level) {
   $('#mission-title').textContent = level.title;
   $('#mission-subtitle').textContent = level.subtitle;
   $('#mission-description').textContent = level.description;
-  $('#hint-text').textContent = level.hint;
+  hintStep = 0; renderHint();
   $('#map-code').textContent = `ANNEX_${level.id}`;
   $<HTMLDetailsElement>('.hint').open = false;
   document.querySelectorAll<HTMLButtonElement>('.level-tab').forEach((tab, i) => {
@@ -212,8 +225,8 @@ function primaryAction() {
     if (campaignMode) {
       if (campaign.cleared() < campaign.mission.stages.length) loadLevel(campaign.stage.level);
       else {
-        const next = MISSIONS[MISSIONS.indexOf(campaign.mission) + 1];
-        if (next && next.chapter === campaign.mission.chapter) openMission(next.id);
+        const next = campaign.nextMission;
+        if (next) openMission(next.id);
         else { campaign.returnTo(0); loadLevel(campaign.stage.level); saveCampaign(); }
       }
     }
@@ -344,8 +357,8 @@ function refreshUI() {
         eyebrow = final ? 'EVIDENCE SECURED' : 'SAFE ANCHOR';
         title = final ? `${mission.title} · 完成` : '这一段，已经安全了。';
         copy = mission.stages[stageIndex].result;
-        const next = MISSIONS[MISSIONS.indexOf(mission) + 1];
-        action = !final ? '进入下一行动区' : next?.chapter === mission.chapter ? `下一任务：${next.title}` : '重玩这场行动';
+        const next = campaign.nextMission;
+        action = !final ? '进入下一行动区' : next ? `下一任务：${next.title}` : '重玩这场行动';
         extra = `<div class="win-stamp">${final ? `◇ ${mission.evidence}` : `✓ 安全锚点 ${stageIndex + 1} / ${mission.stages.length}`}</div>`;
       }
     }
@@ -424,9 +437,16 @@ $('.dialog-close').addEventListener('click', closeHelp);
 dialog.addEventListener('close', () => { if (helpWasRunning && game.status === 'paused') game.togglePause(); focusGame(); });
 
 const gameKeys = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyE', 'KeyR', 'KeyZ', 'ShiftLeft', 'ShiftRight', 'Enter', 'Escape'];
+const isEditingControl = (target: EventTarget | null) => target instanceof HTMLElement && !!target.closest('input:not([type="range"]), select, textarea, [contenteditable="true"]');
+document.addEventListener('focusin', event => {
+  if (!isEditingControl(event.target)) return;
+  clearInput();
+  if (game.status === 'running') { game.togglePause(); refreshUI(); }
+});
 window.addEventListener('keydown', event => {
   if (dialog.open) return;
   if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (isEditingControl(event.target)) return;
   if (event.code === 'KeyP' || (previewGame && event.code === 'Escape')) { event.preventDefault(); if (!event.repeat) togglePreview(); return; }
   if (previewGame) return;
   if (event.key === '?') { event.preventDefault(); showHelp(); return; }
@@ -483,6 +503,7 @@ function loop(now: number) {
     }
   } else accumulator = 0;
   for (const event of game.drainEvents()) {
+    if (['start', 'rewind', 'plan', 'caught', 'won'].includes(event)) playtesting.event(event, event === 'caught' ? game.lastMessage : `take ${game.attempts}; echoes ${game.echoes.length}; frame ${game.frame}`);
     sound.play(event);
     if (event === 'plan') persistPlan();
     if (event === 'rewind') renderer.rewindFlash = 1;
@@ -499,6 +520,7 @@ function loop(now: number) {
       if (!campaignMode) $(`[data-level="${levelIndex}"] .level-check`).textContent = '✓';
     }
   }
+  playtesting.tick();
   renderer.draw(previewGame ?? game, now / 1000);
   refreshUI();
   requestAnimationFrame(loop);

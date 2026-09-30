@@ -9,6 +9,9 @@ for (const mission of MISSIONS) for (const stage of mission.stages) {
     const game = playWitness(stage);
     assert.equal(game.status, 'won'); assert.ok(game.seconds <= 12);
   });
+  for (const [index, witness] of (stage.alternatives ?? []).entries()) test(`${stage.level.id}: alternative ${index + 1} also completes with real input`, () => {
+    assert.equal(playWitness({ ...stage, witness }).status, 'won');
+  });
 }
 
 test('campaign commits only real wins, restores checkpoints, and rolls back dependent facts', () => {
@@ -42,4 +45,17 @@ test('replaying a completed mission retains historical unlocks across reloads', 
   campaign.returnTo(0);
   const restored = new Campaign(campaign.export());
   assert.ok(restored.available('C0-2')); assert.deepEqual(restored.flags, []);
+});
+
+test('completing the prologue unlocks the next chapter and excludes optional probes from main progression', () => {
+  const campaign = new Campaign();
+  for (const mission of MISSIONS.filter(m => m.id.startsWith('C0-'))) {
+    assert.ok(campaign.select(mission.id));
+    for (const stage of mission.stages) assert.ok(campaign.commit(playWitness(stage)));
+  }
+  assert.equal(campaign.nextMission?.id, 'C1-1'); assert.ok(campaign.available('C1-1'));
+  assert.ok(campaign.select('C1-1')); assert.equal(new Campaign(campaign.export()).mission.id, 'C1-1');
+  const last = MISSIONS.filter(m => m.id.startsWith('C1-')).at(-1)!;
+  campaign.data.selected = last.id;
+  assert.equal(campaign.nextMission, undefined);
 });

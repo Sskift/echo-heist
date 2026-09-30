@@ -1,7 +1,7 @@
 {
   "name": "echo-heist",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -9,7 +9,8 @@
     "preview": "vite preview --host 127.0.0.1",
     "test": "tsx --test tests/*.test.ts",
     "test:browser": "playwright test",
-    "check:content": "tsx scripts/validate-content.ts"
+    "check:content": "tsx scripts/validate-content.ts",
+    "audit:playtime": "tsx scripts/audit-playtime.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

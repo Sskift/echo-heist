@@ -1,43 +1,13 @@
-import { TILE, type Level, type Point } from './levels.ts';
+import type { Level } from './levels.ts';
+import { g, w, r, e, noise, point, room, level, stage, gate, plate } from './campaign-authoring.ts';
+import { CHAPTER_ONE } from './chapter-one.ts';
+export { room } from './campaign-authoring.ts';
 
 export type WitnessAction = { go: [number, number] } | { wait: number } | { press: 'interact' | 'lure' } | { record: true } | { delay: number; echo: number };
-export type Stage = { level: Level; story: string; result: string; grants: string[]; witness: WitnessAction[]; requires?: string };
-export type Mission = { id: string; chapter: '序章' | '机制试验'; title: string; summary: string; evidence: string; stages: Stage[] };
+export type Stage = { level: Level; story: string; result: string; grants: string[]; witness: WitnessAction[]; requires?: string; alternatives?: WitnessAction[][] };
+export type Mission = { id: string; chapter: string; title: string; summary: string; evidence: string; stages: Stage[] };
 
-const g = (x: number, y: number): WitnessAction => ({ go: [x, y] });
-const w = (wait: number): WitnessAction => ({ wait });
-const r = (): WitnessAction => ({ record: true });
-const e = (): WitnessAction => ({ press: 'interact' });
-const noise = (): WitnessAction => ({ press: 'lure' });
-const point = (x: number, y: number) => ({ x, y });
-
-// Room geometry is authored in tile coordinates. Each opening is deliberate;
-// witnesses below are real input routes used by the content validator.
-export function room(vertical: [number, number[]][] = [], horizontal: [number, number[]][] = [], blocks: [number, number][] = []): Point[] {
-  const cells = new Set<string>();
-  const put = (x: number, y: number) => cells.add(`${x},${y}`);
-  for (let x = 0; x < 30; x++) { put(x, 0); put(x, 17); }
-  for (let y = 0; y < 18; y++) { put(0, y); put(29, y); }
-  for (const [x, gaps] of vertical) for (let y = 1; y < 17; y++) if (!gaps.includes(y)) put(x, y);
-  for (const [y, gaps] of horizontal) for (let x = 1; x < 29; x++) if (!gaps.includes(x)) put(x, y);
-  for (const [x, y] of blocks) put(x, y);
-  return [...cells].map(cell => { const [x, y] = cell.split(',').map(Number); return point(x * TILE, y * TILE); });
-}
-
-function level(id: string, title: string, properties: Partial<Level>): Level {
-  return {
-    id, title, subtitle: 'THE MISSING PARTNER', description: '', hint: '', briefing: [],
-    spawn: point(112, 432), loot: point(816, 144), walls: room(), doors: [], plates: [], guards: [], par: 1,
-    district: '旧馆 / OLD ARCHIVE', ...properties,
-  };
-}
-function stage(level: Level, story: string, result: string, grants: string[], witness: WitnessAction[], requires?: string): Stage {
-  return { level: { ...level, description: level.description || story, briefing: [level.hint, ...level.briefing] }, story, result, grants, witness, requires };
-}
-const gate = (id: string, x: number, y: number, plate = id) => ({ id, x, y, w: 32, h: 64, plate });
-const plate = (id: string, x: number, y: number) => ({ id, x, y });
-
-export const MISSIONS: Mission[] = [
+const INITIAL_MISSIONS: Mission[] = [
   {
     id: 'C0-1', chapter: '序章', title: '缺席的搭档', summary: '有人从这座城市的记录中消失了。先替他打开一扇门。', evidence: '失物柜上的空白姓名',
     stages: [stage(level('C0-1-a', '一道需要两个人的门', {
@@ -160,5 +130,7 @@ export const MISSIONS: Mission[] = [
     }), '联络员：这是专门对付投影的设施。你本人可以进去，同伙在里面却什么也碰不到。', '你替过去的自己清除了障碍。恢复的是作用能力，时间从未倒退。', ['null-tested'], [g(272, 432), g(272, 176), r(), g(112, 336), e(), g(400, 336), g(400, 304), g(528, 304), g(784, 304)])],
   },
 ];
+
+export const MISSIONS: Mission[] = [...INITIAL_MISSIONS.filter(m => m.id.startsWith('C0-')), ...CHAPTER_ONE, ...INITIAL_MISSIONS.filter(m => m.id.startsWith('LAB-'))];
 
 export const CAMPAIGN_LEVELS = MISSIONS.flatMap(m => m.stages.map(s => s.level));

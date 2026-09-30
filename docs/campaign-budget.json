@@ -122,7 +122,11 @@
           "targetMinutes": 10,
           "requiredActionZones": 2,
           "mandatory": true,
-          "implemented": false
+          "implemented": true,
+          "runtimeStageIds": [
+            "C1-1-a",
+            "C1-1-b"
+          ]
         },
         {
           "id": "C1-2",
@@ -132,7 +136,11 @@
           "targetMinutes": 12,
           "requiredActionZones": 2,
           "mandatory": true,
-          "implemented": false
+          "implemented": true,
+          "runtimeStageIds": [
+            "C1-2-a",
+            "C1-2-b"
+          ]
         },
         {
           "id": "C1-3",
@@ -142,7 +150,11 @@
           "targetMinutes": 13,
           "requiredActionZones": 2,
           "mandatory": true,
-          "implemented": false
+          "implemented": true,
+          "runtimeStageIds": [
+            "C1-3-a",
+            "C1-3-b"
+          ]
         },
         {
           "id": "C1-4",
@@ -152,7 +164,12 @@
           "targetMinutes": 14,
           "requiredActionZones": 3,
           "mandatory": true,
-          "implemented": false
+          "implemented": true,
+          "runtimeStageIds": [
+            "C1-4-a",
+            "C1-4-b",
+            "C1-4-c"
+          ]
         },
         {
           "id": "C1-5",
@@ -162,7 +179,12 @@
           "targetMinutes": 15,
           "requiredActionZones": 3,
           "mandatory": true,
-          "implemented": false
+          "implemented": true,
+          "runtimeStageIds": [
+            "C1-5-a",
+            "C1-5-b",
+            "C1-5-c"
+          ]
         },
         {
           "id": "C1-6",
@@ -172,7 +194,13 @@
           "targetMinutes": 21,
           "requiredActionZones": 4,
           "mandatory": true,
-          "implemented": false
+          "implemented": true,
+          "runtimeStageIds": [
+            "C1-6-a",
+            "C1-6-b",
+            "C1-6-c",
+            "C1-6-d"
+          ]
         }
       ]
     },
@@ -586,9 +614,9 @@
     }
   ],
   "implementation": {
-    "version": "0.3.0",
-    "mainMissions": 6,
-    "mainActionZones": 10,
+    "version": "0.4.0",
+    "mainMissions": 12,
+    "mainActionZones": 26,
     "mechanicProbes": 4,
     "mainDurationMeasured": false
   }
