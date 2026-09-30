@@ -98,3 +98,29 @@ test('campaign board and rehearsal controls fit a phone viewport', async ({ page
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await expect(page.locator('#touch-interact')).toBeVisible();
 });
+
+test('the prologue finale can save one mobile keeper after deleting its temporary guide, then finish all three stages', async ({ page }) => {
+  await clock(page);
+  await page.addInitScript(() => {
+    const completed = ['C0-1', 'C0-2', 'C0-3', 'C0-4', 'C0-5'];
+    if (!localStorage.getItem('echo-heist-campaign-v1')) localStorage.setItem('echo-heist-campaign-v1', JSON.stringify({ version: 1, selected: 'C0-6', runs: Object.fromEntries(completed.map(id => [id, []])), completed }));
+  });
+  await page.goto('/'); await advance(page); await start(page);
+  await move(page, 'd', 60); await move(page, 'w', 69); await move(page, 'a', 17); await record(page);
+  await advance(page, 146); await move(page, 'd', 189); await move(page, 'w', 60);
+  await expect(page.locator('#overlay')).toBeVisible(); await page.reload(); await advance(page);
+  await expect(page.locator('#map-code')).toHaveText('ANNEX_C0-6-b'); await start(page);
+  await move(page, 'd', 26); await move(page, 'w', 51); await record(page);
+  await move(page, 'd', 26); await move(page, 'w', 51); await advance(page, 60); await move(page, 's', 51);
+  await move(page, 'd', 77); await move(page, 's', 17); await record(page);
+  await page.getByRole('button', { name: '删除回声 1', exact: true }).click(); await advance(page);
+  await page.reload(); await advance(page); await expect(page.locator('#echo-count')).toHaveText('1 / 3'); await start(page);
+  await move(page, 'd', 50); await advance(page, 29); await move(page, 'd', 70); await move(page, 'w', 51); await advance(page, 90);
+  await move(page, 'd', 43); await move(page, 'w', 17); await move(page, 'd', 35);
+  await expect(page.locator('#overlay')).toBeVisible(); await page.reload(); await advance(page);
+  await expect(page.locator('#map-code')).toHaveText('ANNEX_C0-6-c'); await start(page);
+  await move(page, 'd', 43); await move(page, 'w', 34); await record(page);
+  await move(page, 'd', 77); await move(page, 'w', 9); await move(page, 'd', 120);
+  await expect(page.locator('#overlay-card h2')).toHaveText('旧馆最后一班 · 完成');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('echo-heist-campaign-v1')!).runs['C0-6'].length)).toBe(3);
+});

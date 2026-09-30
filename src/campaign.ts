@@ -2,10 +2,10 @@ import type { Game } from './engine.ts';
 import { MISSIONS, resolveStage, stageVersions, type Mission, type Stage } from './campaign-content.ts';
 
 export const CAMPAIGN_KEY = 'echo-heist-campaign-v1';
-export type CampaignSave = { version: 1; selected: string; runs: Record<string, string[]>; completed: string[]; outcomes?: Record<string, string> };
+export type CampaignSave = { version: 1; selected: string; runs: Record<string, string[]>; completed: string[]; outcomes?: Record<string, string>; endings?: string[] };
 
 export class Campaign {
-  data: CampaignSave = { version: 1, selected: MISSIONS[0].id, runs: {}, completed: [], outcomes: {} };
+  data: CampaignSave = { version: 1, selected: MISSIONS[0].id, runs: {}, completed: [], outcomes: {}, endings: [] };
   constructor(raw?: unknown) {
     if (!raw || typeof raw !== 'object') return;
     const save = raw as CampaignSave;
@@ -27,6 +27,9 @@ export class Campaign {
       }
     }
     if (MISSIONS.some(m => m.id === save.selected) && this.available(save.selected)) this.data.selected = save.selected;
+    const allowed = MISSIONS.filter(m => this.data.completed.includes(m.id)).flatMap(m => m.stages.flatMap(stageVersions).flatMap(s => s.ending ? [s.ending.id] : []));
+    this.data.endings = Array.isArray(save.endings) ? [...new Set(save.endings.filter(id => allowed.includes(id)))] : [];
+    if (this.ending && !this.data.endings.includes(this.ending.id)) this.data.endings.push(this.ending.id);
   }
   get mission(): Mission { return MISSIONS.find(m => m.id === this.data.selected)!; }
   get nextMission(): Mission | undefined {
@@ -47,6 +50,10 @@ export class Campaign {
   }
   indexOf(levelId: string): number { return this.mission.stages.findIndex(s => stageVersions(s).some(v => v.level.id === levelId)); }
   get stage() { return this.stageAt(this.stageIndex); }
+  get ending() { return this.cleared() === this.mission.stages.length ? this.stage.ending : undefined; }
+  revisitEnding(): boolean {
+    return !!this.ending && this.mission.endingAnchor !== undefined && this.returnTo(this.mission.endingAnchor);
+  }
   get flags(): string[] {
     return this.mission.stages.slice(0, this.cleared()).flatMap((base, i) => {
       const s = this.stageAt(i), outcome = s.outcomes?.find(o => o.id === this.data.outcomes?.[base.level.id]);
@@ -73,6 +80,7 @@ export class Campaign {
     if (outcomes[0]) (this.data.outcomes ??= {})[base.level.id] = outcomes[0].id;
     (this.data.runs[this.mission.id] ??= []).push(base.level.id);
     if (this.cleared() === this.mission.stages.length && !this.data.completed.includes(this.mission.id)) this.data.completed.push(this.mission.id);
+    if (current.ending && !this.data.endings?.includes(current.ending.id)) (this.data.endings ??= []).push(current.ending.id);
     return true;
   }
   returnTo(index: number): boolean {

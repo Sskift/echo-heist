@@ -9,10 +9,11 @@ import { CHAPTER_SIX } from './chapter-six.ts';
 import { CHAPTER_SEVEN } from './chapter-seven.ts';
 export { room } from './campaign-authoring.ts';
 
-export type WitnessAction = { go: [number, number] } | { wait: number } | { press: 'interact' | 'lure' } | { record: true } | { delay: number; echo: number };
+export type WitnessAction = { go: [number, number] } | { wait: number } | { press: 'interact' | 'lure' } | { record: true } | { delay: number; echo: number } | { remove: number };
 export type Outcome = { id: string; label: string; consequence: string; power: Power };
-export type Stage = { level: Level; story: string; result: string; grants: string[]; witness: WitnessAction[]; requires?: string; alternatives?: WitnessAction[][]; outcomes?: Outcome[]; variants?: { when: string; stage: Stage }[] };
-export type Mission = { id: string; chapter: string; title: string; summary: string; evidence: string; stages: Stage[] };
+export type Ending = { id: string; title: string; consequence: string; reunion: string[] };
+export type Stage = { level: Level; story: string; result: string; grants: string[]; witness: WitnessAction[]; requires?: string; alternatives?: WitnessAction[][]; outcomes?: Outcome[]; variants?: { when: string; stage: Stage }[]; ending?: Ending };
+export type Mission = { id: string; chapter: string; title: string; summary: string; evidence: string; stages: Stage[]; endingAnchor?: number };
 export const stageVersions = (stage: Stage): Stage[] => [stage, ...(stage.variants ?? []).map(v => v.stage)];
 export const resolveStage = (stage: Stage, flags: string[]): Stage => stage.variants?.find(v => flags.includes(v.when))?.stage ?? stage;
 
@@ -91,7 +92,7 @@ const INITIAL_MISSIONS: Mission[] = [
         spawn: point(112, 400), exit: point(848, 144), loot: point(816, 144), lootLabel: '原始底稿', objectiveLabel: '配合打开两道门，取得底稿并到达锚点', par: 2,
         walls: room([[10, [11, 12]], [20, [5, 6]]], [], [[14, 6], [15, 6]]),
         plates: [plate('A', 208, 208), plate('B', 496, 464)], doors: [gate('A', 320, 352), gate('B', 640, 160)],
-        hint: '第一条回声守 A；第二条穿过 A 去 B。最后一轮沿中区右侧向上，经 B 门取得原件。',
+        hint: '可让两条回声分别守 A、B。也可借临时 A 录一条先守 A 一秒、再去 B 的路线，删掉临时 A，只留换岗者；真人先穿 A，再等 B。原件在右上方。',
       }), '你：两道封条，三个自己。这次我知道该让谁先走。', '原件上的身份编号仍然有效。有人删掉了他的名字，却没来得及抹去所有关联。', ['original-secured'], [g(208, 400), g(208, 208), r(), g(400, 400), g(496, 400), g(496, 464), r(), g(560, 400), g(560, 208), g(720, 208), g(816, 144), g(848, 144)], 'inside-vault'),
       stage(level('C0-6-c', '把名字带出去', {
         spawn: point(112, 464), exit: point(848, 432), objective: 'reach', objectiveLabel: '保住已取得的原件，从东侧出口撤离',
@@ -139,6 +140,15 @@ const INITIAL_MISSIONS: Mission[] = [
     }), '联络员：这是专门对付投影的设施。你本人可以进去，同伙在里面却什么也碰不到。', '你替过去的自己清除了障碍。恢复的是作用能力，时间从未倒退。', ['null-tested'], [g(272, 432), g(272, 176), r(), g(112, 336), e(), g(400, 336), g(400, 304), g(528, 304), g(784, 304)])],
   },
 ];
+
+// A preparation recording lets the mobile keeper reach B physically. Once it
+// is recorded, exact-position replay can cross the now-closed A door itself.
+// This is the existing projection rule; no published geometry is changed.
+INITIAL_MISSIONS.find(m => m.id === 'C0-6')!.stages[1].alternatives = [[
+  g(208, 400), g(208, 208), r(),
+  g(208, 400), g(208, 208), w(60), g(208, 400), g(496, 400), g(496, 464), r(), { remove: 0 },
+  g(560, 400), g(560, 208), g(720, 208), g(816, 144), g(848, 144),
+]];
 
 export const MISSIONS: Mission[] = [...INITIAL_MISSIONS.filter(m => m.id.startsWith('C0-')), ...CHAPTER_ONE, ...CHAPTER_TWO, ...CHAPTER_THREE, ...CHAPTER_FOUR, ...CHAPTER_FIVE, ...CHAPTER_SIX, ...CHAPTER_SEVEN, ...INITIAL_MISSIONS.filter(m => m.id.startsWith('LAB-'))];
 

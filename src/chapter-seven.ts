@@ -1,6 +1,7 @@
 import type { Mission, Stage, WitnessAction } from './campaign-content.ts';
 import type { Circuit, Delivery, Level, Terminal } from './levels.ts';
 import { g, w, r, e, noise, point as p, room, level, stage, gate, plate } from './campaign-authoring.ts';
+import { CHAPTER_SEVEN_FINALE } from './chapter-seven-finale.ts';
 
 const power = (id: string, on = true) => ({ id, on });
 const panel = (id: string, x: number, y: number, initial: boolean, label: string): Circuit => ({ id, x, y, initial, label });
@@ -90,4 +91,5 @@ export const CHAPTER_SEVEN: Mission[] = [
       [g(208, 432), r(), g(528, 432), g(528, 176), noise(), g(528, 304), g(400, 304), g(400, 432), r(), { delay: 120, echo: 1 }, g(528, 432), g(528, 176), e(), g(528, 432), g(400, 432), e(), g(112, 432), w(250)], 'C7-3-b'),
     ],
   },
+  ...CHAPTER_SEVEN_FINALE,
 ];

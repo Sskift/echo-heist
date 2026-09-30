@@ -9,6 +9,7 @@ import { CAMPAIGN_LEVELS, MISSIONS, canonicalZoneId } from './campaign-content.t
 import { Campaign, CAMPAIGN_KEY } from './campaign.ts';
 import { CampaignUI } from './campaign-ui.ts';
 import { PlaytestUI } from './playtest-ui.ts';
+import { EndingUI } from './ending-ui.ts';
 
 const ALL_LEVELS = [...LEVELS, ...CAMPAIGN_LEVELS];
 let campaign: Campaign;
@@ -104,6 +105,9 @@ let initialized = false;
 let pointerFastForward = false;
 let hintStep = 0;
 const dialog = $<HTMLDialogElement>('#help-dialog');
+const endingUI = new EndingUI(() => {
+  if (campaign.revisitEnding()) { clearInput(); saveCampaign(); loadLevel(campaign.stage.level); focusGame(); }
+});
 const campaignUI = new CampaignUI(campaign, {
   mission: id => openMission(id),
   stage: index => { if (campaign.returnTo(index)) { saveCampaign(); loadLevel(campaign.stage.level); } },
@@ -146,7 +150,7 @@ function renderHint() {
   $('#more-hint').hidden = hintStep >= hints.length - 1;
   $('#more-hint').textContent = `再给一点提示（${hintStep + 1} / ${hints.length}）`;
 }
-$('.version').textContent = 'VOL. 10';
+$('.version').textContent = 'VOL. 11';
 $('.manual-steps').insertAdjacentHTML('beforeend', '<li><strong>安排一场完整劫案</strong><p>行动档案中的序章会逐步解锁。每段成功后保存安全锚点，下一段重新录制同伙。点击阶段名称可以回退；之后的阶段需要重做。</p></li><li><strong>调整时序，先看结果</strong><p>回声下方的加减按钮以 0.25 秒调整出场；按 P 预演已保存的回声，拖动时间检查门禁与暴露。E 操作电源和凭据终端，录制会保留这次操作请求。</p></li>');
 const playtesting = new PlaytestUI(() => ({ zoneId: canonicalZoneId(game.level.id), missionId: campaignMode ? campaign.mission.id : game.level.id, phase: dialog.open ? 'help' : previewGame ? 'rehearsal' : game.status === 'running' ? 'execution' : 'planning' }), () => { if (game.status === 'running') game.togglePause(); clearInput(); });
 $('.hint').addEventListener('toggle', () => { if ($<HTMLDetailsElement>('.hint').open) playtesting.event('hint', `tier ${hintStep + 1}`); });
@@ -233,6 +237,7 @@ function loadLevel(level: Level) {
 
 function primaryAction() {
   sound.unlock();
+  if (campaignMode && campaign.ending && ['ready', 'won'].includes(game.status)) { clearInput(); endingUI.show(campaign.ending); return; }
   if (game.status === 'ready') game.start();
   else if (game.status === 'paused') game.togglePause();
   else if (game.status === 'caught') game.restart();
@@ -359,7 +364,10 @@ function refreshUI() {
     overlay.hidden = game.status === 'running';
     if (game.status === 'running') return;
     let eyebrow = '', title = '', copy = '', action = '', extra = '';
-    if (game.status === 'ready') {
+    if (game.status === 'ready' && campaignMode && campaign.ending) {
+      eyebrow = 'STORY COMPLETE'; title = '回声劫案 · 已完成'; copy = campaign.ending.title;
+      action = '前往旧渡口'; extra = '<p class="overlay-footnote">尾声已保存 · 可回到最终选择锚点</p>';
+    } else if (game.status === 'ready') {
       eyebrow = `OPERATION ${game.level.id} / BRIEFING`;
       title = game.level.title;
       copy = game.level.briefing[0];
@@ -389,7 +397,7 @@ function refreshUI() {
         title = final ? `${mission.title} · 完成` : '这一段，已经安全了。';
         copy = campaign.stageAt(stageIndex).result;
         const next = campaign.nextMission;
-        action = !final ? '进入下一行动区' : next ? `下一任务：${next.title}` : '重玩这场行动';
+        action = !final ? '进入下一行动区' : campaign.ending ? '前往旧渡口' : next ? `下一任务：${next.title}` : '重玩这场行动';
         extra = `<div class="win-stamp">${final ? `◇ ${mission.evidence}` : `✓ 安全锚点 ${stageIndex + 1} / ${mission.stages.length}`}</div>`;
       }
     }
@@ -475,7 +483,7 @@ document.addEventListener('focusin', event => {
   if (game.status === 'running') { game.togglePause(); refreshUI(); }
 });
 window.addEventListener('keydown', event => {
-  if (dialog.open) return;
+  if (dialog.open || endingUI.open) return;
   if (event.ctrlKey || event.metaKey || event.altKey) return;
   if (isEditingControl(event.target)) return;
   if (event.code === 'KeyP' || (previewGame && event.code === 'Escape')) { event.preventDefault(); if (!event.repeat) togglePreview(); return; }

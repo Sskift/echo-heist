@@ -9,6 +9,11 @@ const ids = new Set<string>();
 let zones = 0, layouts = 0;
 for (const mission of MISSIONS) {
   const facts = new Set<string>();
+  if (mission.endingAnchor !== undefined) {
+    assert.ok(Number.isInteger(mission.endingAnchor) && mission.endingAnchor >= 0 && mission.endingAnchor < mission.stages.length - 1 && mission.stages[mission.endingAnchor].outcomes?.length, `Invalid ending rollback anchor in ${mission.id}`);
+    const endings = stageVersions(mission.stages.at(-1)!).map(s => s.ending);
+    assert.ok(endings.length >= 2 && endings.every(Boolean) && new Set(endings.map(e => e!.id)).size === endings.length, `Missing distinct endings in ${mission.id}`);
+  }
   for (const base of mission.stages) {
     for (const variant of base.variants ?? []) {
       assert.ok(facts.has(variant.when), `Unknown branch prerequisite ${variant.when}`);
@@ -18,6 +23,7 @@ for (const mission of MISSIONS) {
     }
     for (const stage of stageVersions(base)) {
     const level = stage.level;
+    if (stage.ending) assert.ok(base === mission.stages.at(-1) && mission.endingAnchor !== undefined && stage.ending.title.trim() && stage.ending.consequence.trim() && stage.ending.reunion.length >= 2 && stage.ending.reunion.every(p => p.trim()), `Incomplete ending in ${level.id}`);
     assert.ok(!ids.has(level.id), `Duplicate action zone ${level.id}`); ids.add(level.id);
     if (stage.requires) assert.ok(facts.has(stage.requires), `Unavailable prerequisite ${stage.requires}`);
     const unique = (values: { id: string }[]) => assert.equal(new Set(values.map(v => v.id)).size, values.length, `Duplicate entity in ${level.id}`);
@@ -116,6 +122,7 @@ for (const mission of MISSIONS.filter(m => m.stages.some(s => stageVersions(s).s
     prefixes = [...next.values()];
   }
   assert.ok(prefixes.every(c => c.data.completed.includes(mission.id)), `Incomplete route in ${mission.id}`);
+  if (mission.endingAnchor !== undefined) assert.ok(prefixes.every(c => c.ending && c.data.endings?.includes(c.ending.id)), `Ending not committed after final delivery in ${mission.id}`);
   console.log(`${mission.id}: ${prefixes.length} complete choice combinations survived checkpoint reloads`);
 }
 console.log(`${MISSIONS.length} missions / ${zones} action zones / ${layouts} branch layouts: references and executable solutions passed. This does not measure first-play duration.`);

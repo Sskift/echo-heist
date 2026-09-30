@@ -25,6 +25,10 @@ export function playWitness(stage: Stage, observe?: (game: Game) => void): Game 
     } else if ('wait' in action) { for (let n = 0; n < action.wait && (game.status as string) !== 'won'; n++) step(); }
     else if ('press' in action) { step(0, 0, action.press === 'interact', action.press === 'lure'); if ((game.status as string) !== 'won') step(); }
     else if ('record' in action) { if (!game.rewind()) throw new Error(`${stage.level.id}: cannot record`); }
+    else if ('remove' in action) {
+      if (!Number.isInteger(action.remove) || !game.echoes[action.remove]) throw new Error(`${stage.level.id}: invalid removal`);
+      game.removeEcho(action.remove);
+    }
     else if (!game.setDelay(action.echo, action.delay)) throw new Error(`${stage.level.id}: invalid delay`);
   }
   if (game.status !== 'won') throw new Error(`${stage.level.id}: reference plan did not finish`);

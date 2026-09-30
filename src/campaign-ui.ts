@@ -1,6 +1,6 @@
 import type { Game } from './engine.ts';
 import { FPS, MAX_FRAMES } from './levels.ts';
-import { MISSIONS } from './campaign-content.ts';
+import { MISSIONS, stageVersions } from './campaign-content.ts';
 import type { Campaign } from './campaign.ts';
 import './campaign.css';
 
@@ -168,6 +168,8 @@ export class CampaignUI {
         $('#stage-rail').innerHTML = mission.stages.map((s, i) => `<button data-stage="${i}" ${i > this.campaign.stageIndex ? 'disabled' : ''} ${i === stageIndex ? 'aria-current="step"' : ''} title="回到该锚点；其后阶段将重新规划"><span>${i < this.campaign.cleared() ? '✓' : String(i + 1).padStart(2, '0')}</span>${i > this.campaign.stageIndex && s.variants?.length ? '下一段 · 依所选方案' : this.campaign.stageAt(i).level.title}</button>`).join('');
       }
       $('#evidence-list').innerHTML = MISSIONS.filter(m => m.chapter !== '机制试验' && this.campaign.data.completed.includes(m.id)).map(m => `<p>◇ ${m.evidence}</p>`).join('') || '<p>完成主线任务后，线索会保存在这里。</p>';
+      const endings = MISSIONS.flatMap(m => m.stages.flatMap(stageVersions)).flatMap(s => s.ending && this.campaign.data.endings?.includes(s.ending.id) ? [s.ending] : []);
+      if (endings.length) $('#evidence-list').insertAdjacentHTML('beforeend', `<div class="ending-ledger"><p>已完成的收束</p>${endings.map(e => `<p>◇ ${e.title}</p>`).join('')}</div>`);
     }
     const delayKey = `${!!preview}:${game.level.id}:${game.editingIndex}:${game.echoes.map(e => `${e.colorIndex}:${e.frames.length}:${e.delay ?? 0}`).join(',')}`;
     if (delayKey !== this.delayKey) {
