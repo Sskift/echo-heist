@@ -12,6 +12,7 @@ export class CampaignUI {
   private delayKey = '';
   private securityKey = '';
   private powerKey = '';
+  private relayKey = '';
   constructor(private campaign: Campaign, actions: Actions) {
     $('.intro').insertAdjacentHTML('afterend', `
       <section class="campaign-shell" aria-label="行动档案">
@@ -23,6 +24,7 @@ export class CampaignUI {
       <div class="rehearsal-toolbar"><button id="preview-button" aria-pressed="false">◇ 预演回声</button><span id="interaction-tip">E 操作设备 · P 预演已保存的计划</span></div>
       <section id="preview-panel" class="preview-panel" hidden aria-label="回声预演"><div><strong>只读预演</strong><output id="preview-time">0.00s</output></div><p>仅播放已保存回声；真人不参与，也不会保存进度。拖动时间，检查门与设备。</p><input id="preview-frame" type="range" min="0" max="720" step="1" value="0" aria-label="预演时间"><ol id="preview-log"></ol></section>`);
     $('#echo-slots').insertAdjacentHTML('afterend', '<div id="echo-delays" class="echo-delays"></div>');
+    $('.rehearsal-toolbar').insertAdjacentHTML('afterend', '<div id="credential-strip" class="credential-strip" hidden><strong id="credential-owner"></strong><span id="credential-event"></span></div><details id="relay-panel" class="security-panel relay-panel" hidden><summary>凭据与交接时段 <span>＋</span></summary><p>凭据只有一份，金色标记表示持有者。先交付、再接收、最后授权；授权后仍持有凭据。普通终端只处理按键那一刻，留候终端可按一次 E 后站在圈内等送件；离开或投影受抑制就取消。多人同时接收会取消本次请求，不会复制凭据。</p><ul id="relay-status" aria-label="交接状态"></ul><p>实体原件仍需真人取走。预演只播放已保存回声，不包含真人送件。</p></details>');
     $('.hint').insertAdjacentHTML('afterend', '<details class="hint evidence"><summary>已取得的线索 <span>＋</span></summary><div id="evidence-list"></div></details>');
     $('#preview-panel').insertAdjacentHTML('afterend', '<details id="security-panel" class="security-panel" hidden><summary>安保响应规则 <span>＋</span></summary><p id="security-rule"></p><ul id="security-status" aria-label="守卫状态"></ul><p>地图圆圈为参考响点；其他位置同样可以发声。方框标记的固定哨兵不响应诱饵。单位格与地图网格一致。</p></details>');
     $('#security-panel').insertAdjacentHTML('beforebegin', '<details id="power-panel" class="security-panel power-panel" hidden><summary>电路与行动条件 <span>＋</span></summary><p>在面板旁按 E，录下的是指定状态；重复相同请求不会反复切换。同帧相反请求会取消。连线显示门禁、监控与照明的供电关系。</p><ul id="power-status" aria-label="电路状态"></ul><p id="power-objectives"></p><p id="power-consequence" class="power-consequence"></p></details>');
@@ -53,6 +55,16 @@ export class CampaignUI {
 
   render(game: Game, campaignMode: boolean, preview: Game | null) {
     const world = preview ?? game;
+    const relayStatus = (world.level.terminals ?? []).map(t => world.terminalStatus(t));
+    const relayKey = `${world.level.id}:${world.credentialOwner()}:${relayStatus.join('|')}:${world.signals.at(-1)?.text}:${!!preview}`;
+    if (relayKey !== this.relayKey) {
+      this.relayKey = relayKey;
+      $('#credential-strip').hidden = $('#relay-panel').hidden = !world.level.terminals?.length;
+      $('#credential-owner').textContent = `${preview ? '预演 · ' : ''}唯一凭据：${world.credentialOwner()}`;
+      const event = world.signals.filter(s => /凭据|接收|交付|授权|等候/.test(s.text)).at(-1);
+      $('#credential-event').textContent = event ? `${(event.frame / FPS).toFixed(2)}s · ${event.text}` : '在终端旁按 E；空手也能录下接收请求';
+      $('#relay-status').replaceChildren(...relayStatus.map(text => { const item = document.createElement('li'); item.textContent = text; return item; }));
+    }
     const powerKey = `${world.level.id}:${world.hasLoot}:${[...world.circuits].join(',')}:${[...world.openDoors].join(',')}:${!!preview}`;
     if (powerKey !== this.powerKey) {
       this.powerKey = powerKey;
@@ -118,7 +130,10 @@ export class CampaignUI {
     }
     const intent = game.interaction();
     const tip = intent ? `E：${intent.type === 'circuit' ? `将 ${intent.id} 设为${game.circuitState(intent.id, intent.on)}` : intent.type === 'take' ? `在 ${intent.id} 接收凭据` : intent.type === 'give' ? `向 ${intent.id} 交付凭据` : `在 ${intent.id} 请求授权`}` : game.tokenOwner === 'player' ? '你持有唯一凭据 · 到终端按 E 交付' : 'E 操作设备 · P 预演已保存的计划';
-    const explanation = intent?.type === 'take' && game.tokenOwner !== `terminal:${intent.id}` ? `${tip}（终端为空，可录制请求）` : tip;
+    const terminal = intent && game.level.terminals?.find(t => t.id === intent.id && intent.type !== 'circuit');
+    const waiting = game.waitingReceivers.get('player') === terminal?.id;
+    const blockers = terminal ? game.terminalBlockers(terminal) : [];
+    const explanation = terminal ? `${waiting ? `在 ${terminal.id} 等候接收 · 离开取消` : tip}${blockers.length ? `（${blockers.join('、')}）` : intent?.type === 'take' && game.tokenOwner !== `terminal:${terminal.id}` ? terminal.waitForDelivery ? '（可原地留候）' : '（终端为空，可录制请求）' : ''}` : tip;
     if ($('#interaction-tip').textContent !== explanation) $('#interaction-tip').textContent = explanation;
     $('#preview-panel').hidden = !preview;
     $('#preview-button').textContent = preview ? '◇ 结束预演，返回计划' : '◇ 预演回声';

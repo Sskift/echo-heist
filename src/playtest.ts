@@ -1,4 +1,4 @@
-export const PLAYTEST_BUILD = '0.6.0';
+export const PLAYTEST_BUILD = '0.7.0';
 export const PLAYTEST_KEY = 'echo-heist-playtest-v1';
 export type Phase = 'planning' | 'execution' | 'rehearsal' | 'help' | 'away' | 'unclassified';
 export type Profile = { role: 'first-time' | 'returning' | 'developer'; experience: 'new' | 'regular'; externalGuide: boolean };

@@ -1,4 +1,4 @@
-import { doorPlates, FPS, LOOP_SECONDS, MAX_ECHOES, MAX_FRAMES, TILE, type Level, type Point, type Power, type Scanner } from './levels.ts';
+import { doorPlates, FPS, LOOP_SECONDS, MAX_ECHOES, MAX_FRAMES, TILE, type Level, type Point, type Power, type Scanner, type Terminal } from './levels.ts';
 import { findRoute } from './navigation.ts';
 
 export type Intent = { type: 'circuit'; id: string; on: boolean } | { type: 'take' | 'give' | 'authorize'; id: string };
@@ -38,6 +38,7 @@ export class Game {
   circuits = new Map<string, boolean>();
   authorized = new Set<string>();
   tokenOwner: string | null = null;
+  waitingReceivers = new Map<string, string>();
   signals: { frame: number; text: string }[] = [];
   failure: { frame: number; actor: string; guard: number; point: Point; scanner?: string } | null = null;
   scanExposure = new Map<string, number>();
@@ -162,6 +163,30 @@ export class Game {
     if (terminal) return { type: terminal.kind === 'lock' ? 'authorize' : this.tokenOwner === 'player' ? 'give' : 'take', id: terminal.id };
   }
 
+  credentialOwner(): string {
+    if (this.tokenOwner === 'player') return '当前的你';
+    if (this.tokenOwner?.startsWith('terminal:')) return `终端 ${this.tokenOwner.slice(9)}`;
+    const index = this.echoes.findIndex(e => `echo:${e.colorIndex}` === this.tokenOwner);
+    return index >= 0 ? `回声 ${index + 1}` : '无凭据';
+  }
+
+  terminalBlockers(terminal: Terminal): string[] {
+    const reasons: string[] = [];
+    if (terminal.window && (this.frame < Math.round(terminal.window[0] * FPS) || this.frame >= Math.round(terminal.window[1] * FPS))) reasons.push(`时段 ${terminal.window.join('–')} 秒`);
+    if (!this.powered(terminal.power)) reasons.push(`${terminal.power!.id} 需${this.circuitState(terminal.power!.id, terminal.power!.on)}`);
+    if (terminal.plate && !this.activePlates.has(terminal.plate)) reasons.push(`需有人守住 ${terminal.plate}`);
+    if (terminal.requiresAuthorization && !this.authorized.has(terminal.requiresAuthorization)) reasons.push(`需先取得 ${terminal.requiresAuthorization} 授权`);
+    return reasons;
+  }
+
+  terminalStatus(terminal: Terminal): string {
+    const blockers = this.terminalBlockers(terminal);
+    const names = [...this.waitingReceivers].filter(([, id]) => id === terminal.id).map(([actor]) => actor === 'player' ? '你' : `回声 ${this.echoes.findIndex(e => `echo:${e.colorIndex}` === actor) + 1}`);
+    const window = terminal.window ? this.seconds < terminal.window[0] ? `距开放 ${(terminal.window[0] - this.seconds).toFixed(1)}s` : this.seconds < terminal.window[1] ? `剩余 ${(terminal.window[1] - this.seconds).toFixed(1)}s` : '时段已过' : '不限时段';
+    const conditions = [terminal.plate ? `需守 ${terminal.plate}` : '', terminal.power ? `${terminal.power.id} 需${this.circuitState(terminal.power.id, terminal.power.on)}` : '', terminal.requiresAuthorization ? `先签 ${terminal.requiresAuthorization}` : ''].filter(Boolean).join('、');
+    return `${terminal.id} · ${terminal.kind === 'lock' ? '授权' : terminal.kind === 'source' ? '凭据源' : '交接'} · ${terminal.window ? `${terminal.window.join('–')}s，` : ''}${window}${conditions ? ` · ${conditions}` : ''} · ${blockers.length ? '条件未满足' : '可操作'}${this.tokenOwner === `terminal:${terminal.id}` ? ' · 存有凭据' : ''}${terminal.authorization && this.authorized.has(terminal.authorization) ? ' · 已授权' : ''}${names.length ? ` · ${names.join('、')} 等候接收` : ''}${terminal.waitForDelivery ? ' · 按 E 留候，离开取消' : ''}`;
+  }
+
   private resolveIntents() {
     const collect = () => this.actors().flatMap(actor => {
       if (!actor.at.intent) return [];
@@ -180,17 +205,49 @@ export class Game {
       else { this.circuits.set(circuit.id, [...values][0]); this.signal(`${circuit.id} 电源${circuit.states ? '：' : ''}${this.circuitState(circuit.id)}`); }
     }
     requests = collect(); // Transfers see suppression after this tick's power requests.
+    // Only marked terminals retain a take request. Leaving range, suppression,
+    // or a new request cancels it; end-pose holding can wait but never reissues E.
+    for (const [actor, id] of this.waitingReceivers) {
+      const at = this.actors().find(a => a.id === actor)?.at;
+      const terminal = this.level.terminals?.find(t => t.id === id);
+      if (!at || !terminal || distance(at, terminal) >= 30 || requests.some(r => r.id === actor)) {
+        this.waitingReceivers.delete(actor);
+        if (!requests.some(r => r.id === actor)) this.signal(`${actor === 'player' ? '当前的你' : `回声 ${this.echoes.findIndex(e => `echo:${e.colorIndex}` === actor) + 1}`} 在 ${id} 的等候已取消：${!at ? '投影不可用' : '已离开接收范围'}`);
+      }
+    }
+    for (const request of requests) {
+      if (request.intent.type !== 'take') continue;
+      const terminal = this.level.terminals?.find(t => t.id === request.intent.id);
+      if (terminal?.waitForDelivery && distance(request.at, terminal) < 30) {
+        this.waitingReceivers.set(request.id, terminal.id);
+        this.signal(`${request.label} 在 ${terminal.id} 等候接收；离开终端会取消`);
+      }
+    }
+    for (const [actor, id] of this.waitingReceivers) {
+      if (requests.some(r => r.id === actor)) continue;
+      const receiver = this.actors().find(a => a.id === actor)!;
+      requests.push({ ...receiver, intent: { type: 'take', id } });
+    }
     // All transfers use the single owner field. Giving precedes receiving, so a
     // same-tick rendezvous works; competing receivers cancel instead of duplicating.
     for (const phase of ['give', 'take', 'authorize'] as const) {
       for (const terminal of this.level.terminals ?? []) {
         const group = requests.filter(r => r.intent.type === phase && r.intent.id === terminal.id && distance(r.at, terminal) < 30);
         if (!group.length) continue;
+        if ((phase === 'authorize') !== (terminal.kind === 'lock')) continue;
+        const blockers = this.terminalBlockers(terminal);
+        const waiting = phase === 'take' && terminal.waitForDelivery;
+        if (blockers.length) {
+          if (!waiting) this.signal(`${terminal.id} ${phase === 'authorize' ? '授权' : phase === 'give' ? '交付' : '接收'}未满足：${blockers.join('、')}`);
+          continue;
+        }
+        if (waiting && this.tokenOwner !== `terminal:${terminal.id}`) continue;
         if (phase === 'give') {
           const sender = group.find(r => r.id === this.tokenOwner);
           if (sender) { this.tokenOwner = `terminal:${terminal.id}`; this.signal(`${sender.label} 将凭据交给 ${terminal.id}`); }
           else this.signal(`${terminal.id} 交付未满足：没有持有凭据`);
         } else if (phase === 'take') {
+          group.forEach(r => this.waitingReceivers.delete(r.id));
           if (group.length > 1) this.signal(`${terminal.id} 接收冲突：凭据留在终端`);
           else if (this.tokenOwner === `terminal:${terminal.id}`) { this.tokenOwner = group[0].id; this.signal(`${group[0].label} 收到 ${terminal.id} 的凭据`); }
           else this.signal(`${group[0].label} 接收未满足：${terminal.id} 尚无凭据`);
@@ -260,6 +317,7 @@ export class Game {
     this.authorized.clear();
     const source = this.level.terminals?.find(t => t.kind === 'source');
     this.tokenOwner = source ? `terminal:${source.id}` : null;
+    this.waitingReceivers.clear();
     this.openDoors.clear();
     this.activePlates.clear();
     this.guards = this.level.guards.map(g => ({

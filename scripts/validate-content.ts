@@ -24,6 +24,13 @@ for (const mission of MISSIONS) {
     }
     for (const rect of [...level.glass ?? [], ...level.scanners ?? [], ...level.suppressors ?? []]) assert.ok(rect.w > 0 && rect.h > 0 && rect.x >= 0 && rect.y >= 0 && rect.x + rect.w <= WIDTH && rect.y + rect.h <= HEIGHT, `Invalid facility bounds in ${level.id}`);
     assert.ok((level.terminals ?? []).filter(t => t.kind === 'source').length <= 1, `Multiple credentials in ${level.id}`);
+    for (const terminal of level.terminals ?? []) {
+      if (terminal.window) assert.ok(terminal.window[0] >= 0 && terminal.window[1] > terminal.window[0] && terminal.window[1] <= 12, `Invalid terminal window in ${level.id}`);
+      if (terminal.plate) assert.ok(level.plates.some(p => p.id === terminal.plate), `Unknown terminal plate in ${level.id}`);
+      if (terminal.requiresAuthorization) assert.ok(level.terminals?.some(t => t.authorization === terminal.requiresAuthorization && t.id !== terminal.id), `Unknown prerequisite authorization in ${level.id}`);
+      if (terminal.kind === 'lock') assert.ok(terminal.authorization && !terminal.waitForDelivery, `Invalid lock in ${level.id}`);
+      else assert.ok(!terminal.authorization, `Only locks grant authorization in ${level.id}`);
+    }
     for (const door of level.doors) {
       for (const plate of doorPlates(door)) assert.ok(level.plates.some(p => p.id === plate), `Unknown plate in ${level.id}`);
       if (door.authorization) assert.ok(level.terminals?.some(t => t.authorization === door.authorization), `Missing authorization in ${level.id}`);
@@ -31,7 +38,7 @@ for (const mission of MISSIONS) {
     for (const scanner of level.scanners ?? []) {
       assert.ok(scanner.period > 0 && scanner.period <= 12 && scanner.active[0] >= 0 && scanner.active[1] > scanner.active[0] && scanner.active[1] <= scanner.period, `Invalid scanner cycle ${level.id}`);
     }
-    for (const entity of [...level.doors, ...level.guards, ...level.suppressors ?? [], ...level.scanners ?? []]) {
+    for (const entity of [...level.doors, ...level.guards, ...level.suppressors ?? [], ...level.scanners ?? [], ...level.terminals ?? []]) {
       if (entity.power) assert.ok(level.circuits?.some(c => c.id === entity.power!.id), `Unknown circuit in ${level.id}`);
     }
     for (const powers of [level.lootPower, level.exitPower, level.onLoot?.power]) {

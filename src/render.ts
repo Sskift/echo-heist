@@ -81,7 +81,7 @@ export class Renderer {
 
   draw(game: Game, time: number) {
     const c = this.ctx;
-    const palette = game.level.theme === 'gala' ? { floor: '#24221e', grid: '#343129', wall: '#4a473b', wallTop: '#66634d' } : game.level.theme === 'industrial' ? { floor: '#1b232b', grid: '#293541', wall: '#3c4a57', wallTop: '#657989' } : C;
+    const palette = game.level.theme === 'gala' ? { floor: '#24221e', grid: '#343129', wall: '#4a473b', wallTop: '#66634d' } : game.level.theme === 'industrial' ? { floor: '#1b232b', grid: '#293541', wall: '#3c4a57', wallTop: '#657989' } : game.level.theme === 'clockwork' ? { floor: '#25241f', grid: '#34322a', wall: '#514b3c', wallTop: '#786c50' } : C;
     const dt = Math.min(0.1, time - this.lastTime);
     this.lastTime = time;
     c.clearRect(0, 0, WIDTH, HEIGHT);
@@ -201,10 +201,25 @@ export class Renderer {
     }
     for (const terminal of game.level.terminals ?? []) {
       const holding = game.tokenOwner === `terminal:${terminal.id}`;
-      const color = holding ? '#efbd72' : '#8ed4ed';
+      const blocked = game.terminalBlockers(terminal).length > 0;
+      const waiting = [...game.waitingReceivers.values()].includes(terminal.id);
+      const color = holding ? '#efbd72' : blocked ? '#8a8295' : '#8ed4ed';
+      if (terminal.plate) {
+        const at = game.level.plates.find(p => p.id === terminal.plate);
+        if (at) this.line([at, terminal], '#b7a78a55', 1, [4, 5]);
+      }
+      if (terminal.power) {
+        const at = game.level.circuits?.find(c => c.id === terminal.power!.id);
+        if (at) this.line([at, terminal], '#b7a78a55', 1, [4, 5]);
+      }
       this.circle(terminal, 22, '#18323b', color);
+      if (waiting) this.circle(terminal, 27, 'transparent', '#efbd72');
       this.text(terminal.id, terminal.x, terminal.y + 5, color, 15, 'center');
-      this.text(`${terminal.kind === 'source' ? '凭据源' : terminal.kind === 'lock' ? '授权' : '接力'} / E`, terminal.x, terminal.y + 40, color, 10, 'center');
+      const align = game.blocked(terminal.x + 32, terminal.y + 40, 1) ? 'right' : game.blocked(terminal.x - 32, terminal.y + 40, 1) ? 'left' : 'center';
+      this.text(`${terminal.kind === 'source' ? '凭据源' : terminal.kind === 'lock' ? '授权' : terminal.waitForDelivery ? '留候' : '交接'}${waiting ? ' · 等候中' : ' / E'}`, terminal.x, terminal.y + 40, color, 10, align);
+      const conditions = [terminal.window ? `${terminal.window.join('–')}s` : '', terminal.plate ? `守 ${terminal.plate}` : '', terminal.power ? `${terminal.power.id} ${game.circuitState(terminal.power.id, terminal.power.on)}` : '', terminal.requiresAuthorization ? `先签 ${terminal.requiresAuthorization}` : ''].filter(Boolean).join(' · ');
+      if (conditions) this.text(conditions, terminal.x, terminal.y + 55, '#b7a78a', 9, align);
+      if (terminal.authorization && game.authorized.has(terminal.authorization)) this.text('✓', terminal.x - 25, terminal.y - 16, '#c3ed82', 14);
       if (holding) this.circle({ x: terminal.x + 18, y: terminal.y - 18 }, 5, C.amber);
     }
 
