@@ -55,7 +55,7 @@ test('completing the prologue unlocks the next chapter and excludes optional pro
   }
   assert.equal(campaign.nextMission?.id, 'C1-1'); assert.ok(campaign.available('C1-1'));
   assert.ok(campaign.select('C1-1')); assert.equal(new Campaign(campaign.export()).mission.id, 'C1-1');
-  const last = MISSIONS.filter(m => m.id.startsWith('C1-')).at(-1)!;
+  const last = MISSIONS.filter(m => !m.id.startsWith('LAB-')).at(-1)!;
   campaign.data.selected = last.id;
   assert.equal(campaign.nextMission, undefined);
 });

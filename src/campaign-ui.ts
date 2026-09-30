@@ -10,6 +10,7 @@ type Actions = { mission: (id: string) => void; stage: (index: number) => void; 
 export class CampaignUI {
   private key = '';
   private delayKey = '';
+  private securityKey = '';
   constructor(private campaign: Campaign, actions: Actions) {
     $('.intro').insertAdjacentHTML('afterend', `
       <section class="campaign-shell" aria-label="行动档案">
@@ -22,6 +23,7 @@ export class CampaignUI {
       <section id="preview-panel" class="preview-panel" hidden aria-label="回声预演"><div><strong>只读预演</strong><output id="preview-time">0.00s</output></div><p>仅播放已保存回声；真人不参与，也不会保存进度。拖动时间，检查门与设备。</p><input id="preview-frame" type="range" min="0" max="720" step="1" value="0" aria-label="预演时间"><ol id="preview-log"></ol></section>`);
     $('#echo-slots').insertAdjacentHTML('afterend', '<div id="echo-delays" class="echo-delays"></div>');
     $('.hint').insertAdjacentHTML('afterend', '<details class="hint evidence"><summary>已取得的线索 <span>＋</span></summary><div id="evidence-list"></div></details>');
+    $('#preview-panel').insertAdjacentHTML('afterend', '<details id="security-panel" class="security-panel" hidden><summary>安保响应规则 <span>＋</span></summary><p id="security-rule"></p><ul id="security-status" aria-label="守卫状态"></ul><p>地图圆圈为参考响点；其他位置同样可以发声。方框标记的固定哨兵不响应诱饵。单位格与地图网格一致。</p></details>');
     $('#mission-cards').addEventListener('click', event => {
       const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-mission]');
       if (button && !button.disabled) { actions.mission(button.dataset.mission!); $<HTMLDetailsElement>('#mission-board').open = false; }
@@ -48,6 +50,20 @@ export class CampaignUI {
   checkpointSaved(ok: boolean) { $('#checkpoint-note').textContent = ok ? '安全锚点已保存到本机' : '仅本次有效 · 本机存档不可用'; }
 
   render(game: Game, campaignMode: boolean, preview: Game | null) {
+    const world = preview ?? game;
+    const security = world.guards.map((guard, i) => {
+      const def = world.level.guards[i];
+      const source = guard.investigate ? world.soundName(guard.investigate) : '';
+      const investigation = def.searchSeconds === undefined ? `调查 ${source}，剩余 ${guard.attention.toFixed(1)} 秒` : guard.searching ? `在 ${source} 搜索，剩余 ${guard.attention.toFixed(1)} 秒` : `前往 ${source}，抵达后搜索 ${def.searchSeconds} 秒`;
+      return `${world.guardName(i)} · ${!world.powered(def.power) ? '断电' : def.kind === 'sentry' ? '固定哨兵，忽略声音' : guard.investigate ? investigation : '按原路线值守'} · 视野 ${(def.range / 32).toFixed(1)} 格${def.kind === 'sentry' ? '' : ` · 听觉 ${((def.hearing ?? 450) / 32).toFixed(1)} 格`}`;
+    });
+    const securityKey = `${world.level.id}:${security.join('|')}`;
+    if (securityKey !== this.securityKey) {
+      this.securityKey = securityKey;
+      $('#security-panel').hidden = !world.guards.length;
+      $('#security-rule').textContent = world.level.noiseResponse === 'nearest' ? '每个声源派最近的可响应守卫。同帧多声源按最近组合分派，每名守卫接一处；距离相同先按守卫编号，再按声源从西到东、从北到南。墙与玻璃不隔声；守卫抵达后搜索，再返回岗位。' : '听觉范围内的巡逻者都会响应；普通墙体不隔声。调查结束后返回原路线。';
+      $('#security-status').replaceChildren(...security.map(text => { const item = document.createElement('li'); item.textContent = text; return item; }));
+    }
     const mission = this.campaign.mission;
     const stageIndex = mission.stages.findIndex(s => s.level.id === game.level.id);
     const key = `${campaignMode}:${mission.id}:${stageIndex}:${game.status}:${this.campaign.data.completed.join(',')}:${this.campaign.cleared()}`;

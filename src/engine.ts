@@ -6,7 +6,7 @@ export type Input = { x: number; y: number; lure: boolean; interact?: boolean };
 export type Frame = Point & { angle: number; lure: boolean; intent?: Intent };
 export type Echo = { frames: Frame[]; colorIndex: number; delay?: number };
 export type Status = 'ready' | 'running' | 'paused' | 'caught' | 'won';
-export type Guard = Point & { angle: number; waypoint: number; investigate: Point | null; attention: number; suspicion: number; path?: Point[]; pathKey?: string; seenActor?: string };
+export type Guard = Point & { angle: number; waypoint: number; investigate: Point | null; attention: number; suspicion: number; path?: Point[]; pathKey?: string; seenActor?: string; searching?: boolean };
 export type GameEvent = 'start' | 'rewind' | 'door' | 'loot' | 'lure' | 'caught' | 'won' | 'tick' | 'full' | 'plan';
 
 const SPEED = 224;
@@ -43,9 +43,22 @@ export class Game {
   scanExposure = new Map<string, number>();
   spectator = false;
   private interactHeld = false;
+  private pendingNoise: Point[] = [];
+  private wallCells = new Map<number, Map<number, Point[]>>();
 
   constructor(level: Level) {
     this.level = level;
+    // Walls are static for the life of a level. Index every touched cell so
+    // collision and vision queries also work with walls off the tile grid.
+    for (const wall of level.walls) {
+      for (let x = Math.floor(wall.x / TILE); x < Math.ceil((wall.x + TILE) / TILE); x++) {
+        let column = this.wallCells.get(x);
+        if (!column) { column = new Map(); this.wallCells.set(x, column); }
+        for (let y = Math.floor(wall.y / TILE); y < Math.ceil((wall.y + TILE) / TILE); y++) {
+          const cell = column.get(y) ?? []; cell.push(wall); column.set(y, cell);
+        }
+      }
+    }
     this.player = { ...level.spawn, angle: -Math.PI / 2, lure: false };
     this.resetWorld('ready');
   }
@@ -227,6 +240,7 @@ export class Game {
     this.lureCooldown = 0;
     this.recording = [];
     this.noise = [];
+    this.pendingNoise = [];
     this.interactHeld = false;
     this.failure = null;
     this.scanExposure.clear();
@@ -238,7 +252,7 @@ export class Game {
     this.openDoors.clear();
     this.activePlates.clear();
     this.guards = this.level.guards.map(g => ({
-      ...g.route[0], angle: Math.atan2((g.route[1] ?? g.route[0]).y - g.route[0].y, (g.route[1] ?? g.route[0]).x - g.route[0].x),
+      ...g.route[0], angle: g.facing ?? Math.atan2((g.route[1] ?? g.route[0]).y - g.route[0].y, (g.route[1] ?? g.route[0]).x - g.route[0].x),
       waypoint: 1, investigate: null, attention: 0, suspicion: 0,
     }));
     this.status = status;
@@ -300,14 +314,30 @@ export class Game {
     return echo.frames[Math.max(0, Math.min(frame - (echo.delay ?? 0), echo.frames.length - 1))];
   }
 
-  blocked(x: number, y: number, radius = RADIUS): boolean {
-    const touches = (r: { x: number; y: number; w: number; h: number }) => {
-      const nearX = Math.max(r.x, Math.min(x, r.x + r.w));
-      const nearY = Math.max(r.y, Math.min(y, r.y + r.h));
-      return Math.hypot(x - nearX, y - nearY) < radius;
+  blocked(x: number, y: number, radius = RADIUS, sight = false): boolean {
+    if (radius <= 0) return false;
+    const touches = (rx: number, ry: number, width: number, height: number) => {
+      const dx = x - Math.max(rx, Math.min(x, rx + width));
+      const dy = y - Math.max(ry, Math.min(y, ry + height));
+      return dx * dx + dy * dy < radius * radius;
     };
-    return this.level.walls.some(w => touches({ ...w, w: TILE, h: TILE })) ||
-      this.level.doors.some(d => !this.openDoors.has(d.id) && touches(d));
+    for (let cx = Math.floor((x - radius) / TILE); cx <= Math.floor((x + radius) / TILE); cx++) {
+      const column = this.wallCells.get(cx);
+      if (!column) continue;
+      for (let cy = Math.floor((y - radius) / TILE); cy <= Math.floor((y + radius) / TILE); cy++) {
+        for (const wall of column.get(cy) ?? []) if (touches(wall.x, wall.y, TILE, TILE)) return true;
+      }
+    }
+    return this.level.doors.some(d => !this.openDoors.has(d.id) && touches(d.x, d.y, d.w, d.h)) ||
+      (!sight && (this.level.glass ?? []).some(g => touches(g.x, g.y, g.w, g.h)));
+  }
+
+  occluded(x: number, y: number): boolean { return this.blocked(x, y, 1, true); }
+
+  private canWalk(from: Point, to: Point): boolean {
+    const steps = Math.ceil(distance(from, to) / 5);
+    for (let i = 1; i <= steps; i++) if (this.blocked(from.x + (to.x - from.x) * i / steps, from.y + (to.y - from.y) * i / steps)) return false;
+    return true;
   }
 
   private move(actor: Point, dx: number, dy: number) {
@@ -333,7 +363,7 @@ export class Game {
     const steps = Math.ceil(distance(from, to) / 6);
     for (let i = 1; i < steps; i++) {
       const t = i / steps;
-      if (this.blocked(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t, 1)) return false;
+      if (this.occluded(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t)) return false;
     }
     return true;
   }
@@ -341,10 +371,33 @@ export class Game {
   private makeNoise(at: Point) {
     this.noise.push({ ...at, life: 1 });
     this.events.push('lure');
-    for (const [index, guard] of this.guards.entries()) if (this.level.guards[index].kind !== 'sentry' && this.powered(this.level.guards[index].power) && distance(guard, at) < 450) {
-      guard.investigate = { ...at };
-      guard.attention = 2.5;
+    if (this.level.noiseResponse === 'nearest') this.pendingNoise.push({ x: at.x, y: at.y });
+    else for (const [index, guard] of this.guards.entries()) if (this.hears(index, at)) this.investigate(index, at);
+  }
+
+  guardName(index: number): string { return this.level.guards[index].id ?? String(index + 1); }
+  soundName(at: Point): string { return this.level.soundMarkers?.find(m => distance(m, at) < 12)?.id ?? '临时声源'; }
+  private hears(index: number, at: Point): boolean {
+    const def = this.level.guards[index];
+    return def.kind !== 'sentry' && this.powered(def.power) && distance(this.guards[index], at) < (def.hearing ?? 450);
+  }
+  private investigate(index: number, at: Point) {
+    const guard = this.guards[index];
+    guard.investigate = { x: at.x, y: at.y }; guard.searching = false;
+    guard.attention = this.level.guards[index].searchSeconds ?? 2.5;
+    this.signal(`${this.guardName(index)} 号守卫调查声响 · ${this.soundName(at)}`);
+  }
+  private dispatchNoise() {
+    // Resolve simultaneous sounds as a batch. Distance, stable guard ID, then
+    // source coordinates break ties, independently of the echo array order.
+    const sources = this.pendingNoise.filter((s, i, all) => all.findIndex(a => a.x === s.x && a.y === s.y) === i);
+    const pairs = sources.flatMap(at => this.guards.flatMap((guard, index) => this.hears(index, at) ? [{ at, index, gap: distance(guard, at), id: this.guardName(index) }] : []));
+    pairs.sort((a, b) => a.gap - b.gap || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) || a.at.x - b.at.x || a.at.y - b.at.y);
+    const assigned = new Set<number>(), heard = new Set<Point>();
+    for (const pair of pairs) if (!assigned.has(pair.index) && !heard.has(pair.at)) {
+      this.investigate(pair.index, pair.at); assigned.add(pair.index); heard.add(pair.at);
     }
+    this.pendingNoise = [];
   }
 
   private updateGuards() {
@@ -352,11 +405,18 @@ export class Game {
     this.guards.forEach((guard, index) => {
       const def = this.level.guards[index];
       if (!this.powered(def.power)) { guard.suspicion = 0; return; }
-      guard.attention = Math.max(0, guard.attention - DT);
-      if (guard.attention === 0) guard.investigate = null;
+      if (guard.investigate && def.searchSeconds !== undefined && distance(guard, guard.investigate) < 8 && !guard.searching) {
+        guard.searching = true; this.signal(`${this.guardName(index)} 号守卫抵达声源，搜索 ${def.searchSeconds} 秒`);
+      }
+      if (def.searchSeconds === undefined || guard.searching) guard.attention = Math.max(0, guard.attention - DT);
+      if (guard.investigate && guard.attention === 0) { guard.investigate = null; guard.searching = false; this.signal(`${this.guardName(index)} 号守卫返回巡逻路线`); }
       const destination = guard.investigate ?? def.route[guard.waypoint % def.route.length];
       let target = destination;
-      if (guard.investigate && !this.canSee(guard, destination)) {
+      // Keep existing recordings on legacy maps compatible with their original
+      // routing rule. New arrival-search guards and glass need body clearance.
+      const routeBlocked = (guard.investigate || def.searchSeconds !== undefined) &&
+        !(def.searchSeconds !== undefined || this.level.glass?.length ? this.canWalk(guard, destination) : this.canSee(guard, destination));
+      if (routeBlocked) {
         const key = `${destination.x}:${destination.y}:${[...this.openDoors].join(',')}`;
         if (guard.pathKey !== key) { guard.path = findRoute(guard, destination, (x, y) => this.blocked(x, y)); guard.pathKey = key; }
         while (guard.path?.length && distance(guard, guard.path[0]) < 5) guard.path.shift();
@@ -368,7 +428,10 @@ export class Game {
       if (dist > 5 && def.kind !== 'sentry') {
         guard.angle = Math.atan2(dy, dx);
         this.move(guard, dx / dist * def.speed * DT, dy / dist * def.speed * DT);
-      } else if (!guard.investigate && def.kind !== 'sentry') guard.waypoint = (guard.waypoint + 1) % def.route.length;
+      } else if (!guard.investigate && def.kind !== 'sentry') {
+        guard.waypoint = (guard.waypoint + 1) % def.route.length;
+        if (def.route.length === 1 && def.facing !== undefined) guard.angle = def.facing;
+      }
       const seen = actors.find(({ at: a }) => {
         const gap = Math.atan2(a.y - guard.y, a.x - guard.x) - guard.angle;
         const angle = Math.abs(Math.atan2(Math.sin(gap), Math.cos(gap)));
@@ -383,7 +446,7 @@ export class Game {
       const actor = actors.find(a => a.label === this.guards[guard].seenActor)!;
       this.failure = { frame: this.frame, actor: actor.label, guard, point: { x: actor.at.x, y: actor.at.y } };
       this.status = 'caught';
-      this.lastMessage = `${this.seconds.toFixed(2)} 秒：${actor.label}被 ${guard + 1} 号守卫发现。调整这一段路线或出场时间。`;
+      this.lastMessage = `${this.seconds.toFixed(2)} 秒：${actor.label}被 ${this.guardName(guard)} 号守卫发现。调整这一段路线或出场时间。`;
       this.signal(this.lastMessage);
       this.events.push('caught');
     }
@@ -404,6 +467,7 @@ export class Game {
       const local = this.frame - (echo.delay ?? 0);
       if (local < echo.frames.length && echo.frames[local].lure && !this.suppressed(echo.frames[local])) this.makeNoise(echo.frames[local]);
     }
+    this.dispatchNoise();
     delete this.player.intent;
     if (!this.spectator && input.interact && !this.interactHeld) this.player.intent = this.interaction();
     this.interactHeld = !!input.interact;

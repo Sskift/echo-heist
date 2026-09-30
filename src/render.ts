@@ -106,6 +106,12 @@ export class Renderer {
     this.text('NIGHT SHIFT  ·  02:14 AM', 520, 94, '#475e50', 9);
     this.text('AUTHORIZED PERSONNEL ONLY', 510, 523, '#40584a', 9);
 
+    for (const marker of game.level.soundMarkers ?? []) {
+      this.circle(marker, 15, '#efbd7208', '#efbd7250');
+      this.text(marker.id, marker.x, marker.y + 4, '#cead79', 9, 'center');
+      this.text('参考响点', marker.x, marker.y + 29, '#a68c62', 8, 'center');
+    }
+
     // In-floor wiring explains the relationship between each switch and door.
     for (const plate of game.level.plates) {
       const lit = game.activePlates.has(plate.id);
@@ -136,6 +142,8 @@ export class Renderer {
     // Guard light is ray-cast against the same collision geometry as detection.
     game.guards.forEach((guard, i) => {
       if (!game.powered(game.level.guards[i].power)) return;
+      const route = game.level.guards[i].route;
+      if (this.trails && route.length > 1) this.line([...route, route[0]], '#efbd7235', 1, [3, 7]);
       const range = game.level.guards[i].range;
       const color = guard.suspicion > 0.2 ? '239,133,103' : '234,188,112';
       const light = c.createRadialGradient(guard.x, guard.y, 0, guard.x, guard.y, range);
@@ -145,13 +153,19 @@ export class Renderer {
       for (let angle = guard.angle - 0.56; angle <= guard.angle + 0.57; angle += 0.028) {
         let length = 0;
         for (length = 0; length < range; length += 5) {
-          if (game.blocked(guard.x + Math.cos(angle) * length, guard.y + Math.sin(angle) * length, 1)) break;
+          if (game.occluded(guard.x + Math.cos(angle) * length, guard.y + Math.sin(angle) * length)) break;
         }
         c.lineTo(guard.x + Math.cos(angle) * length, guard.y + Math.sin(angle) * length);
       }
       c.closePath(); c.fill();
     });
 
+    for (const glass of game.level.glass ?? []) {
+      c.fillStyle = '#8ed4ed1c'; c.fillRect(glass.x, glass.y, glass.w, glass.h);
+      c.strokeStyle = '#8ed4edb0'; c.lineWidth = 2; c.strokeRect(glass.x, glass.y, glass.w, glass.h);
+      this.text(`${glass.id} / 玻璃·不遮视线`, Math.min(glass.x, WIDTH - 160), glass.y + glass.h + 15, '#8ed4ed', 9);
+      for (let y = glass.y + 12; y < glass.y + glass.h - 8; y += 28) this.line([{ x: glass.x + 4, y: y + 5 }, { x: glass.x + glass.w - 4, y }], '#8ed4ed60');
+    }
     for (const scanner of game.level.scanners ?? []) {
       const active = game.scanning(scanner);
       const phase = (game.seconds + (scanner.phase ?? 0)) % scanner.period;
@@ -258,7 +272,14 @@ export class Renderer {
     });
     game.guards.forEach((guard, index) => {
       const enabled = game.powered(game.level.guards[index].power);
-      this.actor({ ...guard, lure: false }, !enabled ? '#526153' : guard.suspicion > 0.2 ? '#ed947c' : C.amber, time, false, !enabled ? '断电' : guard.investigate ? '调查中' : `${index + 1} / SECURITY`);
+      const sentry = game.level.guards[index].kind === 'sentry';
+      const label = !enabled ? '断电' : guard.investigate ? `${game.guardName(index)} / ${guard.searching ? '搜索' : '调查'}` : `${game.guardName(index)} / ${sentry ? '固定哨兵' : '巡逻'}`;
+      if (sentry) { c.strokeStyle = '#efbd7280'; c.lineWidth = 1; c.strokeRect(guard.x - 19, guard.y - 19, 38, 38); }
+      if (guard.investigate && this.trails) {
+        this.line([guard, ...(guard.path ?? []), guard.investigate], '#efbd7260', 1, [4, 5]);
+        this.circle(guard.investigate, 9, '#efbd7210', '#efbd72');
+      }
+      this.actor({ ...guard, lure: false }, !enabled ? '#526153' : guard.suspicion > 0.2 ? '#ed947c' : C.amber, time, false, label);
       if (guard.suspicion > 0) {
         c.fillStyle = '#100e0a'; c.fillRect(guard.x - 15, guard.y + 21, 30, 3);
         c.fillStyle = '#ef957e'; c.fillRect(guard.x - 15, guard.y + 21, guard.suspicion * 30, 3);
