@@ -81,7 +81,7 @@ export class Renderer {
 
   draw(game: Game, time: number) {
     const c = this.ctx;
-    const palette = game.level.theme === 'gala' ? { floor: '#24221e', grid: '#343129', wall: '#4a473b', wallTop: '#66634d' } : C;
+    const palette = game.level.theme === 'gala' ? { floor: '#24221e', grid: '#343129', wall: '#4a473b', wallTop: '#66634d' } : game.level.theme === 'industrial' ? { floor: '#1b232b', grid: '#293541', wall: '#3c4a57', wallTop: '#657989' } : C;
     const dt = Math.min(0.1, time - this.lastTime);
     this.lastTime = time;
     c.clearRect(0, 0, WIDTH, HEIGHT);
@@ -136,7 +136,7 @@ export class Renderer {
     c.strokeStyle = game.hasLoot ? C.lime : '#68937a'; c.lineWidth = 1.5;
     c.setLineDash([7, 5]); c.strokeRect(exit.x - 30, exit.y - 30, 60, 60); c.setLineDash([]);
     this.line([{ x: exit.x + 12, y: exit.y }, { x: exit.x - 12, y: exit.y }, { x: exit.x - 4, y: exit.y - 8 }], '#95bca0', 2);
-    this.text(game.level.objective === 'reach' ? '安全锚点 / ANCHOR' : '撤离点 / EXIT', exit.x, exit.y + 49, game.hasLoot ? C.lime : '#9bbca4', 10, 'center');
+    this.text(!game.exitReady ? '供电未就绪 / WAIT' : game.level.objective === 'reach' ? '安全锚点 / ANCHOR' : '撤离点 / EXIT', exit.x, exit.y + 49, !game.exitReady ? C.amber : game.hasLoot ? C.lime : '#9bbca4', 10, 'center');
     c.restore();
 
     // Guard light is ray-cast against the same collision geometry as detection.
@@ -144,7 +144,7 @@ export class Renderer {
       if (!game.powered(game.level.guards[i].power)) return;
       const route = game.level.guards[i].route;
       if (this.trails && route.length > 1) this.line([...route, route[0]], '#efbd7235', 1, [3, 7]);
-      const range = game.level.guards[i].range;
+      const range = game.visionRange(i);
       const color = guard.suspicion > 0.2 ? '239,133,103' : '234,188,112';
       const light = c.createRadialGradient(guard.x, guard.y, 0, guard.x, guard.y, range);
       light.addColorStop(0, `rgba(${color},0.23)`); light.addColorStop(1, `rgba(${color},0.02)`);
@@ -185,10 +185,19 @@ export class Renderer {
     for (const circuit of game.level.circuits ?? []) {
       const on = game.circuits.get(circuit.id), color = on ? '#c3ed82' : '#efbd72';
       for (const door of game.level.doors.filter(d => d.power?.id === circuit.id)) this.line([circuit, { x: door.x, y: circuit.y }, { x: door.x, y: door.y }], `${color}60`, 1, [6, 4]);
+      if (this.trails) game.level.guards.forEach((def, i) => {
+        const link = def.power?.id === circuit.id ? def.power : def.lighting?.id === circuit.id ? def.lighting : null;
+        if (!link) return;
+        const at = game.guards[i], active = game.powered(link);
+        this.line([circuit, { x: at.x, y: circuit.y }, at], active ? '#efbd7260' : '#7898a335', 1, [3, 6]);
+        if (def.lighting) { this.circle({ x: at.x + 25, y: at.y - 19 }, 5, active ? '#efbd72' : '#485866'); this.text(active ? '灯亮' : '灯灭', at.x + 25, at.y - 32, active ? C.amber : '#91a8bc', 8, 'center'); }
+      });
       c.fillStyle = '#283629'; c.fillRect(circuit.x - 18, circuit.y - 18, 36, 36);
       c.strokeStyle = color; c.strokeRect(circuit.x - 18, circuit.y - 18, 36, 36);
       this.text('⏻', circuit.x, circuit.y + 6, color, 20, 'center');
-      this.text(`${circuit.id} ${on ? '接通' : '断开'} / E 操作`, circuit.x, circuit.y + 40, color, 10, 'center');
+      const align = game.blocked(circuit.x + 32, circuit.y + 40, 1) ? 'right' : game.blocked(circuit.x - 32, circuit.y + 40, 1) ? 'left' : 'center';
+      this.text(`${circuit.id} ${game.circuitState(circuit.id)} / E 操作`, circuit.x, circuit.y + 40, color, 10, align);
+      if (circuit.label) this.text(circuit.label, circuit.x, circuit.y + 55, '#91a8bc', 9, align);
     }
     for (const terminal of game.level.terminals ?? []) {
       const holding = game.tokenOwner === `terminal:${terminal.id}`;
@@ -248,6 +257,8 @@ export class Renderer {
       c.restore();
     }
     this.text(game.hasLoot ? 'COLLECTED' : game.level.lootLabel ?? '藏品 / THE PRIZE', loot.x, loot.y + 44, C.amber, 10, 'center');
+    if (!game.hasLoot && !game.canCollect) this.text(`取物需 ${game.powerRequirements(game.level.lootPower)}`, loot.x, loot.y + 59, '#ef947c', 9, 'center');
+    else if (!game.hasLoot && game.level.onLoot) this.text('拆离后需恢复供电', loot.x, loot.y + 59, '#ef947c', 9, 'center');
     }
 
     if (this.trails) for (const echo of game.echoes) {
@@ -273,8 +284,10 @@ export class Renderer {
     game.guards.forEach((guard, index) => {
       const enabled = game.powered(game.level.guards[index].power);
       const sentry = game.level.guards[index].kind === 'sentry';
-      const label = !enabled ? '断电' : guard.investigate ? `${game.guardName(index)} / ${guard.searching ? '搜索' : '调查'}` : `${game.guardName(index)} / ${sentry ? '固定哨兵' : '巡逻'}`;
+      const camera = game.level.guards[index].kind === 'camera';
+      const label = !enabled ? `${game.guardName(index)} / 停机` : guard.investigate ? `${game.guardName(index)} / ${guard.searching ? '搜索' : '调查'}` : `${game.guardName(index)} / ${camera ? '摄像头' : sentry ? '固定哨兵' : '巡逻'}`;
       if (sentry) { c.strokeStyle = '#efbd7280'; c.lineWidth = 1; c.strokeRect(guard.x - 19, guard.y - 19, 38, 38); }
+      if (camera) { c.strokeStyle = enabled ? C.amber : '#526153'; c.lineWidth = 2; c.strokeRect(guard.x - 21, guard.y - 13, 42, 26); this.circle(guard, 6, enabled ? C.amber : '#526153'); }
       if (guard.investigate && this.trails) {
         this.line([guard, ...(guard.path ?? []), guard.investigate], '#efbd7260', 1, [4, 5]);
         this.circle(guard.investigate, 9, '#efbd7210', '#efbd72');

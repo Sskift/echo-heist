@@ -11,9 +11,9 @@ export type Point = { x: number; y: number };
 export type Power = { id: string; on: boolean };
 export type Door = { id: string; x: number; y: number; w: number; h: number; plate?: string; plates?: string[]; plateMode?: 'all' | 'any' | 'one' | 'none'; power?: Power; window?: [number, number]; windows?: [number, number][]; authorization?: string };
 export type Plate = Point & { id: string; window?: [number, number] };
-export type GuardDefinition = { id?: string; route: Point[]; speed: number; range: number; kind?: 'sentry' | 'patrol'; power?: Power; hearing?: number; searchSeconds?: number; facing?: number };
+export type GuardDefinition = { id?: string; route: Point[]; speed: number; range: number; kind?: 'sentry' | 'patrol' | 'camera'; power?: Power; lighting?: Power & { darkRange: number }; hearing?: number; searchSeconds?: number; facing?: number };
 export type Glass = { id: string; x: number; y: number; w: number; h: number };
-export type Circuit = Point & { id: string; initial: boolean };
+export type Circuit = Point & { id: string; initial: boolean; label?: string; states?: [string, string] };
 export type Terminal = Point & { id: string; kind: 'source' | 'relay' | 'lock'; authorization?: string };
 export type Suppressor = { id: string; x: number; y: number; w: number; h: number; power?: Power };
 export type Scanner = { id: string; x: number; y: number; w: number; h: number; period: number; active: [number, number]; phase?: number; power?: Power };
@@ -45,6 +45,9 @@ export type Level = {
   glass?: Glass[];
   noiseResponse?: 'all' | 'nearest';
   soundMarkers?: (Point & { id: string })[];
+  lootPower?: Power[];
+  exitPower?: Power[];
+  onLoot?: { power: Power[]; message: string };
 };
 
 export const doorPlates = (door: Door): string[] => door.plates ?? (door.plate ? [door.plate] : []);

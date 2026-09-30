@@ -2,6 +2,7 @@ import type { Level } from './levels.ts';
 import { g, w, r, e, noise, point, room, level, stage, gate, plate } from './campaign-authoring.ts';
 import { CHAPTER_ONE } from './chapter-one.ts';
 import { CHAPTER_TWO } from './chapter-two.ts';
+import { CHAPTER_THREE } from './chapter-three.ts';
 export { room } from './campaign-authoring.ts';
 
 export type WitnessAction = { go: [number, number] } | { wait: number } | { press: 'interact' | 'lure' } | { record: true } | { delay: number; echo: number };
@@ -132,6 +133,6 @@ const INITIAL_MISSIONS: Mission[] = [
   },
 ];
 
-export const MISSIONS: Mission[] = [...INITIAL_MISSIONS.filter(m => m.id.startsWith('C0-')), ...CHAPTER_ONE, ...CHAPTER_TWO, ...INITIAL_MISSIONS.filter(m => m.id.startsWith('LAB-'))];
+export const MISSIONS: Mission[] = [...INITIAL_MISSIONS.filter(m => m.id.startsWith('C0-')), ...CHAPTER_ONE, ...CHAPTER_TWO, ...CHAPTER_THREE, ...INITIAL_MISSIONS.filter(m => m.id.startsWith('LAB-'))];
 
 export const CAMPAIGN_LEVELS = MISSIONS.flatMap(m => m.stages.map(s => s.level));

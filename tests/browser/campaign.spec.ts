@@ -69,7 +69,7 @@ test('delay trimming is visible, persists, and preview is read-only with live co
 test('device requests are recorded by real E input and replay in the preview', async ({ page }) => {
   await clock(page); await page.goto('/'); await advance(page); await select(page, 'LAB-POWER'); await start(page);
   await move(page, 'd', 43); await move(page, 'w', 69); await interact(page);
-  await expect(page.locator('#door-status')).toHaveText('所有通道已打开');
+  await expect(page.locator('#door-status')).toHaveText('1 / 1 道门开启 · 可以分时通过');
   await record(page); await page.locator('#preview-button').click(); await advance(page);
   await page.locator('#preview-frame').focus(); await page.keyboard.press('End'); await advance(page);
   await expect(page.locator('#preview-log')).toContainText('P 电源接通');

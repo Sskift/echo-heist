@@ -2,13 +2,14 @@ import { Game } from './engine.ts';
 import type { Stage } from './campaign-content.ts';
 
 // Author tool: all routes use movement and interaction inputs, never teleports.
-export function playWitness(stage: Stage): Game {
+export function playWitness(stage: Stage, observe?: (game: Game) => void): Game {
   const game = new Game(stage.level); game.start();
   const step = (x = 0, y = 0, interact = false, lure = false) => {
     if (game.status === 'ready') game.start();
     if (game.status !== 'running') throw new Error(`${stage.level.id}: ${game.status} / ${game.lastMessage}`);
     const attempt = game.attempts;
     game.step({ x, y, interact, lure });
+    observe?.(game);
     if (game.attempts !== attempt) throw new Error(`${stage.level.id}: route exceeded 12 seconds`);
   };
   for (const action of stage.witness) {

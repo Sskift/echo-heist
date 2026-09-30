@@ -11,6 +11,7 @@ export class CampaignUI {
   private key = '';
   private delayKey = '';
   private securityKey = '';
+  private powerKey = '';
   constructor(private campaign: Campaign, actions: Actions) {
     $('.intro').insertAdjacentHTML('afterend', `
       <section class="campaign-shell" aria-label="行动档案">
@@ -24,6 +25,7 @@ export class CampaignUI {
     $('#echo-slots').insertAdjacentHTML('afterend', '<div id="echo-delays" class="echo-delays"></div>');
     $('.hint').insertAdjacentHTML('afterend', '<details class="hint evidence"><summary>已取得的线索 <span>＋</span></summary><div id="evidence-list"></div></details>');
     $('#preview-panel').insertAdjacentHTML('afterend', '<details id="security-panel" class="security-panel" hidden><summary>安保响应规则 <span>＋</span></summary><p id="security-rule"></p><ul id="security-status" aria-label="守卫状态"></ul><p>地图圆圈为参考响点；其他位置同样可以发声。方框标记的固定哨兵不响应诱饵。单位格与地图网格一致。</p></details>');
+    $('#security-panel').insertAdjacentHTML('beforebegin', '<details id="power-panel" class="security-panel power-panel" hidden><summary>电路与行动条件 <span>＋</span></summary><p>在面板旁按 E，录下的是指定状态；重复相同请求不会反复切换。同帧相反请求会取消。连线显示门禁、监控与照明的供电关系。</p><ul id="power-status" aria-label="电路状态"></ul><p id="power-objectives"></p><p id="power-consequence" class="power-consequence"></p></details>');
     $('#mission-cards').addEventListener('click', event => {
       const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-mission]');
       if (button && !button.disabled) { actions.mission(button.dataset.mission!); $<HTMLDetailsElement>('#mission-board').open = false; }
@@ -51,11 +53,29 @@ export class CampaignUI {
 
   render(game: Game, campaignMode: boolean, preview: Game | null) {
     const world = preview ?? game;
+    const powerKey = `${world.level.id}:${world.hasLoot}:${[...world.circuits].join(',')}:${[...world.openDoors].join(',')}:${!!preview}`;
+    if (powerKey !== this.powerKey) {
+      this.powerKey = powerKey;
+      $('#power-panel').hidden = !world.level.circuits?.length;
+      $('#power-status').replaceChildren(...(world.level.circuits ?? []).map(circuit => {
+        const feeds = world.level.doors.filter(d => d.power?.id === circuit.id).map(d => `${d.id} ${world.openDoors.has(d.id) ? '开' : '关'}（需${world.circuitState(circuit.id, d.power!.on)}）`);
+        world.level.guards.forEach((g, i) => {
+          if (g.power?.id === circuit.id) feeds.push(`${world.guardName(i)} ${world.powered(g.power) ? '工作' : '停机'}`);
+          if (g.lighting?.id === circuit.id) feeds.push(`${world.guardName(i)} 照明${world.powered(g.lighting) ? '亮' : '暗'}，视距 ${(world.visionRange(i) / 32).toFixed(1)} 格`);
+        });
+        const item = document.createElement('li');
+        item.textContent = `${circuit.id} · ${circuit.label ?? '电源'}：${world.circuitState(circuit.id)}${feeds.length ? ` ｜ ${feeds.join('；')}` : ''}`;
+        return item;
+      }));
+      $('#power-objectives').textContent = [world.level.lootPower?.length ? `取物：${world.powerRequirements(world.level.lootPower)}${world.canCollect ? ' ✓' : ' · 未满足'}` : '', world.level.exitPower?.length ? `撤离：${world.powerRequirements(world.level.exitPower)}${world.exitReady ? ' ✓' : ' · 未满足'}` : ''].filter(Boolean).join(' ｜ ');
+      $('#power-consequence').textContent = world.level.onLoot ? world.hasLoot && world.level.exitPower?.length && world.exitReady ? '取物后变化已经发生，撤离供电条件已满足。' : `${world.hasLoot ? '已经发生' : '取物后预告'}：${world.level.onLoot.message}${preview ? '（只读预演不含真人取物，仅展示录像操作。）' : ''}` : '';
+    }
     const security = world.guards.map((guard, i) => {
       const def = world.level.guards[i];
       const source = guard.investigate ? world.soundName(guard.investigate) : '';
       const investigation = def.searchSeconds === undefined ? `调查 ${source}，剩余 ${guard.attention.toFixed(1)} 秒` : guard.searching ? `在 ${source} 搜索，剩余 ${guard.attention.toFixed(1)} 秒` : `前往 ${source}，抵达后搜索 ${def.searchSeconds} 秒`;
-      return `${world.guardName(i)} · ${!world.powered(def.power) ? '断电' : def.kind === 'sentry' ? '固定哨兵，忽略声音' : guard.investigate ? investigation : '按原路线值守'} · 视野 ${(def.range / 32).toFixed(1)} 格${def.kind === 'sentry' ? '' : ` · 听觉 ${((def.hearing ?? 450) / 32).toFixed(1)} 格`}`;
+      const fixed = def.kind === 'sentry' || def.kind === 'camera';
+      return `${world.guardName(i)} · ${!world.powered(def.power) ? '停机' : fixed ? `${def.kind === 'camera' ? '摄像头' : '固定哨兵'}，忽略声音` : guard.investigate ? investigation : '按原路线值守'} · 视野 ${(world.visionRange(i) / 32).toFixed(1)} 格${fixed ? '' : ` · 听觉 ${((def.hearing ?? 450) / 32).toFixed(1)} 格`}`;
     });
     const securityKey = `${world.level.id}:${security.join('|')}`;
     if (securityKey !== this.securityKey) {
@@ -97,7 +117,7 @@ export class CampaignUI {
       if (preview) document.querySelectorAll<HTMLButtonElement>('[data-delay]').forEach(button => { button.disabled = true; });
     }
     const intent = game.interaction();
-    const tip = intent ? `E：${intent.type === 'circuit' ? `${intent.on ? '接通' : '断开'} ${intent.id}` : intent.type === 'take' ? `在 ${intent.id} 接收凭据` : intent.type === 'give' ? `向 ${intent.id} 交付凭据` : `在 ${intent.id} 请求授权`}` : game.tokenOwner === 'player' ? '你持有唯一凭据 · 到终端按 E 交付' : 'E 操作设备 · P 预演已保存的计划';
+    const tip = intent ? `E：${intent.type === 'circuit' ? `将 ${intent.id} 设为${game.circuitState(intent.id, intent.on)}` : intent.type === 'take' ? `在 ${intent.id} 接收凭据` : intent.type === 'give' ? `向 ${intent.id} 交付凭据` : `在 ${intent.id} 请求授权`}` : game.tokenOwner === 'player' ? '你持有唯一凭据 · 到终端按 E 交付' : 'E 操作设备 · P 预演已保存的计划';
     const explanation = intent?.type === 'take' && game.tokenOwner !== `terminal:${intent.id}` ? `${tip}（终端为空，可录制请求）` : tip;
     if ($('#interaction-tip').textContent !== explanation) $('#interaction-tip').textContent = explanation;
     $('#preview-panel').hidden = !preview;

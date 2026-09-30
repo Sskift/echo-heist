@@ -1,4 +1,4 @@
-import { doorPlates, FPS, LOOP_SECONDS, MAX_ECHOES, MAX_FRAMES, TILE, type Level, type Point, type Scanner } from './levels.ts';
+import { doorPlates, FPS, LOOP_SECONDS, MAX_ECHOES, MAX_FRAMES, TILE, type Level, type Point, type Power, type Scanner } from './levels.ts';
 import { findRoute } from './navigation.ts';
 
 export type Intent = { type: 'circuit'; id: string; on: boolean } | { type: 'take' | 'give' | 'authorize'; id: string };
@@ -103,6 +103,17 @@ export class Game {
   }
 
   powered(power?: { id: string; on: boolean }): boolean { return !power || this.circuits.get(power.id) === power.on; }
+  circuitState(id: string, on = this.circuits.get(id) ?? false): string {
+    return this.level.circuits?.find(c => c.id === id)?.states?.[on ? 1 : 0] ?? (on ? '接通' : '断开');
+  }
+  unmetPower(requirements: Power[] = []): Power[] { return requirements.filter(p => !this.powered(p)); }
+  powerRequirements(requirements: Power[] = []): string { return requirements.map(p => `${p.id} ${this.circuitState(p.id, p.on)}`).join('、'); }
+  get canCollect(): boolean { return !this.unmetPower(this.level.lootPower).length; }
+  get exitReady(): boolean { return !this.unmetPower(this.level.exitPower).length; }
+  visionRange(index: number): number {
+    const def = this.level.guards[index];
+    return def.lighting && !this.powered(def.lighting) ? def.lighting.darkRange : def.range;
+  }
   scanning(scanner: Scanner, frame = this.frame): boolean {
     const period = Math.round(scanner.period * FPS);
     const time = ((frame + Math.round((scanner.phase ?? 0) * FPS)) % period + period) % period;
@@ -166,7 +177,7 @@ export class Game {
       if (!group.length) continue;
       const values = new Set(group.map(r => (r.intent as Extract<Intent, { type: 'circuit' }>).on));
       if (values.size > 1) this.signal(`${circuit.id} 操作冲突：保持原供电状态`);
-      else { this.circuits.set(circuit.id, [...values][0]); this.signal(`${circuit.id} 电源${this.circuits.get(circuit.id) ? '接通' : '断开'}`); }
+      else { this.circuits.set(circuit.id, [...values][0]); this.signal(`${circuit.id} 电源${circuit.states ? '：' : ''}${this.circuitState(circuit.id)}`); }
     }
     requests = collect(); // Transfers see suppression after this tick's power requests.
     // All transfers use the single owner field. Giving precedes receiving, so a
@@ -379,7 +390,7 @@ export class Game {
   soundName(at: Point): string { return this.level.soundMarkers?.find(m => distance(m, at) < 12)?.id ?? '临时声源'; }
   private hears(index: number, at: Point): boolean {
     const def = this.level.guards[index];
-    return def.kind !== 'sentry' && this.powered(def.power) && distance(this.guards[index], at) < (def.hearing ?? 450);
+    return def.kind !== 'sentry' && def.kind !== 'camera' && this.powered(def.power) && distance(this.guards[index], at) < (def.hearing ?? 450);
   }
   private investigate(index: number, at: Point) {
     const guard = this.guards[index];
@@ -425,17 +436,17 @@ export class Game {
       const dx = target.x - guard.x;
       const dy = target.y - guard.y;
       const dist = Math.hypot(dx, dy);
-      if (dist > 5 && def.kind !== 'sentry') {
+      if (dist > 5 && def.kind !== 'sentry' && def.kind !== 'camera') {
         guard.angle = Math.atan2(dy, dx);
         this.move(guard, dx / dist * def.speed * DT, dy / dist * def.speed * DT);
-      } else if (!guard.investigate && def.kind !== 'sentry') {
+      } else if (!guard.investigate && def.kind !== 'sentry' && def.kind !== 'camera') {
         guard.waypoint = (guard.waypoint + 1) % def.route.length;
         if (def.route.length === 1 && def.facing !== undefined) guard.angle = def.facing;
       }
       const seen = actors.find(({ at: a }) => {
         const gap = Math.atan2(a.y - guard.y, a.x - guard.x) - guard.angle;
         const angle = Math.abs(Math.atan2(Math.sin(gap), Math.cos(gap)));
-        return distance(a, guard) < def.range && (angle < 0.56 || distance(a, guard) < 24) && this.canSee(guard, a);
+        return distance(a, guard) < this.visionRange(index) && (angle < 0.56 || distance(a, guard) < 24) && this.canSee(guard, a);
       });
       guard.seenActor = seen?.label;
       guard.suspicion = Math.max(0, Math.min(1, guard.suspicion + (seen ? DT * 1.65 : -DT * 0.8)));
@@ -478,13 +489,18 @@ export class Game {
     if (this.alarm >= 1) return;
     this.updateScanners();
     if (this.alarm >= 1) return;
-    if (!this.spectator && this.level.objective !== 'reach' && this.editingIndex === null && !this.hasLoot && distance(this.player, this.level.loot) < 25) {
+    if (!this.spectator && this.level.objective !== 'reach' && this.editingIndex === null && !this.hasLoot && this.canCollect && distance(this.player, this.level.loot) < 25) {
       this.hasLoot = true;
       this.events.push('loot');
+      if (this.level.onLoot) {
+        for (const power of this.level.onLoot.power) this.circuits.set(power.id, power.on);
+        this.signal(this.level.onLoot.message);
+        this.updatePlates();
+      }
     }
     this.frame++;
     this.noise = this.noise.map(n => ({ ...n, life: n.life - DT * 1.3 })).filter(n => n.life > 0);
-    if (!this.spectator && this.editingIndex === null && (this.hasLoot || this.level.objective === 'reach') && distance(this.player, this.level.exit ?? this.level.spawn) < 30) {
+    if (!this.spectator && this.editingIndex === null && this.exitReady && (this.hasLoot || this.level.objective === 'reach') && distance(this.player, this.level.exit ?? this.level.spawn) < 30) {
       this.status = 'won';
       this.events.push('won');
       return;
