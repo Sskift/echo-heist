@@ -1,8 +1,10 @@
 import './style.css';
+import './planning.css';
 import { Game } from './engine.ts';
 import { ECHO_COLORS, FPS, LEVELS, LOOP_SECONDS, MAX_ECHOES } from './levels.ts';
 import { Renderer } from './render.ts';
 import { Sound } from './audio.ts';
+import { decodePlan, encodePlan, PLAN_KEY, type SavedPlan } from './plans.ts';
 
 const icons = {
   echo: '<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M6 6h20v6H12v4h12v5H12v5h14" stroke="currentColor" stroke-width="3"/><path d="M2 11v19h19" stroke="currentColor" opacity=".4" stroke-width="2"/></svg>',
@@ -24,10 +26,21 @@ try {
   }
 } catch { /* Storage can be unavailable in private browser contexts. */ }
 
+const plans: Record<string, SavedPlan> = {};
+try {
+  const raw: unknown = JSON.parse(localStorage.getItem(PLAN_KEY) ?? '{}');
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const level of LEVELS) {
+      const echoes = decodePlan((raw as Record<string, unknown>)[level.id], level.id);
+      if (echoes) plans[level.id] = encodePlan(level.id, echoes);
+    }
+  }
+} catch { /* Invalid or unavailable saves fall back to a fresh plan. */ }
+
 $('#app').innerHTML = `
   <header class="site-header">
     <a class="brand" href="./" aria-label="ECHO HEIST 首页"><span class="brand-symbol">${icons.echo}</span><span>ECHO HEIST<span class="brand-cn">回声劫案</span></span></a>
-    <div class="header-note"><span class="status-dot"></span> A SOLO CO-OP HEIST <span class="version">VOL. 01</span></div>
+    <div class="header-note"><span class="status-dot"></span> A SOLO CO-OP HEIST <span class="version">VOL. 02</span></div>
     <button class="text-button" id="help-button">行动手册 <span class="key">?</span></button>
   </header>
   <main>
@@ -37,10 +50,11 @@ $('#app').innerHTML = `
     </section>
     <div class="game-layout">
       <section class="console" aria-label="游戏区域">
-        <div class="console-bar"><div class="feed-label"><span class="status-dot"></span> LIVE FEED <span class="divider">/</span> <span id="map-code">ANNEX_01</span></div><div class="console-controls"><button class="icon-button active" id="trails-button" title="显示 / 隐藏回声轨迹" aria-label="显示回声轨迹" aria-pressed="true">${icons.eye}</button><button class="icon-button" id="sound-button" title="开启音效" aria-label="开启音效" aria-pressed="false">${icons.sound}<span class="sound-off"></span></button><button class="icon-button pause-button" id="pause-button" title="暂停 / 继续 (Esc)" aria-label="暂停游戏">Ⅱ</button><button class="icon-button" id="fullscreen-button" title="全屏" aria-label="切换全屏">⛶</button></div></div>
+        <div class="console-bar"><div class="feed-label"><span class="status-dot"></span> LIVE FEED <span class="divider">/</span> <span id="map-code">ANNEX_01</span></div><div class="console-controls"><button class="fast-forward-button" id="fast-forward" title="按住快进，或按住 Shift" aria-label="按住三倍快进" aria-pressed="false">3× <span>快进</span></button><button class="icon-button active" id="trails-button" title="显示 / 隐藏回声轨迹" aria-label="显示回声轨迹" aria-pressed="true">${icons.eye}</button><button class="icon-button" id="sound-button" title="开启音效" aria-label="开启音效" aria-pressed="false">${icons.sound}<span class="sound-off"></span></button><button class="icon-button pause-button" id="pause-button" title="暂停 / 继续 (Esc)" aria-label="暂停游戏">Ⅱ</button><button class="icon-button" id="fullscreen-button" title="全屏" aria-label="切换全屏">⛶</button></div></div>
         <div class="arena">
           <canvas id="game-canvas" tabindex="0" aria-label="俯视角金库。用 WASD 或方向键移动，R 保存回声，空格制造声响。详细操作见行动手册。"></canvas>
-          <div class="arena-badge"><span class="rec-dot"></span><span id="record-label">STANDBY</span></div>
+          <div class="arena-badge"><span id="speed-indicator" hidden>3× FAST FORWARD</span><span class="rec-dot"></span><span id="record-label">STANDBY</span></div>
+          <div class="edit-banner" id="edit-banner" hidden><span id="edit-label"></span><button id="cancel-rerecord">取消，保留原路线</button></div>
           <div class="arena-caption">ARCHIVE SECURITY SYSTEM <span>CAM_04</span></div>
           <div class="overlay" id="overlay"><div class="overlay-card" id="overlay-card"></div></div>
           <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -53,14 +67,14 @@ $('#app').innerHTML = `
         <h2 id="mission-title"></h2><p class="mission-subtitle" id="mission-subtitle"></p><p class="mission-description" id="mission-description"></p>
         <div class="clock-panel"><div class="clock-top"><span>本轮剩余</span><span id="loop-number">TAKE 01</span></div><div class="clock"><span id="seconds">12</span><span class="clock-fraction" id="fraction">.00</span><span class="clock-unit">s</span></div><div class="clock-progress"><span id="clock-fill"></span></div></div>
         <div class="objectives"><p class="section-label">行动目标 <span>OBJECTIVES</span></p><div class="objective" id="objective-doors"><span class="objective-check">01</span><div>让过去的你打开通道<small id="door-status">等待开关激活</small></div></div><div class="objective" id="objective-loot"><span class="objective-check">02</span><div>取走藏品，回到撤离点<small id="loot-status">藏品位于右上角</small></div></div></div>
-        <div class="echo-section"><p class="section-label">你的同伙 <span id="echo-count">0 / 3</span></p><div id="echo-slots"></div></div>
-        <div class="mission-actions"><button class="primary-button" id="record-button">${icons.rewind}<span>留下回声</span><kbd>R</kbd></button><div class="secondary-actions"><button id="retry-button">重试本轮 <kbd>↵</kbd></button><button id="reset-button">清空计划</button></div></div>
+        <div class="echo-section"><p class="section-label">你的同伙 <span id="echo-count">0 / 3</span></p><div id="echo-slots"></div><p class="plan-status" id="plan-status" role="status">录制后自动保存</p></div>
+        <div class="mission-actions"><button class="primary-button" id="record-button">${icons.rewind}<span>留下回声</span><kbd>R</kbd></button><div class="secondary-actions"><button id="retry-button">重试本轮 <kbd>↵</kbd></button><button id="undo-button" title="撤销上次录制、重录、删除或清空 (Z)">撤销 <kbd>Z</kbd></button><button id="reset-button">清空计划</button></div></div>
         <details class="hint"><summary>卡住了？查看线索 <span>＋</span></summary><p id="hint-text"></p></details>
       </aside>
     </div>
-    <footer class="game-footer"><div class="controls-legend"><span><kbd>W A S D</kbd> / <kbd>↑↓←→</kbd> 移动</span><span><kbd>R</kbd> 留下回声</span><span><kbd>SPACE</kbd> 声响诱饵</span><span><kbd>ESC</kbd> 暂停</span></div><span class="footer-motto">ONE THIEF. MULTIPLE ALIBIS.</span></footer>
+    <footer class="game-footer"><div class="controls-legend"><span><kbd>W A S D</kbd> / <kbd>↑↓←→</kbd> 移动</span><span><kbd>R</kbd> 保存回声</span><span><kbd>SHIFT</kbd> 按住快进</span><span><kbd>SPACE</kbd> 声响诱饵</span><span><kbd>ESC</kbd> 暂停</span></div><span class="footer-motto">ONE THIEF. MULTIPLE ALIBIS.</span></footer>
   </main>
-  <dialog id="help-dialog"><button class="dialog-close" aria-label="关闭行动手册">×</button><p class="eyebrow">FIELD MANUAL / 001</p><h2>你只需要一个同伙。<br />昨天的你就够了。</h2><p class="manual-intro">每一轮有 12 秒。走过的路线会被录下，成为下一轮与你同时行动的回声。</p><ol class="manual-steps"><li><strong>走到开关，留下自己</strong><p>用 WASD 或方向键走到 A。按 R 保存路线并开始下一轮。提前录制的回声会停在终点，直到这一轮结束。</p></li><li><strong>让过去为现在开门</strong><p>回声从起点重放，你可以自由行动。它会踩开关、重放声响，也会被守卫发现。回声是投影，可穿过后来关闭的门，无法拿走藏品。</p></li><li><strong>拿到藏品，安全撤离</strong><p>接触右上角金色藏品自动拾取，再返回左下角撤离点。12 秒用尽会自动录制；槽位满时需要重试或删除旧回声。</p></li></ol><div class="manual-shortcuts"><span><kbd>R</kbd> 保存回声</span><span><kbd>Enter</kbd> 重试，保留同伙</span><span><kbd>Space</kbd> 声响诱饵</span><span><kbd>Esc</kbd> 暂停</span></div><p class="manual-note">删除回声后，其他回声保留原来的绝对路线。切换关卡会重置当前计划，通关记录会保存在本机。建议使用桌面键盘游玩。</p><button class="primary-button" id="close-help">知道了，开始行动 ${icons.arrow}</button></dialog>
+  <dialog id="help-dialog"><button class="dialog-close" aria-label="关闭行动手册">×</button><p class="eyebrow">FIELD MANUAL / 002</p><h2>你只需要一个同伙。<br />昨天的你就够了。</h2><p class="manual-intro">每一轮有 12 秒。走过的路线会被录下，成为下一轮与你同时行动的回声。</p><ol class="manual-steps"><li><strong>走到开关，留下自己</strong><p>用 WASD 或方向键走到 A。按 R 保存路线并开始下一轮。提前录制的回声会停在终点，直到这一轮结束。</p></li><li><strong>让过去为现在开门</strong><p>回声从起点重放，你可以自由行动。它会踩开关、重放声响，也会被守卫发现。回声是投影，可穿过后来关闭的门，无法拿走藏品。</p></li><li><strong>拿到藏品，安全撤离</strong><p>接触右上角金色藏品自动拾取，再返回左下角撤离点。12 秒用尽会自动录制；槽位满时可以点击重录，调整某一名同伙的路线。</p></li><li><strong>修改计划，不必全部重来</strong><p>点击回声卡片的「重录」，其他同伙照常行动，被重录的旧回声暂时退场。这一轮只录路线；按 R 替换，或取消以保留旧路线。误删或录错可以按 Z 撤销。按住 Shift 以三倍速度推进，松开恢复正常。</p></li></ol><div class="manual-shortcuts"><span><kbd>R</kbd> 保存回声</span><span><kbd>Enter</kbd> 重试，保留同伙</span><span><kbd>Shift</kbd> 按住快进</span><span><kbd>Z</kbd> 撤销计划修改</span></div><p class="manual-note">已保存的回声计划按关卡保存在本机，刷新或切换关卡不会丢失。正在录制的草稿和撤销历史仅在本次关卡有效。建议使用桌面键盘游玩。</p><button class="primary-button" id="close-help">知道了，开始行动 ${icons.arrow}</button></dialog>
 `;
 
 let levelIndex = 0;
@@ -74,7 +88,20 @@ let uiKey = '';
 let overlayKey = '';
 let toastTimer = 0;
 let helpWasRunning = false;
+let initialized = false;
+let pointerFastForward = false;
 const dialog = $<HTMLDialogElement>('#help-dialog');
+
+function clearInput() { keys.clear(); pointerFastForward = false; }
+function isFastForwarding() { return game.status === 'running' && (pointerFastForward || keys.has('ShiftLeft') || keys.has('ShiftRight')); }
+
+function persistPlan() {
+  plans[game.level.id] = encodePlan(game.level.id, game.echoes);
+  try {
+    localStorage.setItem(PLAN_KEY, JSON.stringify(plans));
+    $('#plan-status').textContent = '计划已保存到本机';
+  } catch { $('#plan-status').textContent = '仅本次有效 · 无法写入本机存档'; }
+}
 
 function toast(text: string) {
   $('#toast').textContent = text;
@@ -86,9 +113,14 @@ function toast(text: string) {
 function focusGame() { $('#game-canvas').focus({ preventScroll: true }); }
 
 function setLevel(index: number) {
+  if (initialized) persistPlan();
   levelIndex = index;
   game = new Game(LEVELS[index]);
-  keys.clear(); accumulator = 0;
+  const restored = decodePlan(plans[game.level.id], game.level.id);
+  if (restored) game.restorePlan(restored);
+  $('#plan-status').textContent = restored?.length ? `已恢复 ${restored.length} 条回声` : '录制后自动保存';
+  initialized = true;
+  clearInput(); accumulator = 0;
   uiKey = ''; overlayKey = '';
   $('#toast').classList.remove('visible');
   const level = game.level;
@@ -123,14 +155,15 @@ function record() {
   sound.unlock();
   if (game.status === 'ready') { game.start(); focusGame(); return; }
   if (game.status === 'running') {
-    if (game.rewind()) { accumulator = 0; keys.clear(); toast('回声已就位。现在，和过去的自己合作。'); }
+    const editing = game.editingIndex !== null;
+    if (game.rewind()) { accumulator = 0; clearInput(); toast(editing ? '新路线已替换。按 Z 可撤销这次修改。' : '回声已就位。现在，和过去的自己合作。'); }
     else if (game.lastMessage) toast(game.lastMessage);
   }
   focusGame();
 }
 
 function refreshUI() {
-  const key = `${game.status}:${game.echoes.length}:${game.echoes.map(e => `${e.colorIndex}-${e.frames.length}`).join(',')}:${game.attempts}:${game.hasLoot}:${[...game.openDoors].join('')}`;
+  const key = `${game.status}:${game.editingIndex}:${game.canUndo}:${game.echoes.length}:${game.echoes.map(e => `${e.colorIndex}-${e.frames.length}`).join(',')}:${game.attempts}:${game.hasLoot}:${[...game.openDoors].join('')}`;
   if (uiKey !== key) {
     uiKey = key;
     $('#loop-number').textContent = `TAKE ${String(game.attempts).padStart(2, '0')}`;
@@ -139,24 +172,38 @@ function refreshUI() {
     $('.arena-badge').classList.toggle('recording', game.status === 'running');
     $('#echo-slots').innerHTML = Array.from({ length: MAX_ECHOES }, (_, i) => {
       const echo = game.echoes[i];
-      return echo ? `<div class="echo-slot filled" style="--echo-color:${ECHO_COLORS[echo.colorIndex]}"><span class="echo-avatar">${icons.echo}</span><div><strong>回声 0${i + 1}</strong><small>${(echo.frames.length / FPS).toFixed(1)}s 路线 · 终点待命</small></div><button data-delete="${i}" title="删除回声 ${i + 1} 并重新规划" aria-label="删除回声 ${i + 1}">×</button></div>` : `<div class="echo-slot empty"><span class="empty-cross">＋</span><span>等待另一个你</span><span class="slot-number">0${i + 1}</span></div>`;
+      return echo ? `<div class="echo-slot filled ${game.editingIndex === i ? 'editing' : ''}" style="--echo-color:${ECHO_COLORS[echo.colorIndex]}"><span class="echo-avatar">${icons.echo}</span><div class="echo-info"><strong>回声 0${i + 1}<span>${(echo.frames.length / FPS).toFixed(1)}s</span></strong><small data-echo-state="${i}"></small></div><button class="rerecord-button" data-rerecord="${i}" aria-label="重录回声 ${i + 1}" ${game.editingIndex !== null ? 'disabled' : ''}>重录</button><button data-delete="${i}" title="删除回声 ${i + 1} 并重新规划" aria-label="删除回声 ${i + 1}" ${game.editingIndex !== null ? 'disabled' : ''}>×</button></div>` : `<div class="echo-slot empty"><span class="empty-cross">＋</span><span>等待另一个你</span><span class="slot-number">0${i + 1}</span></div>`;
     }).join('');
     $('#tracks').innerHTML = Array.from({ length: MAX_ECHOES }, (_, i) => {
       const echo = game.echoes[i];
-      return `<div class="track"><span class="track-label" style="color:${echo ? ECHO_COLORS[echo.colorIndex] : '#62766a'}">E${i + 1}</span><div class="track-line" style="--echo-color:${echo ? ECHO_COLORS[echo.colorIndex] : '#526153'}">${echo ? `<span class="recorded-segment" style="width:${echo.frames.length / FPS / LOOP_SECONDS * 100}%"></span><span class="hold-segment" style="left:${echo.frames.length / FPS / LOOP_SECONDS * 100}%"></span>` : '<span class="empty-track"></span>'}<span class="track-playhead"></span></div></div>`;
+      return `<div class="track ${game.editingIndex === i ? 'editing-track' : ''}"><span class="track-label" style="color:${echo ? ECHO_COLORS[echo.colorIndex] : '#62766a'}">E${i + 1}</span><div class="track-line" style="--echo-color:${echo ? ECHO_COLORS[echo.colorIndex] : '#526153'}">${echo ? `<span class="recorded-segment" style="width:${echo.frames.length / FPS / LOOP_SECONDS * 100}%"></span><span class="hold-segment" style="left:${echo.frames.length / FPS / LOOP_SECONDS * 100}%"></span>` : '<span class="empty-track"></span>'}${game.editingIndex === i ? '<span class="draft-segment"></span>' : ''}<span class="track-playhead"></span></div></div>`;
     }).join('');
     const allDoors = game.openDoors.size === game.level.doors.length;
     $('#objective-doors').classList.toggle('done', allDoors);
     $('#objective-loot').classList.toggle('done', game.hasLoot);
     $('#door-status').textContent = allDoors ? '所有通道已打开' : `${game.openDoors.size} / ${game.level.doors.length} 道门已开启`;
-    $('#loot-status').textContent = game.status === 'won' ? '安全撤离，行动完成' : game.hasLoot ? '已拿到藏品，返回左下角！' : '藏品位于右上角';
+    $('#loot-status').textContent = game.editingIndex !== null ? '重录中：这一轮只录路线' : game.status === 'won' ? '安全撤离，行动完成' : game.hasLoot ? '已拿到藏品，返回左下角！' : '藏品位于右上角';
     const button = $<HTMLButtonElement>('#record-button');
     button.disabled = !['ready', 'running'].includes(game.status);
-    button.querySelector('span')!.textContent = game.status === 'ready' ? '开始行动' : '留下回声';
+    button.querySelector('span')!.textContent = game.editingIndex !== null ? (game.status === 'ready' ? '开始重录' : '保存新路线') : game.status === 'ready' ? '开始行动' : '留下回声';
     $('#pause-button').textContent = game.status === 'paused' ? '▷' : 'Ⅱ';
     $('#pause-button').setAttribute('aria-label', game.status === 'paused' ? '继续游戏' : '暂停游戏');
     $<HTMLButtonElement>('#retry-button').disabled = game.status === 'ready';
+    $<HTMLButtonElement>('#undo-button').disabled = !game.canUndo;
+    $<HTMLButtonElement>('#reset-button').disabled = game.editingIndex !== null;
+    $('#edit-banner').hidden = game.editingIndex === null;
+    $('#edit-label').textContent = game.editingIndex === null ? '' : `重录回声 0${game.editingIndex + 1} · R 保存新路线`;
   }
+  const fast = isFastForwarding();
+  $('#speed-indicator').hidden = !fast;
+  $('#fast-forward').classList.toggle('active', fast);
+  $('#fast-forward').setAttribute('aria-pressed', String(fast));
+  document.querySelectorAll<HTMLElement>('[data-echo-state]').forEach(el => {
+    const state = game.echoActivity(Number(el.dataset.echoState));
+    if (el.textContent !== state) el.textContent = state;
+  });
+  const draft = document.querySelector<HTMLElement>('.draft-segment');
+  if (draft) draft.style.width = `${game.seconds / LOOP_SECONDS * 100}%`;
   const seconds = game.remaining.toFixed(2).split('.');
   $('#seconds').textContent = seconds[0].padStart(2, '0');
   $('#fraction').textContent = `.${seconds[1]}`;
@@ -164,8 +211,8 @@ function refreshUI() {
   $('.clock-panel').classList.toggle('urgent', game.status === 'running' && game.remaining <= 3);
   document.querySelectorAll<HTMLElement>('.track-playhead').forEach(el => el.style.left = `${game.seconds / LOOP_SECONDS * 100}%`);
 
-  if (overlayKey !== `${levelIndex}:${game.status}:${game.lastMessage}`) {
-    overlayKey = `${levelIndex}:${game.status}:${game.lastMessage}`;
+  if (overlayKey !== `${levelIndex}:${game.status}:${game.editingIndex}:${game.lastMessage}`) {
+    overlayKey = `${levelIndex}:${game.status}:${game.editingIndex}:${game.lastMessage}`;
     const overlay = $('#overlay');
     overlay.hidden = game.status === 'running';
     if (game.status === 'running') return;
@@ -176,6 +223,13 @@ function refreshUI() {
       copy = game.level.briefing[0];
       action = '开始行动';
       extra = `<p class="overlay-footnote">WASD 移动 · R 留下回声 · 12 秒一轮</p>`;
+      if (game.editingIndex !== null) {
+        eyebrow = 'REWRITE THE PAST';
+        title = `重录回声 0${game.editingIndex + 1}`;
+        copy = '其他同伙照常行动。旧路线暂时退场，这一轮只录制你的新路线。';
+        action = '开始重录';
+        extra = '<p class="overlay-footnote">R 保存替换 · 取消可恢复旧路线</p>';
+      }
     } else if (game.status === 'paused') {
       eyebrow = 'TIME IS ON YOUR SIDE'; title = '时间已暂停'; copy = '想清楚下一步。过去的你会等你。'; action = '继续行动';
     } else if (game.status === 'caught') {
@@ -193,13 +247,41 @@ function refreshUI() {
 }
 
 $('#record-button').addEventListener('click', record);
-$('#retry-button').addEventListener('click', () => { sound.unlock(); game.restart(); accumulator = 0; keys.clear(); focusGame(); });
-$('#reset-button').addEventListener('click', () => { game.clear(); accumulator = 0; keys.clear(); focusGame(); });
-$('#pause-button').addEventListener('click', () => { game.togglePause(); keys.clear(); focusGame(); });
-$('#echo-slots').addEventListener('click', event => {
-  const target = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-delete]');
-  if (target) { game.removeEcho(Number(target.dataset.delete)); accumulator = 0; keys.clear(); focusGame(); }
+$('#retry-button').addEventListener('click', () => { sound.unlock(); game.restart(); accumulator = 0; clearInput(); focusGame(); });
+$('#reset-button').addEventListener('click', () => { game.clear(); accumulator = 0; clearInput(); focusGame(); });
+$('#pause-button').addEventListener('click', () => { game.togglePause(); clearInput(); focusGame(); });
+function undoPlan() {
+  if (game.undoPlan()) { accumulator = 0; clearInput(); toast('已恢复上一个计划。'); }
+  focusGame();
+}
+$('#undo-button').addEventListener('click', undoPlan);
+$('#cancel-rerecord').addEventListener('click', () => {
+  game.cancelRerecord(); accumulator = 0; clearInput(); focusGame();
+  persistPlan();
+  toast('旧路线已恢复。');
 });
+$('#echo-slots').addEventListener('click', event => {
+  const rerecord = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-rerecord]');
+  if (rerecord && game.beginRerecord(Number(rerecord.dataset.rerecord))) {
+    accumulator = 0; clearInput(); focusGame();
+    $('#toast').classList.remove('visible');
+    $('#plan-status').textContent = '旧路线保留中 · R 保存新路线';
+    return;
+  }
+  const target = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-delete]');
+  if (target) { game.removeEcho(Number(target.dataset.delete)); accumulator = 0; clearInput(); focusGame(); }
+});
+const fastButton = $('#fast-forward');
+fastButton.addEventListener('pointerdown', event => {
+  event.preventDefault(); fastButton.setPointerCapture(event.pointerId);
+  pointerFastForward = game.status === 'running';
+});
+for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) fastButton.addEventListener(event, () => { pointerFastForward = false; });
+fastButton.addEventListener('keydown', event => {
+  if (event.code === 'Space' || event.code === 'Enter') { event.preventDefault(); event.stopPropagation(); pointerFastForward = game.status === 'running'; }
+});
+fastButton.addEventListener('keyup', event => { if (event.code === 'Space' || event.code === 'Enter') pointerFastForward = false; });
+fastButton.addEventListener('blur', () => { pointerFastForward = false; });
 document.querySelectorAll<HTMLButtonElement>('[data-level]').forEach(button => button.addEventListener('click', () => setLevel(Number(button.dataset.level))));
 $('#trails-button').addEventListener('click', () => {
   renderer.trails = !renderer.trails;
@@ -225,7 +307,7 @@ $('#fullscreen-button').addEventListener('click', async () => {
 function showHelp() {
   helpWasRunning = game.status === 'running';
   if (helpWasRunning) game.togglePause();
-  keys.clear(); dialog.showModal();
+  clearInput(); dialog.showModal();
 }
 function closeHelp() { dialog.close(); }
 $('#help-button').addEventListener('click', showHelp);
@@ -233,7 +315,7 @@ $('#close-help').addEventListener('click', closeHelp);
 $('.dialog-close').addEventListener('click', closeHelp);
 dialog.addEventListener('close', () => { if (helpWasRunning && game.status === 'paused') game.togglePause(); focusGame(); });
 
-const gameKeys = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyR', 'Enter', 'Escape'];
+const gameKeys = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyR', 'KeyZ', 'ShiftLeft', 'ShiftRight', 'Enter', 'Escape'];
 window.addEventListener('keydown', event => {
   if (dialog.open) return;
   if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -244,18 +326,20 @@ window.addEventListener('keydown', event => {
   if (event.repeat) return;
   sound.unlock();
   if (event.code === 'KeyR') record();
-  else if (event.code === 'Escape') { game.togglePause(); keys.clear(); }
+  else if (event.code === 'KeyZ') undoPlan();
+  else if (event.code === 'Escape') { game.togglePause(); clearInput(); }
   else if (event.code === 'Enter') {
-    if (game.status === 'running') { game.restart(); accumulator = 0; keys.clear(); }
+    if (game.status === 'running') { game.restart(); accumulator = 0; clearInput(); }
     else primaryAction();
   } else {
     keys.add(event.code);
-    if (game.status === 'ready' && gameKeys.includes(event.code)) game.start();
+    if (game.status === 'ready' && gameKeys.includes(event.code) && !event.code.startsWith('Shift')) game.start();
   }
 });
 window.addEventListener('keyup', event => keys.delete(event.code));
-function pauseOnLeave() { keys.clear(); if (game.status === 'running') game.togglePause(); }
+function pauseOnLeave() { clearInput(); if (game.status === 'running') game.togglePause(); }
 window.addEventListener('blur', pauseOnLeave);
+window.addEventListener('pagehide', persistPlan);
 document.addEventListener('visibilitychange', () => { if (document.hidden) pauseOnLeave(); });
 $('#game-canvas').addEventListener('pointerdown', () => { sound.unlock(); focusGame(); });
 
@@ -273,19 +357,21 @@ function loop(now: number) {
   const elapsed = Math.min((now - lastFrame) / 1000, 0.1);
   lastFrame = now;
   if (game.status === 'running') {
-    accumulator += elapsed;
+    accumulator += elapsed * (isFastForwarding() ? 3 : 1);
     while (accumulator >= 1 / FPS) {
+      const before = game.frame;
       game.step({
         x: Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')),
         y: Number(keys.has('KeyS') || keys.has('ArrowDown')) - Number(keys.has('KeyW') || keys.has('ArrowUp')),
         lure: keys.has('Space'),
       });
       accumulator -= 1 / FPS;
-      if (game.status !== 'running') { accumulator = 0; keys.clear(); break; }
+      if (game.status !== 'running' || game.frame < before) { accumulator = 0; clearInput(); break; }
     }
   } else accumulator = 0;
   for (const event of game.drainEvents()) {
     sound.play(event);
+    if (event === 'plan') persistPlan();
     if (event === 'rewind') renderer.rewindFlash = 1;
     if (event === 'loot') toast('藏品到手。回到左下角撤离点！');
     if (event === 'won' || event === 'caught') $('#toast').classList.remove('visible');

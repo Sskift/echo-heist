@@ -1,0 +1,74 @@
+/* Controls for editing a plan, kept separate from the original game skin. */
+.fast-forward-button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 47px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid #425338;
+  border-radius: 2px;
+  background: transparent;
+  color: #a7bc8a;
+  font: 10px var(--mono);
+  touch-action: none;
+  user-select: none;
+}
+.fast-forward-button span { font: 8px 'Microsoft YaHei', sans-serif; }
+.fast-forward-button.active { background: #c3ed82; color: #203528; border-color: #c3ed82; }
+#speed-indicator { margin-right: 12px; color: #d2eaaa; }
+.edit-banner {
+  position: absolute;
+  z-index: 2;
+  left: 20px;
+  right: 20px;
+  top: 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  color: #dde7d0;
+  background: #1b2b22f5;
+  border: 1px solid #8ed4ed55;
+  border-left: 3px solid #8ed4ed;
+  font-size: 10px;
+}
+.edit-banner button { border: 0; background: transparent; color: #a7cbe0; font-size: 10px; padding: 3px; }
+.edit-banner button:hover { color: #e4f4ff; }
+.echo-slot.filled { gap: 7px; min-height: 48px; height: auto; }
+.echo-info { flex: 1; min-width: 0; }
+.echo-info strong { display: flex; align-items: center; gap: 5px; }
+.echo-info strong span { color: #8b967d; font: 8px var(--mono); }
+.echo-info small { min-height: 12px; }
+.echo-slot .rerecord-button {
+  margin-left: auto;
+  border: 1px solid #b7c5b0;
+  border-radius: 2px;
+  padding: 4px 5px;
+  color: #62785b;
+  font-size: 9px;
+  white-space: nowrap;
+}
+.echo-slot .rerecord-button:hover:not(:disabled) { background: #d6e2ce; color: #30492d; }
+.echo-slot button[data-delete] { margin-left: 0; padding: 2px; }
+.echo-slot.editing { border-color: var(--echo-color); box-shadow: inset 2px 0 var(--echo-color); }
+.echo-slot.editing small { color: #3c7895; }
+.plan-status { font-size: 8px; line-height: 1.5; color: #819176; min-height: 12px; margin-top: 8px; }
+.editing-track .recorded-segment, .editing-track .hold-segment { opacity: .14; }
+.draft-segment { position: absolute; top: 0; left: 0; height: 5px; background: var(--echo-color); }
+.secondary-actions { gap: 8px; }
+.secondary-actions button { white-space: nowrap; }
+@media (max-width: 550px) {
+  .console-controls { gap: 7px; }
+  .fast-forward-button { min-width: 27px; padding: 0 4px; font-size: 9px; }
+  .fast-forward-button span { display: none; }
+  .edit-banner { left: 8px; right: 8px; top: 6px; padding: 5px 6px; font-size: 7px; }
+  .edit-banner button { font-size: 7px; }
+  .echo-slot.filled { flex-wrap: wrap; gap: 5px; }
+  .echo-info { flex-basis: calc(100% - 24px); }
+  .echo-slot .rerecord-button { margin-left: 24px; padding: 3px 5px; }
+  .echo-slot button[data-delete] { margin-left: auto; }
+  .echo-info strong { justify-content: space-between; }
+  #speed-indicator { font-size: 5px; margin-right: 4px; }
+}

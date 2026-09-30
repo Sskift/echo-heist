@@ -5,7 +5,7 @@ export type Frame = Point & { angle: number; lure: boolean };
 export type Echo = { frames: Frame[]; colorIndex: number };
 export type Status = 'ready' | 'running' | 'paused' | 'caught' | 'won';
 export type Guard = Point & { angle: number; waypoint: number; investigate: Point | null; attention: number; suspicion: number };
-export type GameEvent = 'start' | 'rewind' | 'door' | 'loot' | 'lure' | 'caught' | 'won' | 'tick' | 'full';
+export type GameEvent = 'start' | 'rewind' | 'door' | 'loot' | 'lure' | 'caught' | 'won' | 'tick' | 'full' | 'plan';
 
 const SPEED = 224;
 const RADIUS = 10;
@@ -17,6 +17,8 @@ export class Game {
   level: Level;
   player: Frame;
   echoes: Echo[] = [];
+  editingIndex: number | null = null;
+  private planHistory: Echo[][] = [];
   recording: Frame[] = [];
   guards: Guard[] = [];
   openDoors = new Set<string>();
@@ -39,6 +41,62 @@ export class Game {
 
   get seconds(): number { return this.frame / FPS; }
   get remaining(): number { return Math.max(0, LOOP_SECONDS - this.seconds); }
+  get activeEchoes() { return this.echoes.map((echo, index) => ({ echo, index })).filter(({ index }) => index !== this.editingIndex); }
+  get canUndo(): boolean { return this.planHistory.length > 0 && this.editingIndex === null; }
+
+  private snapshot(): Echo[] {
+    return this.echoes.map(echo => ({ colorIndex: echo.colorIndex, frames: echo.frames.map(cloneFrame) }));
+  }
+
+  private rememberPlan() {
+    this.planHistory.push(this.snapshot());
+    if (this.planHistory.length > 20) this.planHistory.shift();
+  }
+
+  restorePlan(echoes: Echo[]) {
+    this.echoes = echoes.map(echo => ({ colorIndex: echo.colorIndex, frames: echo.frames.map(cloneFrame) }));
+    this.editingIndex = null;
+    this.planHistory = [];
+    this.resetWorld('ready');
+  }
+
+  beginRerecord(index: number): boolean {
+    if (!Number.isInteger(index) || !this.echoes[index] || this.editingIndex !== null) return false;
+    this.editingIndex = index;
+    this.attempts++;
+    this.resetWorld('ready');
+    this.events.push('rewind');
+    return true;
+  }
+
+  cancelRerecord(): boolean {
+    if (this.editingIndex === null) return false;
+    this.editingIndex = null;
+    this.resetWorld('ready');
+    this.events.push('rewind');
+    return true;
+  }
+
+  undoPlan(): boolean {
+    if (!this.canUndo) return false;
+    this.echoes = this.planHistory.pop()!;
+    this.attempts++;
+    this.resetWorld('ready');
+    this.events.push('rewind', 'plan');
+    return true;
+  }
+
+  echoActivity(index: number): string {
+    if (index === this.editingIndex) return '正在重录';
+    const echo = this.echoes[index];
+    if (!echo) return '';
+    if (this.status === 'ready') return '等待行动';
+    const actor = this.echoAt(echo);
+    const plate = this.level.plates.find(p => distance(p, actor) < 23);
+    if (plate) return `守住 ${plate.id} 开关`;
+    if (this.frame >= echo.frames.length - 1) return '终点待命';
+    return distance(actor, this.echoAt(echo, Math.max(0, this.frame - 1))) < 0.1 ? '等待中' : '移动中';
+  }
 
   resetWorld(status: Status = 'running') {
     this.player = { ...this.level.spawn, angle: -Math.PI / 2, lure: false };
@@ -68,29 +126,44 @@ export class Game {
 
   restart() { this.attempts++; this.resetWorld(); this.events.push('rewind'); }
 
-  clear() { this.echoes = []; this.attempts = 1; this.resetWorld('ready'); this.events.push('rewind'); }
+  clear() {
+    if (this.echoes.length) this.rememberPlan();
+    this.echoes = [];
+    this.editingIndex = null;
+    this.attempts = 1;
+    this.resetWorld('ready');
+    this.events.push('rewind', 'plan');
+  }
 
   removeEcho(index: number) {
-    if (index < 0 || index >= this.echoes.length) return;
+    if (!Number.isInteger(index) || index < 0 || index >= this.echoes.length || this.editingIndex !== null) return;
+    this.rememberPlan();
     this.echoes.splice(index, 1);
     this.attempts++;
     this.resetWorld('ready');
-    this.events.push('rewind');
+    this.events.push('rewind', 'plan');
   }
 
   rewind(): boolean {
     if (this.status !== 'running' || this.recording.length < 2) return false;
-    if (this.echoes.length >= MAX_ECHOES) {
-      this.lastMessage = '回声槽已满。删除一条旧回声，或按 Enter 重试当前路线。';
+    if (this.echoes.length >= MAX_ECHOES && this.editingIndex === null) {
+      this.lastMessage = '回声槽已满。点击回声的「重录」修改路线，或按 Enter 重试本轮。';
       this.events.push('full');
       return false;
     }
-    const used = new Set(this.echoes.map(e => e.colorIndex));
-    const colorIndex = [0, 1, 2].find(i => !used.has(i)) ?? 0;
-    this.echoes.push({ frames: this.recording.map(cloneFrame), colorIndex });
+    this.rememberPlan();
+    if (this.editingIndex !== null) {
+      const colorIndex = this.echoes[this.editingIndex].colorIndex;
+      this.echoes[this.editingIndex] = { frames: this.recording.map(cloneFrame), colorIndex };
+      this.editingIndex = null;
+    } else {
+      const used = new Set(this.echoes.map(e => e.colorIndex));
+      const colorIndex = [0, 1, 2].find(i => !used.has(i)) ?? 0;
+      this.echoes.push({ frames: this.recording.map(cloneFrame), colorIndex });
+    }
     this.attempts++;
     this.resetWorld();
-    this.events.push('rewind');
+    this.events.push('rewind', 'plan');
     return true;
   }
 
@@ -114,7 +187,7 @@ export class Game {
   }
 
   updatePlates() {
-    const actors = [this.player, ...this.echoes.map(e => this.echoAt(e))];
+    const actors = [this.player, ...this.activeEchoes.map(({ echo }) => this.echoAt(echo))];
     const previous = this.openDoors.size;
     this.activePlates = new Set(this.level.plates.filter(p => actors.some(a => distance(a, p) < 23)).map(p => p.id));
     this.openDoors = new Set(this.level.doors.filter(d => this.activePlates.has(d.plate)).map(d => d.id));
@@ -140,7 +213,7 @@ export class Game {
   }
 
   private updateGuards() {
-    const actors = [this.player, ...this.echoes.map(e => this.echoAt(e))];
+    const actors = [this.player, ...this.activeEchoes.map(({ echo }) => this.echoAt(echo))];
     this.guards.forEach((guard, index) => {
       const def = this.level.guards[index];
       guard.attention = Math.max(0, guard.attention - DT);
@@ -179,14 +252,14 @@ export class Game {
     }
     this.player.lure = input.lure && this.lureCooldown === 0;
     if (this.player.lure) { this.lureCooldown = 1.5; this.makeNoise(this.player); }
-    for (const echo of this.echoes) {
+    for (const { echo } of this.activeEchoes) {
       if (this.frame < echo.frames.length && echo.frames[this.frame].lure) this.makeNoise(echo.frames[this.frame]);
     }
     this.recording.push(cloneFrame(this.player));
     this.updatePlates();
     this.updateGuards();
     if (this.alarm >= 1) return;
-    if (!this.hasLoot && distance(this.player, this.level.loot) < 25) {
+    if (this.editingIndex === null && !this.hasLoot && distance(this.player, this.level.loot) < 25) {
       this.hasLoot = true;
       this.events.push('loot');
     }
@@ -199,7 +272,7 @@ export class Game {
     }
     if (this.frame % FPS === 0 && this.remaining <= 3) this.events.push('tick');
     if (this.frame >= MAX_FRAMES) {
-      if (this.echoes.length < MAX_ECHOES) this.rewind();
+      if (this.echoes.length < MAX_ECHOES || this.editingIndex !== null) this.rewind();
       else {
         this.status = 'caught';
         this.lastMessage = '12 秒已用完。回声槽已满，按 Enter 重试，或删除一条回声重新安排。';

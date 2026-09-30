@@ -206,7 +206,7 @@ export class Renderer {
       c.save(); c.globalAlpha = n.life * 0.5;
       this.circle(n, 12 + (1 - n.life) * 100, '#00000000', C.amber); c.restore();
     }
-    game.echoes.forEach((echo, i) => this.actor(game.echoAt(echo), ECHO_COLORS[echo.colorIndex], time, true, `ECHO 0${i + 1}`));
+    game.activeEchoes.forEach(({ echo, index }) => this.actor(game.echoAt(echo), ECHO_COLORS[echo.colorIndex], time, true, `ECHO 0${index + 1}`));
     game.guards.forEach(guard => {
       this.actor({ ...guard, lure: false }, guard.suspicion > 0.2 ? '#ed947c' : C.amber, time, false, guard.investigate ? '?' : 'SECURITY');
       if (guard.suspicion > 0) {
@@ -214,7 +214,11 @@ export class Renderer {
         c.fillStyle = '#ef957e'; c.fillRect(guard.x - 15, guard.y + 21, guard.suspicion * 30, 3);
       }
     });
-    this.actor(game.player, '#eff3df', time, false, 'YOU');
+    if (game.editingIndex !== null && this.trails) {
+      const color = ECHO_COLORS[game.echoes[game.editingIndex].colorIndex];
+      this.line(game.recording.filter((_, i) => i % 3 === 0), `${color}b0`, 2);
+    }
+    this.actor(game.player, game.editingIndex === null ? '#eff3df' : ECHO_COLORS[game.echoes[game.editingIndex].colorIndex], time, false, game.editingIndex === null ? 'YOU' : `REC ECHO 0${game.editingIndex + 1}`);
     if (game.hasLoot) this.circle({ x: game.player.x - 13, y: game.player.y + 9 }, 4, C.amber);
 
     const vignette = c.createRadialGradient(WIDTH / 2, HEIGHT / 2, HEIGHT * 0.25, WIDTH / 2, HEIGHT / 2, WIDTH * 0.65);

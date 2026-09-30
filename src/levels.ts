@@ -35,8 +35,11 @@ function walls(doubleDoor: boolean): Point[] {
   for (let y = 1; y < 17; y++) if (y !== 10 && y !== 11) add(14, y);
   // Storage stacks make readable, useful cover rather than decorative collision.
   for (const [x, y] of [[5, 7], [6, 7], [5, 8], [6, 8], [10, 12], [10, 13], [18, 11], [18, 12], [25, 13], [26, 13]]) add(x, y);
-  if (doubleDoor) for (let x = 15; x < 29; x++) if (x !== 24 && x !== 25) add(x, 7);
-  else for (const [x, y] of [[21, 6], [22, 6], [21, 7], [22, 7]]) add(x, y);
+  if (doubleDoor) {
+    for (let x = 15; x < 29; x++) if (x !== 24 && x !== 25) add(x, 7);
+  } else {
+    for (const [x, y] of [[21, 6], [22, 6], [21, 7], [22, 7]]) add(x, y);
+  }
   return [...occupied].map(key => { const [x, y] = key.split(',').map(Number); return { x: x * TILE, y: y * TILE }; });
 }
 

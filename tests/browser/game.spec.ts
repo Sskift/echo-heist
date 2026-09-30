@@ -104,3 +104,133 @@ test('mobile layout has no horizontal overflow and exposes touch controls', asyn
   await page.screenshot({ path: '.local/mobile.png', fullPage: true });
   await context.close();
 });
+
+test('rerecord, cancel and undo preserve teammates and only persist committed routes', async ({ page }) => {
+  await clock(page); await page.goto('/'); await advance(page);
+  await page.locator('#overlay-action').click(); await advance(page);
+  await move(page, 'd', 43); await move(page, 'w', 77);
+  await page.keyboard.press('r'); await advance(page);
+  const original = await page.evaluate(() => JSON.parse(localStorage.getItem('echo-heist-plans-v1')!)['01']);
+  await advance(page, 130);
+  await expect(page.locator('[data-echo-state="0"]')).toHaveText('守住 A 开关');
+  await page.getByRole('button', { name: '重录回声 1', exact: true }).click(); await advance(page);
+  await expect(page.locator('#edit-banner')).toBeVisible();
+  await expect(page.locator('#overlay-card h2')).toHaveText('重录回声 01');
+  await expect(page.locator('#undo-button')).toBeDisabled();
+  await page.locator('#overlay-action').click(); await advance(page);
+  await move(page, 'd', 30); await move(page, 'w', 30);
+  await page.screenshot({ path: '.local/desktop-rerecord.png', fullPage: true });
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('echo-heist-plans-v1')!)['01'])).toEqual(original);
+  await page.keyboard.press('r'); await advance(page);
+  await expect(page.locator('#echo-count')).toHaveText('1 / 3');
+  await expect(page.locator('#edit-banner')).toBeHidden();
+  const updated = await page.evaluate(() => JSON.parse(localStorage.getItem('echo-heist-plans-v1')!)['01']);
+  expect(updated.echoes[0].frames.length).toBeLessThan(original.echoes[0].frames.length);
+  expect(updated.echoes[0].colorIndex).toBe(original.echoes[0].colorIndex);
+  await page.keyboard.press('z'); await advance(page);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('echo-heist-plans-v1')!)['01'])).toEqual(original);
+  await page.getByRole('button', { name: '重录回声 1', exact: true }).click(); await advance(page);
+  await page.locator('#overlay-action').click(); await advance(page);
+  await move(page, 'w', 20);
+  await page.locator('#cancel-rerecord').click(); await advance(page);
+  await expect(page.locator('#edit-banner')).toBeHidden();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('echo-heist-plans-v1')!)['01'])).toEqual(original);
+});
+
+test('plans survive reload and level switching; uncommitted edits retain the old save', async ({ page }) => {
+  await clock(page); await page.goto('/'); await advance(page);
+  await page.locator('#overlay-action').click(); await advance(page);
+  await move(page, 'd', 25); await page.keyboard.press('r'); await advance(page);
+  const original = await page.evaluate(() => localStorage.getItem('echo-heist-plans-v1'));
+  await page.reload(); await advance(page);
+  await expect(page.locator('#echo-count')).toHaveText('1 / 3');
+  await expect(page.locator('#plan-status')).toHaveText('已恢复 1 条回声');
+  await expect(page.locator('#undo-button')).toBeDisabled();
+  await page.locator('[data-level="1"]').click(); await advance(page);
+  await expect(page.locator('#echo-count')).toHaveText('0 / 3');
+  await page.locator('[data-level="0"]').click(); await advance(page);
+  await expect(page.locator('#echo-count')).toHaveText('1 / 3');
+  await page.getByRole('button', { name: '重录回声 1', exact: true }).click(); await advance(page);
+  await page.locator('#overlay-action').click(); await advance(page); await move(page, 'w', 30);
+  await page.reload(); await advance(page);
+  await expect(page.locator('#edit-banner')).toBeHidden();
+  const restored = await page.evaluate(() => JSON.parse(localStorage.getItem('echo-heist-plans-v1')!)['01']);
+  expect(restored).toEqual(JSON.parse(original!)['01']);
+  await page.locator('#reset-button').click(); await advance(page);
+  await expect(page.locator('#echo-count')).toHaveText('0 / 3');
+  await page.locator('#undo-button').click(); await advance(page);
+  await expect(page.locator('#echo-count')).toHaveText('1 / 3');
+});
+
+test('holding Shift advances the whole simulation at 3x and releases at the loop boundary', async ({ page }) => {
+  await clock(page); await page.goto('/'); await advance(page);
+  const remaining = () => page.locator('.clock').innerText().then(text => Number(text.replace(/\s|s/g, '')));
+  await page.keyboard.down('Shift'); await advance(page, 20);
+  await expect(page.locator('#overlay')).toBeVisible();
+  await page.keyboard.up('Shift');
+  await page.locator('#overlay-action').click(); await advance(page, 2);
+  const start = await remaining();
+  await page.keyboard.down('Shift'); await advance(page, 20);
+  const fast = await remaining();
+  expect(start - fast).toBeCloseTo(1, 1);
+  await expect(page.locator('#fast-forward')).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.up('Shift'); await advance(page, 20);
+  const normal = await remaining();
+  expect(fast - normal).toBeCloseTo(1 / 3, 1);
+  await expect(page.locator('#fast-forward')).toHaveAttribute('aria-pressed', 'false');
+  await page.keyboard.down('Shift');
+  await advance(page, Math.ceil(normal * 20) + 1);
+  await expect(page.locator('#echo-count')).toHaveText('1 / 3');
+  await expect(page.locator('#fast-forward')).toHaveAttribute('aria-pressed', 'false');
+  expect(await remaining()).toBeGreaterThan(11.8);
+  const length = await page.evaluate(() => JSON.parse(localStorage.getItem('echo-heist-plans-v1')!)['01'].echoes[0].frames.length);
+  expect(length).toBe(720);
+  await page.keyboard.up('Shift');
+  await page.keyboard.down('Shift'); await advance(page, 2);
+  await page.keyboard.press('Escape'); await advance(page);
+  const paused = await remaining(); await advance(page, 60);
+  expect(await remaining()).toBe(paused);
+  await expect(page.locator('#fast-forward')).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('the fast-forward button works with pointer and keyboard without leaving a stuck hold', async ({ page }) => {
+  await clock(page); await page.goto('/'); await advance(page);
+  await page.locator('#overlay-action').click(); await advance(page);
+  await page.locator('#fast-forward').hover(); await page.mouse.down(); await advance(page, 10);
+  await expect(page.locator('#fast-forward')).toHaveAttribute('aria-pressed', 'true');
+  await page.mouse.up(); await advance(page);
+  await expect(page.locator('#fast-forward')).toHaveAttribute('aria-pressed', 'false');
+  await page.locator('#fast-forward').focus();
+  await page.keyboard.down('Space'); await advance(page, 10);
+  await expect(page.locator('#fast-forward')).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.up('Space'); await advance(page);
+  await expect(page.locator('#fast-forward')).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('corrupt or unwritable local storage does not prevent recording a plan', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await clock(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('echo-heist-plans-v1', '{broken');
+    Storage.prototype.setItem = () => { throw new DOMException('Quota exceeded', 'QuotaExceededError'); };
+  });
+  await page.goto('/'); await advance(page);
+  await page.locator('#overlay-action').click(); await advance(page);
+  await move(page, 'd', 20); await page.keyboard.press('r'); await advance(page);
+  await expect(page.locator('#echo-count')).toHaveText('1 / 3');
+  await expect(page.locator('#plan-status')).toContainText('无法写入本机存档');
+  expect(errors).toEqual([]);
+});
+
+test('recorded echoes and edit controls remain usable at mobile width', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await clock(page); await page.goto('/'); await advance(page);
+  await page.locator('#overlay-action').click(); await advance(page);
+  await move(page, 'd', 30); await page.keyboard.press('r'); await advance(page);
+  await expect(page.getByRole('button', { name: '重录回声 1', exact: true })).toBeVisible();
+  await page.screenshot({ path: '.local/mobile-plan.png', fullPage: true });
+  await page.getByRole('button', { name: '重录回声 1', exact: true }).click(); await advance(page);
+  await expect(page.locator('#cancel-rerecord')).toBeVisible();
+  const width = await page.evaluate(() => [innerWidth, document.documentElement.scrollWidth]);
+  expect(width[1]).toBeLessThanOrEqual(width[0]);
+});
