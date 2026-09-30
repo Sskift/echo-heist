@@ -13,6 +13,7 @@ export class CampaignUI {
   private securityKey = '';
   private powerKey = '';
   private relayKey = '';
+  private suppressionKey = '';
   constructor(private campaign: Campaign, actions: Actions) {
     $('.intro').insertAdjacentHTML('afterend', `
       <section class="campaign-shell" aria-label="行动档案">
@@ -28,6 +29,7 @@ export class CampaignUI {
     $('.hint').insertAdjacentHTML('afterend', '<details class="hint evidence"><summary>已取得的线索 <span>＋</span></summary><div id="evidence-list"></div></details>');
     $('#preview-panel').insertAdjacentHTML('afterend', '<details id="security-panel" class="security-panel" hidden><summary>安保响应规则 <span>＋</span></summary><p id="security-rule"></p><ul id="security-status" aria-label="守卫状态"></ul><p>地图圆圈为参考响点；其他位置同样可以发声。方框标记的固定哨兵不响应诱饵。单位格与地图网格一致。</p></details>');
     $('#security-panel').insertAdjacentHTML('beforebegin', '<details id="power-panel" class="security-panel power-panel" hidden><summary>电路与行动条件 <span>＋</span></summary><p>在面板旁按 E，录下的是指定状态；重复相同请求不会反复切换。同帧相反请求会取消。连线显示门禁、监控与照明的供电关系。</p><ul id="power-status" aria-label="电路状态"></ul><p id="power-objectives"></p><p id="power-consequence" class="power-consequence"></p></details>');
+    $('#power-panel').insertAdjacentHTML('beforebegin', '<details id="suppression-panel" class="security-panel suppression-panel" hidden><summary>抑制范围与恢复时刻 <span>＋</span></summary><p>紫色网格只影响回声，真人仍可操作。回声继续沿原录像移动：暂时不能压开关、操作、交接或发声，也不会被安保看见。凭据仍归原持有人。离场或场关闭后恢复当前动作，错过的 E 不会补发；被取消的留候需要重新按 E。</p><ul id="suppression-status" aria-label="抑制状态"></ul><p>重叠区域中，只要有一层开启，投影就仍然失效。用预演检查同伙恢复的位置与时刻。</p></details>');
     $('#mission-cards').addEventListener('click', event => {
       const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-mission]');
       if (button && !button.disabled) { actions.mission(button.dataset.mission!); $<HTMLDetailsElement>('#mission-board').open = false; }
@@ -55,6 +57,17 @@ export class CampaignUI {
 
   render(game: Game, campaignMode: boolean, preview: Game | null) {
     const world = preview ?? game;
+    const suppression = (world.level.suppressors ?? []).map(field => {
+      const on = world.suppressionActive(field), powered = world.powered(field.power);
+      const affected = world.activeEchoes.filter(({ echo }) => world.suppressionFields(world.echoAt(echo)).some(s => s.id === field.id)).map(({ index }) => `回声 ${index + 1}`);
+      return `${field.id} · ${!powered ? '已断电' : on ? '抑制中' : '空档'}${field.power ? ` · 供电 ${field.power.id} 需${world.circuitState(field.power.id, field.power.on)}` : ''}${field.cycle ? ` · 每 ${field.cycle.period}s 抑制 ${field.cycle.active.join('–')}s${field.cycle.phase ? `（相位 ${field.cycle.phase}s）` : ''}${powered ? ` · 距${on ? '恢复' : '抑制'} ${world.cycleRemaining(field.cycle).toFixed(1)}s` : ''}` : ' · 无周期'}${affected.length ? ` · ${affected.join('、')} 失效` : ''}`;
+    });
+    const suppressionKey = `${world.level.id}:${suppression.join('|')}`;
+    if (suppressionKey !== this.suppressionKey) {
+      this.suppressionKey = suppressionKey;
+      $('#suppression-panel').hidden = !suppression.length;
+      $('#suppression-status').replaceChildren(...suppression.map(text => { const item = document.createElement('li'); item.textContent = text; return item; }));
+    }
     const relayStatus = (world.level.terminals ?? []).map(t => world.terminalStatus(t));
     const relayKey = `${world.level.id}:${world.credentialOwner()}:${relayStatus.join('|')}:${world.signals.at(-1)?.text}:${!!preview}`;
     if (relayKey !== this.relayKey) {
@@ -71,6 +84,7 @@ export class CampaignUI {
       $('#power-panel').hidden = !world.level.circuits?.length;
       $('#power-status').replaceChildren(...(world.level.circuits ?? []).map(circuit => {
         const feeds = world.level.doors.filter(d => d.power?.id === circuit.id).map(d => `${d.id} ${world.openDoors.has(d.id) ? '开' : '关'}（需${world.circuitState(circuit.id, d.power!.on)}）`);
+        world.level.suppressors?.filter(s => s.power?.id === circuit.id).forEach(s => feeds.push(`${s.id} 抑制供电${world.powered(s.power) ? '接通' : '断开'}`));
         world.level.guards.forEach((g, i) => {
           if (g.power?.id === circuit.id) feeds.push(`${world.guardName(i)} ${world.powered(g.power) ? '工作' : '停机'}`);
           if (g.lighting?.id === circuit.id) feeds.push(`${world.guardName(i)} 照明${world.powered(g.lighting) ? '亮' : '暗'}，视距 ${(world.visionRange(i) / 32).toFixed(1)} 格`);
@@ -87,7 +101,8 @@ export class CampaignUI {
       const source = guard.investigate ? world.soundName(guard.investigate) : '';
       const investigation = def.searchSeconds === undefined ? `调查 ${source}，剩余 ${guard.attention.toFixed(1)} 秒` : guard.searching ? `在 ${source} 搜索，剩余 ${guard.attention.toFixed(1)} 秒` : `前往 ${source}，抵达后搜索 ${def.searchSeconds} 秒`;
       const fixed = def.kind === 'sentry' || def.kind === 'camera';
-      return `${world.guardName(i)} · ${!world.powered(def.power) ? '停机' : fixed ? `${def.kind === 'camera' ? '摄像头' : '固定哨兵'}，忽略声音` : guard.investigate ? investigation : '按原路线值守'} · 视野 ${(world.visionRange(i) / 32).toFixed(1)} 格${fixed ? '' : ` · 听觉 ${((def.hearing ?? 450) / 32).toFixed(1)} 格`}`;
+      const trace = guard.trace ? `追向 ${guard.trace.label} 最后位置（${Math.round(guard.trace.at.x)}, ${Math.round(guard.trace.at.y)}），线索 ${guard.trace.remaining.toFixed(1)} 秒` : '';
+      return `${world.guardName(i)}${def.kind === 'tracker' ? ' · 投影追踪器，只识别回声' : ''} · ${!world.powered(def.power) ? '停机' : fixed ? `${def.kind === 'camera' ? '摄像头' : '固定哨兵'}，忽略声音` : guard.investigate ? investigation : trace || '按原路线值守'} · 视野 ${(world.visionRange(i) / 32).toFixed(1)} 格${fixed ? '' : ` · 听觉 ${((def.hearing ?? 450) / 32).toFixed(1)} 格`}${def.kind === 'tracker' ? ` · 丢失目标后追查 ${def.traceSeconds ?? 1.5} 秒；声响调查优先` : ''}`;
     });
     const securityKey = `${world.level.id}:${security.join('|')}`;
     if (securityKey !== this.securityKey) {

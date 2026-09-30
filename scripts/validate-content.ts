@@ -21,6 +21,8 @@ for (const mission of MISSIONS) {
       assert.ok(guard.route.length && guard.route.every(p => Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 32 && p.y >= 32 && p.x <= WIDTH - 32 && p.y <= HEIGHT - 32), `Invalid guard route in ${level.id}`);
       assert.ok(guard.speed >= 0 && guard.range > 0 && (guard.hearing === undefined || guard.hearing > 0) && (guard.searchSeconds === undefined || guard.searchSeconds > 0), `Invalid guard rules in ${level.id}`);
       if (guard.lighting) assert.ok(level.circuits?.some(c => c.id === guard.lighting!.id) && guard.lighting.darkRange > 0 && guard.lighting.darkRange <= guard.range, `Invalid lighting in ${level.id}`);
+      if (guard.traceSeconds !== undefined) assert.ok(guard.kind === 'tracker' && Number.isFinite(guard.traceSeconds) && guard.traceSeconds > 0 && guard.traceSeconds <= 12, `Invalid tracker memory in ${level.id}`);
+      if (guard.kind === 'tracker') assert.ok(guard.searchSeconds !== undefined, `Tracker needs an explicit arrival search duration in ${level.id}`);
     }
     for (const rect of [...level.glass ?? [], ...level.scanners ?? [], ...level.suppressors ?? []]) assert.ok(rect.w > 0 && rect.h > 0 && rect.x >= 0 && rect.y >= 0 && rect.x + rect.w <= WIDTH && rect.y + rect.h <= HEIGHT, `Invalid facility bounds in ${level.id}`);
     assert.ok((level.terminals ?? []).filter(t => t.kind === 'source').length <= 1, `Multiple credentials in ${level.id}`);
@@ -35,8 +37,8 @@ for (const mission of MISSIONS) {
       for (const plate of doorPlates(door)) assert.ok(level.plates.some(p => p.id === plate), `Unknown plate in ${level.id}`);
       if (door.authorization) assert.ok(level.terminals?.some(t => t.authorization === door.authorization), `Missing authorization in ${level.id}`);
     }
-    for (const scanner of level.scanners ?? []) {
-      assert.ok(scanner.period > 0 && scanner.period <= 12 && scanner.active[0] >= 0 && scanner.active[1] > scanner.active[0] && scanner.active[1] <= scanner.period, `Invalid scanner cycle ${level.id}`);
+    for (const cycle of [...level.scanners ?? [], ...(level.suppressors ?? []).flatMap(s => s.cycle ? [s.cycle] : [])]) {
+      assert.ok(cycle.period > 0 && cycle.period <= 12 && cycle.active[0] >= 0 && cycle.active[1] > cycle.active[0] && cycle.active[1] <= cycle.period && Number.isFinite(cycle.phase ?? 0), `Invalid facility cycle ${level.id}`);
     }
     for (const entity of [...level.doors, ...level.guards, ...level.suppressors ?? [], ...level.scanners ?? [], ...level.terminals ?? []]) {
       if (entity.power) assert.ok(level.circuits?.some(c => c.id === entity.power!.id), `Unknown circuit in ${level.id}`);

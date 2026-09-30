@@ -81,7 +81,7 @@ export class Renderer {
 
   draw(game: Game, time: number) {
     const c = this.ctx;
-    const palette = game.level.theme === 'gala' ? { floor: '#24221e', grid: '#343129', wall: '#4a473b', wallTop: '#66634d' } : game.level.theme === 'industrial' ? { floor: '#1b232b', grid: '#293541', wall: '#3c4a57', wallTop: '#657989' } : game.level.theme === 'clockwork' ? { floor: '#25241f', grid: '#34322a', wall: '#514b3c', wallTop: '#786c50' } : C;
+    const palette = game.level.theme === 'gala' ? { floor: '#24221e', grid: '#343129', wall: '#4a473b', wallTop: '#66634d' } : game.level.theme === 'industrial' ? { floor: '#1b232b', grid: '#293541', wall: '#3c4a57', wallTop: '#657989' } : game.level.theme === 'clockwork' ? { floor: '#25241f', grid: '#34322a', wall: '#514b3c', wallTop: '#786c50' } : game.level.theme === 'audit' ? { floor: '#23232b', grid: '#32313e', wall: '#494654', wallTop: '#756980' } : C;
     const dt = Math.min(0.1, time - this.lastTime);
     this.lastTime = time;
     c.clearRect(0, 0, WIDTH, HEIGHT);
@@ -176,14 +176,15 @@ export class Renderer {
       this.text(`${scanner.id} / ${active ? '扫描' : '空档'} ${Math.max(0, next).toFixed(1)}s`, scanner.x + scanner.w / 2, scanner.y - 12, active ? '#ef947c' : '#efbd72', 10, 'center');
     }
     for (const field of game.level.suppressors ?? []) {
-      const active = game.powered(field.power);
+      const active = game.suppressionActive(field);
       c.fillStyle = active ? '#ba91e322' : '#ba91e306'; c.fillRect(field.x, field.y, field.w, field.h);
       c.strokeStyle = active ? '#ba91e390' : '#ba91e330'; c.setLineDash([4, 4]); c.strokeRect(field.x, field.y, field.w, field.h); c.setLineDash([]);
       if (active) for (let x = field.x + 8; x < field.x + field.w; x += 16) this.line([{ x, y: field.y }, { x, y: field.y + field.h }], '#ba91e325');
-      this.text(`${field.id} / ${active ? '抑制投影' : '抑制已关闭'}`, field.x + field.w / 2, field.y - 12, '#c6a8e4', 10, 'center');
+      this.text(`${field.id} / ${active ? '抑制投影' : field.cycle && game.powered(field.power) ? '抑制空档' : '抑制已关闭'}${field.cycle && game.powered(field.power) ? ` ${game.cycleRemaining(field.cycle).toFixed(1)}s` : ''}`, field.x + field.w / 2, field.y - 12, '#c6a8e4', 10, 'center');
     }
     for (const circuit of game.level.circuits ?? []) {
       const on = game.circuits.get(circuit.id), color = on ? '#c3ed82' : '#efbd72';
+      for (const field of game.level.suppressors?.filter(s => s.power?.id === circuit.id) ?? []) this.line([circuit, { x: field.x + field.w / 2, y: field.y + field.h / 2 }], '#ba91e360', 1, [6, 4]);
       for (const door of game.level.doors.filter(d => d.power?.id === circuit.id)) this.line([circuit, { x: door.x, y: circuit.y }, { x: door.x, y: door.y }], `${color}60`, 1, [6, 4]);
       if (this.trails) game.level.guards.forEach((def, i) => {
         const link = def.power?.id === circuit.id ? def.power : def.lighting?.id === circuit.id ? def.lighting : null;
@@ -300,7 +301,15 @@ export class Renderer {
       const enabled = game.powered(game.level.guards[index].power);
       const sentry = game.level.guards[index].kind === 'sentry';
       const camera = game.level.guards[index].kind === 'camera';
-      const label = !enabled ? `${game.guardName(index)} / 停机` : guard.investigate ? `${game.guardName(index)} / ${guard.searching ? '搜索' : '调查'}` : `${game.guardName(index)} / ${camera ? '摄像头' : sentry ? '固定哨兵' : '巡逻'}`;
+      const tracker = game.level.guards[index].kind === 'tracker';
+      const label = !enabled ? `${game.guardName(index)} / 停机` : guard.investigate ? `${game.guardName(index)} / ${guard.searching ? '搜索' : '调查'}` : guard.trace ? `${game.guardName(index)} / 追踪 ${guard.trace.label}` : `${game.guardName(index)} / ${camera ? '摄像头' : sentry ? '固定哨兵' : tracker ? '只识别回声' : '巡逻'}`;
+      if (tracker) this.line([{ x: guard.x, y: guard.y - 22 }, { x: guard.x + 22, y: guard.y }, { x: guard.x, y: guard.y + 22 }, { x: guard.x - 22, y: guard.y }, { x: guard.x, y: guard.y - 22 }], enabled ? '#caade6' : '#526153', 2);
+      if (guard.trace && this.trails) {
+        this.line([guard, ...(guard.path ?? []), guard.trace.at], '#caade690', 1, [4, 4]);
+        this.circle(guard.trace.at, 9, '#caade610', '#caade6');
+        const labelOnRight = guard.trace.at.x < 150;
+        this.text(`最后位置 ${guard.trace.remaining.toFixed(1)}s`, guard.trace.at.x + (labelOnRight ? 32 : -32), guard.trace.at.y - 6, '#caade6', 9, labelOnRight ? 'left' : 'right');
+      }
       if (sentry) { c.strokeStyle = '#efbd7280'; c.lineWidth = 1; c.strokeRect(guard.x - 19, guard.y - 19, 38, 38); }
       if (camera) { c.strokeStyle = enabled ? C.amber : '#526153'; c.lineWidth = 2; c.strokeRect(guard.x - 21, guard.y - 13, 42, 26); this.circle(guard, 6, enabled ? C.amber : '#526153'); }
       if (guard.investigate && this.trails) {

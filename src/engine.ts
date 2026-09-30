@@ -1,4 +1,4 @@
-import { doorPlates, FPS, LOOP_SECONDS, MAX_ECHOES, MAX_FRAMES, TILE, type Level, type Point, type Power, type Scanner, type Terminal } from './levels.ts';
+import { doorPlates, FPS, LOOP_SECONDS, MAX_ECHOES, MAX_FRAMES, TILE, type Cycle, type Level, type Point, type Power, type Scanner, type Suppressor, type Terminal } from './levels.ts';
 import { findRoute } from './navigation.ts';
 
 export type Intent = { type: 'circuit'; id: string; on: boolean } | { type: 'take' | 'give' | 'authorize'; id: string };
@@ -6,7 +6,7 @@ export type Input = { x: number; y: number; lure: boolean; interact?: boolean };
 export type Frame = Point & { angle: number; lure: boolean; intent?: Intent };
 export type Echo = { frames: Frame[]; colorIndex: number; delay?: number };
 export type Status = 'ready' | 'running' | 'paused' | 'caught' | 'won';
-export type Guard = Point & { angle: number; waypoint: number; investigate: Point | null; attention: number; suspicion: number; path?: Point[]; pathKey?: string; seenActor?: string; searching?: boolean };
+export type Guard = Point & { angle: number; waypoint: number; investigate: Point | null; attention: number; suspicion: number; path?: Point[]; pathKey?: string; seenActor?: string; searching?: boolean; trace?: { at: Point; actor: string; label: string; remaining: number } };
 export type GameEvent = 'start' | 'rewind' | 'door' | 'loot' | 'lure' | 'caught' | 'won' | 'tick' | 'full' | 'plan';
 
 const SPEED = 224;
@@ -116,9 +116,23 @@ export class Game {
     return def.lighting && !this.powered(def.lighting) ? def.lighting.darkRange : def.range;
   }
   scanning(scanner: Scanner, frame = this.frame): boolean {
-    const period = Math.round(scanner.period * FPS);
-    const time = ((frame + Math.round((scanner.phase ?? 0) * FPS)) % period + period) % period;
-    return this.powered(scanner.power) && time >= Math.round(scanner.active[0] * FPS) && time < Math.round(scanner.active[1] * FPS);
+    return this.powered(scanner.power) && this.cycleActive(scanner, frame);
+  }
+  cycleActive(cycle: Cycle, frame = this.frame): boolean {
+    const period = Math.round(cycle.period * FPS);
+    const time = ((frame + Math.round((cycle.phase ?? 0) * FPS)) % period + period) % period;
+    return time >= Math.round(cycle.active[0] * FPS) && time < Math.round(cycle.active[1] * FPS);
+  }
+  cycleRemaining(cycle: Cycle): number {
+    const period = Math.round(cycle.period * FPS), start = Math.round(cycle.active[0] * FPS), end = Math.round(cycle.active[1] * FPS);
+    const time = ((this.frame + Math.round((cycle.phase ?? 0) * FPS)) % period + period) % period;
+    return (time < start ? start - time : time < end ? end - time : period - time + start) / FPS;
+  }
+  suppressionActive(field: Suppressor, frame = this.frame): boolean {
+    return this.powered(field.power) && (!field.cycle || this.cycleActive(field.cycle, frame));
+  }
+  suppressionFields(at: Point): Suppressor[] {
+    return (this.level.suppressors ?? []).filter(s => this.suppressionActive(s) && at.x >= s.x && at.x <= s.x + s.w && at.y >= s.y && at.y <= s.y + s.h);
   }
 
   private updateScanners() {
@@ -143,7 +157,7 @@ export class Game {
     }
   }
   suppressed(at: Point): boolean {
-    return (this.level.suppressors ?? []).some(s => this.powered(s.power) && at.x >= s.x && at.x <= s.x + s.w && at.y >= s.y && at.y <= s.y + s.h);
+    return this.suppressionFields(at).length > 0;
   }
   private actors() {
     return [
@@ -452,6 +466,7 @@ export class Game {
   }
   private investigate(index: number, at: Point) {
     const guard = this.guards[index];
+    guard.trace = undefined;
     guard.investigate = { x: at.x, y: at.y }; guard.searching = false;
     guard.attention = this.level.guards[index].searchSeconds ?? 2.5;
     this.signal(`${this.guardName(index)} 号守卫调查声响 · ${this.soundName(at)}`);
@@ -473,18 +488,39 @@ export class Game {
     const actors = this.actors();
     this.guards.forEach((guard, index) => {
       const def = this.level.guards[index];
-      if (!this.powered(def.power)) { guard.suspicion = 0; return; }
+      if (!this.powered(def.power)) {
+        guard.suspicion = 0; guard.trace = undefined; guard.seenActor = undefined;
+        if (def.kind === 'tracker') { guard.investigate = null; guard.attention = 0; guard.searching = false; }
+        return;
+      }
+      const sees = ({ id, at }: { id: string; at: Point }) => {
+        if (def.kind === 'tracker' && id === 'player') return false;
+        const gap = Math.atan2(at.y - guard.y, at.x - guard.x) - guard.angle;
+        const angle = Math.abs(Math.atan2(Math.sin(gap), Math.cos(gap)));
+        return distance(at, guard) < this.visionRange(index) && (angle < 0.56 || distance(at, guard) < 24) && this.canSee(guard, at);
+      };
+      const nearestVisible = () => actors.filter(sees).sort((a, b) => distance(a.at, guard) - distance(b.at, guard) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
+      if (def.kind === 'tracker' && !guard.investigate) {
+        const spotted = nearestVisible();
+        if (spotted) {
+          if (guard.trace?.actor !== spotted.id) this.signal(`${this.guardName(index)} 追踪 ${spotted.label} 的可见位置`);
+          guard.trace = { at: { x: spotted.at.x, y: spotted.at.y }, actor: spotted.id, label: spotted.label, remaining: def.traceSeconds ?? 1.5 };
+        } else if (guard.trace) {
+          guard.trace.remaining = Math.max(0, guard.trace.remaining - DT);
+          if (!guard.trace.remaining) { guard.trace = undefined; this.signal(`${this.guardName(index)} 丢失投影线索，返回原路线`); }
+        }
+      }
       if (guard.investigate && def.searchSeconds !== undefined && distance(guard, guard.investigate) < 8 && !guard.searching) {
         guard.searching = true; this.signal(`${this.guardName(index)} 号守卫抵达声源，搜索 ${def.searchSeconds} 秒`);
       }
       if (def.searchSeconds === undefined || guard.searching) guard.attention = Math.max(0, guard.attention - DT);
       if (guard.investigate && guard.attention === 0) { guard.investigate = null; guard.searching = false; this.signal(`${this.guardName(index)} 号守卫返回巡逻路线`); }
-      const destination = guard.investigate ?? def.route[guard.waypoint % def.route.length];
+      const destination = guard.investigate ?? guard.trace?.at ?? def.route[guard.waypoint % def.route.length];
       let target = destination;
       // Keep existing recordings on legacy maps compatible with their original
       // routing rule. New arrival-search guards and glass need body clearance.
-      const routeBlocked = (guard.investigate || def.searchSeconds !== undefined) &&
-        !(def.searchSeconds !== undefined || this.level.glass?.length ? this.canWalk(guard, destination) : this.canSee(guard, destination));
+      const routeBlocked = (guard.investigate || guard.trace || def.searchSeconds !== undefined) &&
+        !(guard.trace || def.searchSeconds !== undefined || this.level.glass?.length ? this.canWalk(guard, destination) : this.canSee(guard, destination));
       if (routeBlocked) {
         const key = `${destination.x}:${destination.y}:${[...this.openDoors].join(',')}`;
         if (guard.pathKey !== key) { guard.path = findRoute(guard, destination, (x, y) => this.blocked(x, y)); guard.pathKey = key; }
@@ -497,15 +533,11 @@ export class Game {
       if (dist > 5 && def.kind !== 'sentry' && def.kind !== 'camera') {
         guard.angle = Math.atan2(dy, dx);
         this.move(guard, dx / dist * def.speed * DT, dy / dist * def.speed * DT);
-      } else if (!guard.investigate && def.kind !== 'sentry' && def.kind !== 'camera') {
+      } else if (!guard.investigate && !guard.trace && def.kind !== 'sentry' && def.kind !== 'camera') {
         guard.waypoint = (guard.waypoint + 1) % def.route.length;
         if (def.route.length === 1 && def.facing !== undefined) guard.angle = def.facing;
       }
-      const seen = actors.find(({ at: a }) => {
-        const gap = Math.atan2(a.y - guard.y, a.x - guard.x) - guard.angle;
-        const angle = Math.abs(Math.atan2(Math.sin(gap), Math.cos(gap)));
-        return distance(a, guard) < this.visionRange(index) && (angle < 0.56 || distance(a, guard) < 24) && this.canSee(guard, a);
-      });
+      const seen = def.kind === 'tracker' ? nearestVisible() : actors.find(sees);
       guard.seenActor = seen?.label;
       guard.suspicion = Math.max(0, Math.min(1, guard.suspicion + (seen ? DT * 1.65 : -DT * 0.8)));
     });
@@ -515,7 +547,8 @@ export class Game {
       const actor = actors.find(a => a.label === this.guards[guard].seenActor)!;
       this.failure = { frame: this.frame, actor: actor.label, guard, point: { x: actor.at.x, y: actor.at.y } };
       this.status = 'caught';
-      this.lastMessage = `${this.seconds.toFixed(2)} 秒：${actor.label}被 ${this.guardName(guard)} 号守卫发现。调整这一段路线或出场时间。`;
+      const observer = this.level.guards[guard].kind === 'tracker' ? '追踪器' : this.level.guards[guard].kind === 'camera' ? '摄像头' : '号守卫';
+      this.lastMessage = `${this.seconds.toFixed(2)} 秒：${actor.label}被 ${this.guardName(guard)} ${observer}发现。调整这一段路线或出场时间。`;
       this.signal(this.lastMessage);
       this.events.push('caught');
     }
@@ -523,6 +556,7 @@ export class Game {
 
   step(input: Input) {
     if (this.status !== 'running') return;
+    for (const field of this.level.suppressors ?? []) if (field.cycle && this.suppressionActive(field) !== this.suppressionActive(field, this.frame - 1)) this.signal(`${field.id} 抑制周期${this.suppressionActive(field) ? '开启' : '进入空档'}`);
     this.updatePlates();
     this.lureCooldown = Math.max(0, this.lureCooldown - DT);
     const mag = Math.hypot(input.x, input.y);
