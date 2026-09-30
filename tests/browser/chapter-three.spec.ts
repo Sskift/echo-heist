@@ -59,12 +59,14 @@ test('core pickup visibly cuts civilian power; a blocked exit requires restorati
   await expect(page.locator('#loot-status')).toContainText('撤离前需：CIV 接通');
   await expect(page.locator('#toast')).toContainText('CIV 民用主线断开');
   await page.screenshot({ path: '.local/chapter-three-core.png', fullPage: true });
-  await move(page, 'd', 26); await move(page, 's', 68); await move(page, 'd', 26);
+  // Cross at the doorway's center (y=416), leaving clearance for the player's radius.
+  await move(page, 'd', 26); await move(page, 's', 64); await move(page, 'd', 26);
   await expect(page.locator('#overlay')).toBeHidden();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('echo-heist-campaign-v1')!).runs['C3-6'].length)).toBe(2);
-  await move(page, 'w', 34); await operate(page);
+  await move(page, 'w', 30); await operate(page);
   await expect(page.locator('#power-status')).toContainText('CIV · 民用主线：接通');
-  await move(page, 's', 34); await move(page, 'd', 26);
+  await move(page, 's', 30); await move(page, 'd', 26);
+  await expect(page.locator('#overlay')).toBeVisible();
   await expect(page.locator('#overlay-card h2')).toHaveText('这一段，已经安全了。');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('echo-heist-campaign-v1')!).runs['C3-6'].length)).toBe(3);
   await page.setViewportSize({ width: 390, height: 844 });

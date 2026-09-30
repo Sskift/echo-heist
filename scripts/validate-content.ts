@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { MISSIONS, stageVersions } from '../src/campaign-content.ts';
 import { Game } from '../src/engine.ts';
+import { Campaign } from '../src/campaign.ts';
 import { playWitness } from '../src/witness.ts';
 import { doorPlates, WIDTH, HEIGHT, TILE } from '../src/levels.ts';
 
@@ -74,5 +75,31 @@ for (const mission of MISSIONS) {
     stageVersions(base).forEach(s => { s.grants.forEach(f => facts.add(f)); s.outcomes?.forEach(o => facts.add(o.id)); });
     zones++;
   }
+}
+// Validate reachable combinations, not just each layout in isolation. Every
+// outcome must have a real input witness from every prefix that reaches it.
+for (const mission of MISSIONS.filter(m => m.stages.some(s => stageVersions(s).some(v => v.outcomes?.length)))) {
+  const before = MISSIONS.slice(0, MISSIONS.indexOf(mission));
+  let prefixes = [new Campaign({ version: 1, selected: mission.id, runs: Object.fromEntries(before.map(m => [m.id, []])), completed: before.map(m => m.id) })];
+  for (let index = 0; index < mission.stages.length; index++) {
+    const next = new Map<string, Campaign>();
+    for (const prefix of prefixes) {
+      assert.ok((mission.stages[index].variants ?? []).filter(v => prefix.flags.includes(v.when)).length <= 1, `Ambiguous branch in ${mission.id} stage ${index}`);
+      const stage = prefix.stage, reached = new Set<string>();
+      for (const witness of [stage.witness, ...stage.alternatives ?? []]) {
+        const win = playWitness({ ...stage, witness }), campaign = new Campaign(prefix.export());
+        assert.ok(campaign.commit(win), `Cannot commit ${stage.level.id}`);
+        const selected = campaign.data.outcomes?.[mission.stages[index].level.id];
+        if (selected) reached.add(selected);
+        const restored = new Campaign(campaign.export());
+        assert.equal(restored.cleared(), index + 1, `Cannot restore ${stage.level.id}`);
+        next.set(JSON.stringify(restored.data.outcomes), restored);
+      }
+      for (const outcome of stage.outcomes ?? []) assert.ok(reached.has(outcome.id), `No executable choice ${outcome.id} after ${JSON.stringify(prefix.data.outcomes)}`);
+    }
+    prefixes = [...next.values()];
+  }
+  assert.ok(prefixes.every(c => c.data.completed.includes(mission.id)), `Incomplete route in ${mission.id}`);
+  console.log(`${mission.id}: ${prefixes.length} complete choice combinations survived checkpoint reloads`);
 }
 console.log(`${MISSIONS.length} missions / ${zones} action zones / ${layouts} branch layouts: references and executable solutions passed. This does not measure first-play duration.`);

@@ -117,8 +117,144 @@ const verify = action('C6-3-c', '两种方法，同一份证词', {
 [g(272, 432), r(), g(112, 176), e(), g(400, 176), e(), g(816, 176), g(848, 176), g(848, 432)], 'C6-3-b');
 verify.alternatives = [[g(176, 432), g(176, 304), r(), g(304, 432), g(304, 400), r(), g(528, 432), g(848, 432), g(848, 176), g(816, 176), g(848, 176), g(848, 432)]];
 
+const backup = action('C6-4-a', '先把退路接好', {
+  ...east, walls: room([[14, [12, 13]]]), plates: [plate('A', 272, 176)], doors: [gate('A', 448, 384)],
+  circuits: [panel('BACK', 528, 304, true, '预置备用线路', ['下方签名通道', '上方留守通道'])], lootLabel: '备用线路图',
+}, '搭档：原件一离柜，下一间的入口就会落锁。现在选备用线：上方靠人留守，下方靠持票签名。把回程也写进计划。', '备用线路已接好。原件离柜会关闭来路，下一间只保留你预置的回程条件。',
+['在取件之前选好回来走哪一条路。', 'BACK 两态分别保留上方留守门与下方签名门；开关在第一道门后。', '录 A 留守，穿下门到 BACK。保持上方方案，或按 E 改成下方方案，再取线路图到锚点。'],
+[...holdA, g(528, 432), g(528, 304), g(848, 304), g(848, 176), g(816, 176), g(848, 176), g(848, 432)]);
+backup.outcomes = [outcome('C6-4-north', '预置上方留守通道', '下一间从下方进入；取件锁住下门，靠左上方 A 留守打开上门返回。', 'BACK', true), outcome('C6-4-south', '预置下方签名通道', '下一间从上方进入；取件锁住上门，持票到内侧 L 签名后从下门返回。', 'BACK', false)];
+backup.alternatives = [[...holdA, g(528, 432), g(528, 304), e(), g(848, 304), g(848, 176), g(816, 176), g(848, 176), g(848, 432)]];
+
+const sealed = action('C6-4-b', '来路关上之后', {
+  loot: p(816, 432), exit: p(112, 432), walls: room([[14, [4, 5, 12, 13]]]), plates: [plate('A', 272, 176)],
+  circuits: [panel('ENTRY', 112, 432, true, '取件联锁'), panel('BACK', 112, 304, true, '已预置上方备用线')],
+  doors: [{ id: 'ENTRY', x: 448, y: 384, w: 32, h: 64, power: power('ENTRY') }, { ...gate('NORTH', 448, 128, 'A'), power: power('BACK') }],
+  onLoot: { power: [power('ENTRY', false)], message: '取件关闭下方 ENTRY；上方 NORTH 仍需要 A 留守。沿右侧向上，再从上门回左侧。' }, lootLabel: '抹除程序原件',
+}, '你：上方备用线已在。不能只看去拿原件时的门；让过去的我留在 A，接住来路关闭后的这一轮。', '原件取出，来路确实关闭。预先安排的留守者打开了另一条路。',
+['下方入口现在开着，上方 A 的意义在取件以后。', '先录 A，真人从下方进；取件后向上走，利用 NORTH 回左侧。', '录 A。真人下方取件，沿 x=848 到 y=176，穿上门回 x=112，再下行到锚点。'],
+[...holdA, g(816, 432), g(848, 432), g(848, 176), g(112, 176), g(112, 432)], 'C6-4-a');
+variant(sealed, 'C6-4-south', action('C6-4-b-south', '把签名带到回程', {
+  loot: p(816, 176), exit: p(112, 432), walls: room([[14, [4, 5, 12, 13]]]), plates: [plate('A', 272, 304)],
+  circuits: [panel('ENTRY', 112, 432, true, '取件联锁'), panel('BACK', 176, 432, false, '已预置下方备用线')],
+  terminals: [source(112, 176), lock(656, 432, { plate: 'A' })],
+  doors: [{ id: 'ENTRY', x: 448, y: 128, w: 32, h: 64, power: power('ENTRY') }, { ...signed(448, 384), power: power('BACK', false) }],
+  onLoot: { power: [power('ENTRY', false)], message: '取件关闭上方 ENTRY；持票到右下方 L 签名，A 同伙留守，打开下方 SIGNED 返回。' }, lootLabel: '抹除程序原件',
+}, '搭档：你选了下方备用线。S 的凭据必须随真人进去；拿到原件后，内侧 L 才是回家的钥匙。', '上门关闭后，你带着凭据完成内侧签名，从下方回到了锚点。',
+['上方是来路，下方是签名回程；L 在原件内侧。', 'A 负责远端核验，真人从 S 带票进去，在返回前完成 L。', '录 A 留守，真人到 S 取票，从上门取原件。去右下方 L 签名，再穿下门回左侧。'],
+[g(272, 432), g(272, 304), r(), g(112, 176), e(), g(816, 176), g(656, 176), g(656, 432), e(), g(112, 432)]));
+
+const recover = action('C6-4-c', '修复要发生在取件之后', {
+  loot: p(816, 432), exit: p(112, 432), walls: room([[14, [4, 5, 12, 13]]]),
+  circuits: [panel('ENTRY', 176, 432, true, '来路联锁'), panel('BACK', 112, 304, false, '备用线复位')],
+  doors: [{ id: 'ENTRY', x: 448, y: 384, w: 32, h: 64, power: power('ENTRY') }, { id: 'BACK', x: 448, y: 128, w: 32, h: 64, power: power('BACK') }],
+  onLoot: { power: [power('ENTRY', false), power('BACK', false)], message: '取件会同时断开 ENTRY 与 BACK。提前复位无效；让留在外侧的同伙在取件后接回 BACK。' }, exitPower: [power('BACK')], lootLabel: '联锁变更日志',
+}, '你：这一间会把备用线也重置。过去的我不能只做对的事，还得在正确的时候做。', '复位发生在断电以后，日志安全带出。馆方的取件联锁已成为可预先安排的步骤。',
+['取件会覆盖本帧更早的复位，先开一次 BACK 并不够。', '真人去取件；回声留在左侧 BACK，晚些才接通它。', '录下走到 BACK、等待约四秒、按 E 接通。下一轮真人直接下方取件，再从上方备用门返回左侧。'],
+[g(112, 304), w(240), e(), r(), g(816, 432), g(848, 432), g(848, 176), g(112, 176), g(112, 432)], 'C6-4-b');
+
+const crossCamera = (powerId?: string): GuardDefinition => ({ id: 'CAM', kind: 'camera', route: [p(688, 112)], facing: Math.PI / 2, speed: 0, range: 176, ...(powerId ? { power: power(powerId) } : {}) });
+const spare = action('C6-5-a', '少一个自己，多一次掠过', {
+  ...east, walls: room([[14, [5, 6, 12, 13]]]), plates: [plate('A', 176, 304), plate('B', 304, 400)],
+  doors: [{ id: 'WINDOW', x: 448, y: 160, w: 32, h: 64, window: [2, 5] }, { id: 'MANUAL', x: 448, y: 384, w: 32, h: 64, plates: ['A', 'B'], plateMode: 'all' }], guards: [crossCamera()], lootLabel: '匿名证人的封存索引', par: 0,
+}, '搭档：上方窗口不用同伙，但要短暂经过监控边缘。下方可留两名同伙，绕到视野外。两种安排都能完成，别把回声数量当成唯一答案。', '索引取得。你选择了自己的代价：少留同伙，或把经过监控的时间降为零。',
+['比较上方短窗口和下方双人门，摄像头只看正下方。', '上方快速穿过视野边缘不会立即报警；下方路线应沿右墙向上，保持在视野外。', '少回声：真人在 2–5 秒经过上门，沿 y=176 快速横穿。低暴露：分别录 A、B 留守，走下门，沿 x=848 取索引。'],
+[g(400, 432), g(400, 176), g(816, 176), g(848, 176), g(848, 432)]);
+spare.alternatives = [[g(176, 432), g(176, 304), r(), g(304, 432), g(304, 400), r(), g(528, 432), g(848, 432), g(848, 176), g(816, 176), g(848, 176), g(848, 432)]];
+
+const exposure = action('C6-5-b', '谁去关掉那只眼睛', {
+  loot: p(816, 432), exit: p(848, 432), walls: room([[14, [12, 13]]]), plates: [plate('A', 400, 432)], doors: [gate('A', 448, 384)],
+  circuits: [panel('CAM', 656, 176, true, '走廊摄像头')], guards: [{ ...crossCamera('CAM'), route: [p(688, 368)] }], lootLabel: '匿名证人保留的收据', par: 1,
+}, '你：只留一个开门的人，可以直接掠过走廊。再安排一个人去内侧关监控，就能在它失去视线之后取件。', '收据与索引一致。两种配合保住的是同一份证据，区别在同伙分工与暴露代价。',
+['摄像头从走廊上方看下来，CAM 操作点在门内上方。', '一名同伙守 A，真人快速横穿；或者第二名同伙先进内侧关闭 CAM，真人稍后通过。', '少回声：录 A，沿 y=432 一直通过。低暴露：录 A，再录从门内 x=528 上行到 CAM 并关闭的操作员；真人等约两秒再穿走廊。'],
+[g(400, 432), r(), g(816, 432), g(848, 432)], 'C6-5-a');
+exposure.alternatives = [[g(400, 432), r(), g(528, 432), g(528, 176), g(656, 176), e(), r(), w(120), g(816, 432), g(848, 432)]];
+
+const roles = action('C6-5-c', '一个人兼任，或两个人分担', {
+  ...east, walls: room([[14, [5, 6, 12, 13]]]), plates: [plate('A', 208, 176), plate('B', 304, 432)],
+  terminals: [source(112, 176), { id: 'R', kind: 'relay', x: 272, y: 400 }, lock(400, 176, { plate: 'A' })],
+  doors: [signed(), { id: 'MANUAL', x: 448, y: 384, w: 32, h: 64, plates: ['A', 'B'], plateMode: 'all' }], guards: [crossCamera()], lootLabel: '证人保留的第二份签名',
+}, '搭档：送件、值守可以由同一个过去完成；也可以把职责拆开，走人工通道。证人需要的是证据被带出来，不是你演一场最漂亮的戏。', '证人收据和两份签名归档。你已有足够独立的材料，下一场进市政厅核心，将取证、调度与交接串成整套方案。',
+['同一个回声交完凭据后还能到 A 值守；下门则需要 A、B 同时有人。', '兼任方案从上方持票通过监控边缘；分担方案由两名回声守开关，真人从下方沿右墙取件。', '兼任：录 S 取票、R 交付、A 留守；真人等 R 送达再接票，到 L 签名。分担：分别录 A、B，走下门与右墙。'],
+[g(112, 176), e(), g(272, 176), g(272, 400), e(), g(208, 400), g(208, 176), r(), g(272, 432), g(272, 400), w(180), e(), g(400, 400), g(400, 176), e(), g(816, 176), g(848, 176), g(848, 432)], 'C6-5-b');
+roles.alternatives = [[g(208, 432), g(208, 176), r(), g(304, 432), r(), g(528, 432), g(848, 432), g(848, 176), g(816, 176), g(848, 176), g(848, 432)]];
+
+const hallEntry = action('C6-6-a', '自己决定从哪里进去', {
+  ...east, walls: room([[14, [5, 6, 12, 13]]]), plates: [plate('A', 272, 304), plate('B', 176, 304), plate('C', 304, 400)],
+  circuits: [panel('ACCESS', 272, 432, true, '核心入口', ['双人检修', '持票认证'])], terminals: [source(112, 176), lock(400, 176, { plate: 'A', window: [2, 7] })],
+  doors: [{ ...signed(), power: power('ACCESS') }, { id: 'SERVICE', x: 448, y: 384, w: 32, h: 64, plates: ['B', 'C'], plateMode: 'all', power: power('ACCESS', false) }], lootLabel: '核心区审计章',
+}, '你：入口由我选，接下来怎样调度、怎样交接，也由我安排。先把完整后果看清楚，再开始。', '第一份回执已提交。接力终端或人工岗位将按你的入口方案开放。',
+['上方签名要在 2–7 秒核验；下方检修要两处同时留守。', '持票方案录 A，真人 S 取票、L 授权；检修方案录 B、C，真人改 ACCESS。', '认证：录 A，再到 S、L，走上门。检修：分别录 B、C，真人到 ACCESS 设为双人检修，走下门。'],
+[g(272, 432), g(272, 304), r(), g(112, 176), e(), g(400, 176), e(), g(816, 176), g(848, 176), g(848, 432)]);
+hallEntry.outcomes = [outcome('C6-6-certified', '凭据入口', '调度间开放定时 R 接力和签名内门；需要把送件安排在接收窗口。', 'ACCESS', true), outcome('C6-6-service', '人工入口', '调度间关闭终端，改用 A、B 两处值守与 Q 抑制控制。', 'ACCESS', false)];
+hallEntry.alternatives = [[g(176, 432), g(176, 304), r(), g(304, 432), g(304, 400), r(), g(272, 432), e(), g(528, 432), g(848, 432), g(848, 176), g(816, 176), g(848, 176), g(848, 432)]];
+
+const dispatchOptions = [outcome('C6-6-radio', '保留声响调度', '下一间可从上方广播引走巡逻者；取件会抑制下门同伙，真人需去内侧 N 恢复它。', 'RADIO', true), outcome('C6-6-manual', '切换人工停机', '下一间真人在外侧 T 关闭追踪、释放留守者；取件重启 T，改走预置的上方回程。', 'RADIO', false)];
+const dispatch = action('C6-6-b', '把钥匙交到调度间', {
+  loot: p(816, 176), exit: p(848, 464), walls: room([[22, [5, 6]]]), plates: [plate('A', 272, 432)], doors: [signed(704, 160)],
+  terminals: [source(112, 176), { id: 'R', kind: 'relay', x: 528, y: 304, window: [5, 7] }, lock(656, 176, { plate: 'A' })],
+  circuits: [panel('RADIO', 848, 304, true, '下一间安保调度', ['人工停机', '声响调度'])], lootLabel: '安保调度回执',
+}, '搭档：认证入口把 R 接通了，但它只在第五到第七秒接件。把送件者和接收者排进同一个窗口，再选择下一间怎样处理安保。', '调度回执已保存。保留广播或改成人工停机，会留下不同的取件与回程安排。',
+['R 的窗口同时约束交付与接收；交件者之后还要回到 A。', '送件录像可以延迟出场，真人先在 R 等候，到窗口内接票。', '录 S 取票、R 交付、A 留守，延迟约 1.5 秒。真人到 R 等到五秒左右接票，L 签名；取回执后在 RADIO 保持广播或切为人工。'],
+[g(112, 176), e(), g(528, 176), g(528, 304), e(), g(272, 304), g(272, 432), r(), { delay: 90, echo: 0 }, g(528, 432), g(528, 304), w(240), e(), g(656, 304), g(656, 176), e(), g(816, 176), g(848, 176), g(848, 304), g(848, 464)], 'C6-6-a');
+dispatch.outcomes = dispatchOptions;
+dispatch.alternatives = [[...dispatch.witness.slice(0, -1), e(), g(848, 464)]];
+const manualDispatch = action('C6-6-b-service', '把岗位留在调度间', {
+  loot: p(816, 176), exit: p(848, 464), par: 2, walls: room([[10, [12, 13]], [22, [5, 6]]]), plates: [plate('A', 208, 176), plate('B', 528, 432)], doors: [gate('A', 320, 384), gate('B', 704, 160)],
+  circuits: [panel('Q', 112, 432, true, '内侧抑制'), panel('RADIO', 848, 304, true, '下一间安保调度', ['人工停机', '声响调度'])], suppressors: [{ id: 'N', x: 480, y: 384, w: 96, h: 96, power: power('Q') }], lootLabel: '安保调度回执',
+}, '你：没有终端可借。把 A、B 两处岗位留稳，真人关 Q；进去之后还要决定下一间保留广播还是人工停机。', '人工岗位完成了调度室签入。下一间按 RADIO 回执安排安保与回程。',
+['两道门的留守关系不变，B 会被 Q 控制的抑制场影响。', '先让 A 打开第一道门，第二条录像到 B；真人关闭 Q 后通过。', '录 A，再录 B。真人在起点关 Q，穿两门取回执；在右侧 RADIO 选下一间方式，再去右下锚点。'],
+[g(208, 432), g(208, 176), r(), g(528, 432), r(), e(), g(656, 432), g(656, 176), g(816, 176), g(848, 176), g(848, 304), g(848, 464)]);
+manualDispatch.outcomes = dispatchOptions;
+manualDispatch.alternatives = [[...manualDispatch.witness.slice(0, -1), e(), g(848, 464)]];
+variant(dispatch, 'C6-6-service', manualDispatch);
+
+const deliveryOptions = [outcome('C6-6-manual-exit', '人工交接线', '最后一间用两处留守开门，真人关闭内侧摄像头；取件后还需回到外侧恢复 CIV。', 'DELIVERY', true), outcome('C6-6-signed-exit', '凭据交接线', '最后一间用一名送件兼留守者授权，穿过第五秒结束的扫描，再带件回外侧恢复 CIV。', 'DELIVERY', false)];
+const hallPickup = action('C6-6-c', '叫走守卫，还要接回同伙', {
+  loot: p(816, 432), exit: p(112, 432), par: 2, walls: room([[14, [4, 5, 12, 13]]], [], [[19, 7], [20, 7], [21, 7], [22, 7], [24, 2], [24, 3], [24, 4]]), plates: [plate('A', 400, 432)],
+  doors: [gate('A', 448, 384), { id: 'SERVICE', x: 448, y: 128, w: 32, h: 64, window: [0, 3] }], guards: [{ ...diversionGuard, searchSeconds: 3 }], soundMarkers: [{ id: 'N1', x: 656, y: 176 }],
+  circuits: [panel('N', 848, 304, false, '取件抑制联锁'), panel('DELIVERY', 528, 432, true, '最终交接线', ['凭据交接', '人工交接'])], suppressors: [{ id: 'NULL', x: 352, y: 384, w: 96, h: 96, power: power('N') }],
+  onLoot: { power: [power('N')], message: '取件会开启 N，A 同伙失效、下门关闭。真人去右侧 N 关闭抑制，再沿下方带件返回。' }, lootLabel: '中央总库责任清单',
+}, '搭档：广播保留着，能把守卫叫去上面。原件离柜会抑制开门的同伙；不要忘记给回程留一次真人操作。', '责任清单取出，同伙恢复，你回到了外侧。最后一段按 DELIVERY 回执接入中央总库。',
+['除了声响与 A 留守，取件后还要恢复 N；DELIVERY 决定最后一间的交接设施。', '第一条回声上方发声，第二条晚三秒到 A。真人先选 DELIVERY，取件后右上 N 复位，再返回下门。', '录上方 N1 发声并躲藏，另录 A 并延迟三秒。真人等三秒进下门，在 DELIVERY 选择交接方式；取清单后沿右侧去 N 关闭，再沿下方回左侧。'],
+[g(112, 176), g(656, 176), noise(), g(848, 176), g(848, 80), r(), g(400, 432), r(), { delay: 180, echo: 1 }, w(180), g(528, 432), g(816, 432), g(848, 432), g(848, 304), e(), g(848, 432), g(400, 432), g(112, 432)], 'C6-6-b');
+hallPickup.outcomes = deliveryOptions;
+hallPickup.alternatives = [[...hallPickup.witness.slice(0, 11), e(), ...hallPickup.witness.slice(11)]];
+const manualPickup = action('C6-6-c-manual', '让重启变成另一扇门', {
+  loot: p(816, 432), exit: p(112, 176), walls: room([[14, [4, 5, 12, 13]]]), plates: [plate('A', 400, 432)],
+  circuits: [panel('T', 112, 176, true, '追踪与回程分流'), panel('DELIVERY', 528, 432, true, '最终交接线', ['凭据交接', '人工交接'])],
+  doors: [gate('A', 448, 384), { id: 'RETURN', x: 448, y: 128, w: 32, h: 64, power: power('T') }],
+  guards: [{ id: 'TR', kind: 'tracker', route: [p(688, 432)], facing: Math.PI, speed: 0, range: 350, hearing: 500, searchSeconds: 1.5, traceSeconds: 1.5, power: power('T') }],
+  suppressors: [{ id: 'MANUAL', x: 64, y: 128, w: 96, h: 96 }, { id: 'KEEPER', x: 352, y: 384, w: 96, h: 96, power: power('T') }],
+  onLoot: { power: [power('T')], message: '取件重启 T：A 回声失效、下门关闭，上方 RETURN 同时打开。真人不被追踪器识别，从上门撤离。' }, lootLabel: '中央总库责任清单',
+}, '你：人工方案先由我停 T，放同伙开下门。取件后 T 重启，同时开上门；那时同伙被隐藏，而我可以从它眼前走过。', '追踪器重启时，看不见被抑制的同伙，也不识别真人。你带着责任清单从预置上门离开。',
+['T 同时控制追踪、A 的抑制与上方回程门，取件会将它重新接通。', '录 A，真人去左上 T 断电，再返回下方穿门。取件后不要重走下门。', '录到 A 留守。真人左上关 T，经下方门选 DELIVERY、取清单；沿右侧向上，再穿 RETURN 回左上锚点。'],
+[g(400, 432), r(), g(112, 176), e(), g(112, 432), g(528, 432), g(816, 432), g(848, 432), g(848, 176), g(112, 176)]);
+manualPickup.outcomes = deliveryOptions;
+manualPickup.alternatives = [[...manualPickup.witness.slice(0, 6), e(), ...manualPickup.witness.slice(6)]];
+variant(hallPickup, 'C6-6-manual', manualPickup);
+
+const hallExit = action('C6-6-d', '留人、关眼睛、恢复城市', {
+  loot: p(816, 176), exit: p(112, 432), par: 2, walls: room([[10, [12, 13]], [20, [5, 6]]]), plates: [plate('A', 208, 176), plate('B', 528, 432)], doors: [gate('A', 320, 384), gate('B', 640, 160)],
+  circuits: [panel('CAM', 592, 432, true, '内侧监控'), panel('CIV', 112, 304, true, '民用验证线路')], guards: [crossCamera('CAM')],
+  onLoot: { power: [power('CIV', false)], message: '取件会断开 CIV。带件返回左侧，亲手接回民用验证线路后才能完成交接。' }, exitPower: [power('CIV')], lootLabel: '中央总库传输地址',
+}, '搭档：人工交接线需要两处值守，内侧监控由真人关掉。取出传输地址会断开 CIV，带件回来以后，别让城市替我们的行动付账。', '市政厅的独立记录、责任清单与传输地址齐了，CIV 已恢复。你：下一次我们不再只把东西偷出来。把证据送到他们无法单独抹去的地方，然后去旧渡口见你。',
+['A 为 B 开门，B 为真人开内门；CAM 要先关，CIV 要在取件后恢复。', '两条回声分别留守 A、B，真人在右下 CAM 断电，再取地址并沿原路带回左侧。', '录 A，再录 B。真人进外门到 CAM 关闭监控，经上方 B 门取件；返回 B、A 两门后，到左侧 CIV 按 E 恢复，回锚点。'],
+[g(208, 432), g(208, 176), r(), g(528, 432), r(), g(592, 432), e(), g(592, 176), g(816, 176), g(592, 176), g(592, 432), g(112, 432), g(112, 304), e(), g(112, 432)], 'C6-6-c');
+variant(hallExit, 'C6-6-signed-exit', action('C6-6-d-signed', '让一份凭据完成交接', {
+  loot: p(816, 176), exit: p(112, 432), walls: room([[14, [5, 6]]]), plates: [plate('A', 208, 176)], doors: [signed()],
+  terminals: [source(112, 176), { id: 'R', kind: 'relay', x: 272, y: 400 }, lock(400, 176, { plate: 'A' })],
+  scanners: [{ id: 'SCAN', x: 640, y: 128, w: 32, h: 96, period: 12, active: [0, 5] }], circuits: [panel('CIV', 112, 304, true, '民用验证线路')],
+  onLoot: { power: [power('CIV', false)], message: '取件会断开 CIV。按原签名通道带件返回，接回外侧 CIV 才能完成交接；扫描第五秒结束。' }, exitPower: [power('CIV')], lootLabel: '中央总库传输地址',
+}, '你：凭据交接线只需一个送件兼留守的人。先把唯一凭据接稳，等扫描结束，再带地址回来恢复 CIV。', '一份凭据串起了全部核验，CIV 已恢复。市政厅的独立记录与责任清单指向中央总库。你：把证据送到他们无法单独抹去的地方，然后去旧渡口见你。',
+['同一名回声交件后守 A；真人接票、授权、穿过扫描，最后恢复 CIV。', '扫描到第五秒结束，接力已经消耗了一部分时间；进入光带前确认空档。', '录 S 取票、R 交件、A 留守。真人在 R 等件接收，到 L 签名，等扫描结束后取地址；原路回到左侧 CIV 恢复，再到锚点。'],
+[g(112, 176), e(), g(272, 176), g(272, 400), e(), g(208, 400), g(208, 176), r(), g(272, 432), g(272, 400), w(160), e(), g(400, 400), g(400, 176), e(), g(592, 176), g(816, 176), g(112, 176), g(112, 304), e(), g(112, 432)]));
+
 export const CHAPTER_SIX: Mission[] = [
   { id: 'C6-1', chapter: '自己写作案计划', title: '正门还是检修口', summary: '选择入口，也选择下一间可用的设施；成功后才提交，锚点允许重选。', evidence: '两条入口汇合的市政厅内部索引', stages: [entry, entryAfter] },
   { id: 'C6-2', chapter: '自己写作案计划', title: '先救谁的时间', summary: '先取记录或先接通信，让先得到的证明帮助核验另一份。', evidence: 'B-17 活着的双重证明与旧渡口地址', stages: [order, recordsFirst, contact] },
   { id: 'C6-3', chapter: '自己写作案计划', title: '留灯还是留门', summary: '供电结果带到下一间：终端与监控，或通道与黑暗。', evidence: '互相印证的签名副本与设备时间戳', stages: [grid, gridAfter, verify] },
+  { id: 'C6-4', chapter: '自己写作案计划', title: '计划赶不上自己', summary: '取件锁住来路，让事先安排的备用门与延后复位接住回程。', evidence: '抹除程序原件与取件联锁变更日志', stages: [backup, sealed, recover] },
+  { id: 'C6-5', chapter: '自己写作案计划', title: '不只一种完美', summary: '同一份证据，少回声或低暴露，自己选择配合的代价。', evidence: '匿名证人的索引、收据与第二份签名', stages: [spare, exposure, roles] },
+  { id: 'C6-6', chapter: '自己写作案计划', title: '市政厅不眠夜', summary: '四段完整劫案：选择入口、安保调度与交接设施，取出责任清单并恢复民用线路。', evidence: '可互相核验的责任清单与中央总库传输地址', stages: [hallEntry, dispatch, hallPickup, hallExit] },
 ];

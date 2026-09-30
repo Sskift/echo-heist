@@ -652,7 +652,12 @@
           "targetMinutes": 18,
           "requiredActionZones": 3,
           "mandatory": true,
-          "implemented": false
+          "implemented": true,
+          "runtimeStageIds": [
+            "C6-4-a",
+            "C6-4-b",
+            "C6-4-c"
+          ]
         },
         {
           "id": "C6-5",
@@ -662,7 +667,12 @@
           "targetMinutes": 19,
           "requiredActionZones": 3,
           "mandatory": true,
-          "implemented": false
+          "implemented": true,
+          "runtimeStageIds": [
+            "C6-5-a",
+            "C6-5-b",
+            "C6-5-c"
+          ]
         },
         {
           "id": "C6-6",
@@ -672,7 +682,13 @@
           "targetMinutes": 26,
           "requiredActionZones": 4,
           "mandatory": true,
-          "implemented": false
+          "implemented": true,
+          "runtimeStageIds": [
+            "C6-6-a",
+            "C6-6-b",
+            "C6-6-c",
+            "C6-6-d"
+          ]
         }
       ]
     },
@@ -746,9 +762,9 @@
     }
   ],
   "implementation": {
-    "version": "0.8.1",
-    "mainMissions": 39,
-    "mainActionZones": 104,
+    "version": "0.9.0",
+    "mainMissions": 42,
+    "mainActionZones": 114,
     "mechanicProbes": 4,
     "mainDurationMeasured": false
   }
