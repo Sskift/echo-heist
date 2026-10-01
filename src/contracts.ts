@@ -10,7 +10,9 @@ const integer = (v: unknown, min: number, max: number): v is number => Number.is
 
 export class ContractBook {
   private data: ContractSave = {version:1,rotation:0,inContracts:false,scores:{}};
-  private committed = new WeakMap<Game, number>();
+  // Each world reset creates a new recording. Displayed attempt numbers can
+  // restart at one when a player clears a plan, so they are not run identities.
+  private committed = new WeakSet<Game['recording']>();
   constructor(save: unknown, private canEnter: () => boolean) {
     if (!save || typeof save !== 'object') return;
     const raw = save as Partial<ContractSave>;
@@ -43,11 +45,11 @@ export class ContractBook {
   commit(game: Game): boolean {
     const c=this.active;
     if (!this.inContracts || !c || game.level!==c.stage.level || game.status!=='won' || game.spectator || game.editingIndex!==null
-      || !game.objectiveComplete || !game.exitReady || game.echoes.length>game.echoLimit || this.committed.get(game)===game.attempts) return false;
+      || !game.objectiveComplete || !game.exitReady || game.echoes.length>game.echoLimit || this.committed.has(game.recording)) return false;
     const last={frames:game.frame,echoes:game.echoes.length}, before=this.data.scores[c.id];
     this.data.scores[c.id]={completions:Math.min(1_000_000,(before?.completions??0)+1),
       fastestFrames:Math.min(before?.fastestFrames??MAX_FRAMES,last.frames), fewestEchoes:Math.min(before?.fewestEchoes??3,last.echoes), last};
-    this.committed.set(game,game.attempts); return true;
+    this.committed.add(game.recording); return true;
   }
   export(): ContractSave { return structuredClone(this.data); }
 }

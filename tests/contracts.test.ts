@@ -57,6 +57,12 @@ test('only successful active runs score; fastest time and fewest echoes are inde
   const preview=finish(80,0); preview.spectator=true; assert.equal(book.commit(preview),false);
   const wrong=finish(80,0); wrong.level=CONTRACTS[0].stage.level; assert.equal(book.commit(wrong),false);
   lean.restart(); assert.equal(book.commit(lean),false);
+  const displayedAttempt=fast.attempts;
+  fast.clear(); fast.start(); fast.hasLoot=true; fast.frame=199; fast.step({x:0,y:0,lure:false});
+  assert.equal(fast.attempts,displayedAttempt,'clearing restarts the displayed counter');
+  assert.equal(book.commit(fast),true,'a fresh successful recording must settle even with the same displayed attempt');
+  assert.equal(book.commit(fast),false); assert.equal(book.score(c.id)?.completions,3);
+  assert.equal(book.score(c.id)?.fastestFrames,120); assert.equal(book.score(c.id)?.fewestEchoes,0);
   const save=book.export(); const restored=new ContractBook(save,()=>true); assert.deepEqual(restored.export(),save);
   save.scores[c.id].fastestFrames=-1; assert.equal(new ContractBook(save,()=>true).score(c.id),undefined);
   book.leave(); assert.equal(book.commit(finish(90,0)),false);
