@@ -2,8 +2,8 @@ import type { GameEvent, Status } from './engine.ts';
 import type { Level } from './levels.ts';
 import { SOUNDTRACK, type TrackId } from './soundtrack.ts';
 
-export const AUDIO_KEY = 'echo-heist-audio-v1';
-export type AudioSettings = { enabled: boolean; music: number; effects: number; adaptive: boolean };
+const AUDIO_KEY = 'echo-heist-audio-v1';
+type AudioSettings = { enabled: boolean; music: number; effects: number; adaptive: boolean };
 const defaults: AudioSettings = { enabled: false, music: 0.5, effects: 0.75, adaptive: true };
 const volume = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : fallback;
 

@@ -9,7 +9,7 @@ export type Status = 'ready' | 'running' | 'paused' | 'caught' | 'won';
 export type OperationResult = 'success' | 'blocked' | 'waiting' | 'cancelled' | 'ignored';
 export type OperationRecord = { frame: number; actor: string; label: string; intent: Intent; result: OperationResult; reason: string; point: Point };
 type OperationRequest = { id: string; label: string; at: Frame; intent: Intent };
-export type Guard = Point & { angle: number; waypoint: number; investigate: Point | null; attention: number; suspicion: number; path?: Point[]; pathKey?: string; seenActor?: string; searching?: boolean; trace?: { at: Point; actor: string; label: string; remaining: number } };
+type Guard = Point & { angle: number; waypoint: number; investigate: Point | null; attention: number; suspicion: number; path?: Point[]; pathKey?: string; seenActor?: string; searching?: boolean; trace?: { at: Point; actor: string; label: string; remaining: number } };
 export type GameEvent = 'start' | 'rewind' | 'door' | 'loot' | 'deposit' | 'receipt' | 'lure' | 'caught' | 'won' | 'tick' | 'full' | 'plan';
 
 const SPEED = 224;
@@ -564,7 +564,7 @@ export class Game {
     this.noise.push({ ...at, life: 1 });
     this.events.push('lure');
     if (this.level.noiseResponse === 'nearest') this.pendingNoise.push({ x: at.x, y: at.y });
-    else for (const [index, guard] of this.guards.entries()) if (this.hears(index, at)) this.investigate(index, at);
+    else for (const index of this.guards.keys()) if (this.hears(index, at)) this.investigate(index, at);
   }
 
   guardName(index: number): string { return this.level.guards[index].id ?? String(index + 1); }

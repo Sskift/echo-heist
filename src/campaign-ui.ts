@@ -1,6 +1,6 @@
 import type { Game } from './engine.ts';
 import { FPS, MAX_FRAMES } from './levels.ts';
-import { MISSIONS, stageVersions } from './campaign-content.ts';
+import { MISSIONS } from './campaign-content.ts';
 import type { Campaign } from './campaign.ts';
 import './campaign.css';
 
@@ -30,7 +30,6 @@ export class CampaignUI {
     $('#echo-slots').insertAdjacentHTML('afterend', '<div id="echo-delays" class="echo-delays"></div>');
     $('.rehearsal-toolbar').insertAdjacentHTML('afterend', '<details id="delivery-panel" class="security-panel power-panel" hidden><summary>证据植入与送达回执 <span>＋</span></summary><p>真人携带证据到植入点按 E，提交时检查列出的条件。回声可以配合开门、授权和引导调查，但不能替代真人植入。需要回执时，指定守卫必须到植入点搜索发现副本，再返回标记的登记点；巡逻路过、远处听见或只读预演均不算送达。</p><p id="delivery-status" role="status"></p><ul id="delivery-requirements" aria-label="植入条件与回执"></ul><p id="delivery-consequence"></p></details>');
     $('.rehearsal-toolbar').insertAdjacentHTML('afterend', '<div id="credential-strip" class="credential-strip" hidden><strong id="credential-owner"></strong><span id="credential-event"></span></div><details id="relay-panel" class="security-panel relay-panel" hidden><summary>凭据与交接时段 <span>＋</span></summary><p>凭据只有一份，金色标记表示持有者。先交付、再接收、最后授权；授权后仍持有凭据。普通终端只处理按键那一刻，留候终端可按一次 E 后站在圈内等送件；离开或投影受抑制就取消。多人同时接收会取消本次请求，不会复制凭据。</p><ul id="relay-status" aria-label="交接状态"></ul><p>实体原件仍需真人取走。预演只播放已保存回声，不包含真人送件。</p></details>');
-    $('.hint').insertAdjacentHTML('afterend', '<details class="hint evidence"><summary>已取得的线索 <span>＋</span></summary><div id="evidence-list"></div></details>');
     $('#preview-panel').insertAdjacentHTML('afterend', '<details id="security-panel" class="security-panel" hidden><summary>安保响应规则 <span>＋</span></summary><p id="security-rule"></p><ul id="security-status" aria-label="守卫状态"></ul><p>地图圆圈为参考响点；其他位置同样可以发声。方框标记的固定哨兵不响应诱饵。单位格与地图网格一致。</p></details>');
     $('#security-panel').insertAdjacentHTML('beforebegin', '<details id="power-panel" class="security-panel power-panel" hidden><summary>电路与行动条件 <span>＋</span></summary><p>在面板旁按 E，录下的是指定状态；重复相同请求不会反复切换。同帧相反请求会取消。连线显示门禁、监控与照明的供电关系。</p><ul id="power-status" aria-label="电路状态"></ul><p id="power-objectives"></p><p id="power-consequence" class="power-consequence"></p></details>');
     $('#power-panel').insertAdjacentHTML('beforebegin', '<details id="suppression-panel" class="security-panel suppression-panel" hidden><summary>抑制范围与恢复时刻 <span>＋</span></summary><p>紫色网格只影响回声，真人仍可操作。回声继续沿原录像移动：暂时不能压开关、操作、交接或发声，也不会被安保看见。凭据仍归原持有人。离场或场关闭后恢复当前动作，错过的 E 不会补发；被取消的留候需要重新按 E。</p><ul id="suppression-status" aria-label="抑制状态"></ul><p>重叠区域中，只要有一层开启，投影就仍然失效。用预演检查同伙恢复的位置与时刻。</p></details>');
@@ -158,7 +157,7 @@ export class CampaignUI {
       $('#campaign-summary').textContent = campaignMode ? `${mission.chapter} · ${mission.title}` : '原型演习 · 三种基本配合';
       $('#mission-cards').innerHTML = [...new Set(MISSIONS.map(m => m.chapter))].map(chapter => `<details class="chapter-group" ${chapter === mission.chapter ? 'open' : ''}><summary>${chapter === '序章' ? 'C0 / 昨天的搭档' : chapter === '机制试验' ? '机制试验 / 后续章节的可玩样例' : `${MISSIONS.find(m => m.chapter === chapter)!.id.split('-')[0]} / ${chapter}`}<span>${MISSIONS.filter(m => m.chapter === chapter && this.campaign.data.completed.includes(m.id)).length} / ${MISSIONS.filter(m => m.chapter === chapter).length}</span></summary><div class="mission-grid">${MISSIONS.filter(m => m.chapter === chapter).map(m => {
         const complete = this.campaign.data.completed.includes(m.id), available = this.campaign.available(m.id);
-        return `<button class="mission-card ${m.id === mission.id && campaignMode ? 'current' : ''}" data-mission="${m.id}" ${!available ? 'disabled' : ''}><span>${complete ? '✓ 已完成' : available ? `${m.stages.length} 段行动` : '完成前一任务解锁'}</span><strong>${m.title}</strong><small>${m.summary}</small></button>`;
+        return `<button class="mission-card ${m.id === mission.id && campaignMode ? 'current' : ''}" data-mission="${m.id}" ${!available ? 'disabled' : ''}><span>${complete ? '✓ 已完成' : available ? `${m.stages.length} 段行动` : '完成前一任务解锁'}</span><strong>${available ? m.title : '未解锁的行动'}</strong><small>${available ? m.summary : '抵达之后，任务与线索才会揭晓。'}</small></button>`;
       }).join('')}</div></details>`).join('');
       if (campaignMode && stageIndex >= 0) {
         const stage = this.campaign.stageAt(stageIndex);
@@ -167,9 +166,6 @@ export class CampaignUI {
         $('#story-line').textContent = game.status === 'won' ? stage.result : stage.story;
         $('#stage-rail').innerHTML = mission.stages.map((s, i) => `<button data-stage="${i}" ${i > this.campaign.stageIndex ? 'disabled' : ''} ${i === stageIndex ? 'aria-current="step"' : ''} title="回到该锚点；其后阶段将重新规划"><span>${i < this.campaign.cleared() ? '✓' : String(i + 1).padStart(2, '0')}</span>${i > this.campaign.stageIndex && s.variants?.length ? '下一段 · 依所选方案' : this.campaign.stageAt(i).level.title}</button>`).join('');
       }
-      $('#evidence-list').innerHTML = MISSIONS.filter(m => m.chapter !== '机制试验' && this.campaign.data.completed.includes(m.id)).map(m => `<p>◇ ${m.evidence}</p>`).join('') || '<p>完成主线任务后，线索会保存在这里。</p>';
-      const endings = MISSIONS.flatMap(m => m.stages.flatMap(stageVersions)).flatMap(s => s.ending && this.campaign.data.endings?.includes(s.ending.id) ? [s.ending] : []);
-      if (endings.length) $('#evidence-list').insertAdjacentHTML('beforeend', `<div class="ending-ledger"><p>已完成的收束</p>${endings.map(e => `<p>◇ ${e.title}</p>`).join('')}</div>`);
     }
     const delayKey = `${!!preview}:${game.level.id}:${game.editingIndex}:${game.echoes.map(e => `${e.colorIndex}:${e.frames.length}:${e.delay ?? 0}`).join(',')}`;
     if (delayKey !== this.delayKey) {

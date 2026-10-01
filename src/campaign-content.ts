@@ -7,7 +7,6 @@ import { CHAPTER_FOUR } from './chapter-four.ts';
 import { CHAPTER_FIVE } from './chapter-five.ts';
 import { CHAPTER_SIX } from './chapter-six.ts';
 import { CHAPTER_SEVEN } from './chapter-seven.ts';
-export { room } from './campaign-authoring.ts';
 
 export type WitnessAction = { go: [number, number] } | { wait: number } | { press: 'interact' | 'lure' } | { record: true } | { delay: number; echo: number } | { remove: number };
 export type Outcome = { id: string; label: string; consequence: string; power: Power };
@@ -153,4 +152,3 @@ INITIAL_MISSIONS.find(m => m.id === 'C0-6')!.stages[1].alternatives = [[
 export const MISSIONS: Mission[] = [...INITIAL_MISSIONS.filter(m => m.id.startsWith('C0-')), ...CHAPTER_ONE, ...CHAPTER_TWO, ...CHAPTER_THREE, ...CHAPTER_FOUR, ...CHAPTER_FIVE, ...CHAPTER_SIX, ...CHAPTER_SEVEN, ...INITIAL_MISSIONS.filter(m => m.id.startsWith('LAB-'))];
 
 export const CAMPAIGN_LEVELS = MISSIONS.flatMap(m => m.stages.flatMap(s => stageVersions(s).map(v => v.level)));
-export const canonicalZoneId = (id: string): string => MISSIONS.flatMap(m => m.stages).find(s => stageVersions(s).some(v => v.level.id === id))?.level.id ?? id;

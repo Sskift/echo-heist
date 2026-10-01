@@ -2,7 +2,7 @@ import type { Echo, Frame } from './engine.ts';
 import { HEIGHT, MAX_ECHOES, MAX_FRAMES, WIDTH } from './levels.ts';
 
 // Bump this version when a level's geometry or replay semantics change.
-export const PLAN_VERSION = 2;
+const PLAN_VERSION = 2;
 export const PLAN_KEY = 'echo-heist-plans-v1';
 export type SavedPlan = { version: number; levelId: string; echoes: Echo[] };
 

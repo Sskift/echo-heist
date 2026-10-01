@@ -2,7 +2,7 @@ import type { Game } from './engine.ts';
 import { MISSIONS, resolveStage, stageVersions, type Mission, type Stage } from './campaign-content.ts';
 
 export const CAMPAIGN_KEY = 'echo-heist-campaign-v1';
-export type CampaignSave = { version: 1; selected: string; runs: Record<string, string[]>; completed: string[]; outcomes?: Record<string, string>; endings?: string[] };
+type CampaignSave = { version: 1; selected: string; runs: Record<string, string[]>; completed: string[]; outcomes?: Record<string, string>; endings?: string[] };
 
 export class Campaign {
   data: CampaignSave = { version: 1, selected: MISSIONS[0].id, runs: {}, completed: [], outcomes: {}, endings: [] };

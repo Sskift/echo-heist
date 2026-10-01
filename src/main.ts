@@ -6,10 +6,10 @@ import { Renderer } from './render.ts';
 import { Sound } from './audio.ts';
 import { MediaUI } from './media-ui.ts';
 import { decodePlan, encodePlan, PLAN_KEY, type SavedPlan } from './plans.ts';
-import { CAMPAIGN_LEVELS, MISSIONS, canonicalZoneId } from './campaign-content.ts';
+import { CAMPAIGN_LEVELS } from './campaign-content.ts';
 import { Campaign, CAMPAIGN_KEY } from './campaign.ts';
 import { CampaignUI } from './campaign-ui.ts';
-import { PlaytestUI } from './playtest-ui.ts';
+import { StoryUI } from './story-ui.ts';
 import { EndingUI } from './ending-ui.ts';
 import { OperationUI, operationText } from './operation-ui.ts';
 
@@ -27,13 +27,13 @@ const icons = {
 };
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector<T>(selector)!;
-let saved: Record<string, { echoes: number; seconds: number }> = {};
+const completedTraining = new Set<string>();
 try {
   const raw = JSON.parse(localStorage.getItem('echo-heist-progress-v1') ?? '{}');
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-    for (const level of ALL_LEVELS) {
+    for (const level of LEVELS) {
       const record = raw[level.id];
-      if (record && Number.isFinite(record.echoes) && Number.isFinite(record.seconds)) saved[level.id] = record;
+      if (record === true || (record && Number.isFinite(record.echoes) && Number.isFinite(record.seconds))) completedTraining.add(level.id);
     }
   }
 } catch { /* Storage can be unavailable in private browser contexts. */ }
@@ -52,13 +52,13 @@ try {
 $('#app').innerHTML = `
   <header class="site-header">
     <a class="brand" href="./" aria-label="ECHO HEIST 首页"><span class="brand-symbol">${icons.echo}</span><span>ECHO HEIST<span class="brand-cn">回声劫案</span></span></a>
-    <div class="header-note"><span class="status-dot"></span> A SOLO CO-OP HEIST <span class="version">VOL. 02</span></div>
+    <div class="header-note"><span class="status-dot"></span> A SOLO CO-OP HEIST <span class="version">VOL. 14.0</span></div>
     <button class="text-button" id="help-button">行动手册 <span class="key">?</span></button>
   </header>
   <main>
     <section class="intro">
       <div><p class="eyebrow">12 SECONDS. THREE ECHOES. ONE PERFECT HEIST.</p><h1>你的同伙，是过去的你<span>。</span></h1></div>
-      <nav class="level-nav" aria-label="选择关卡">${LEVELS.map((level, i) => `<button class="level-tab" data-level="${i}"><span class="tab-number">${level.id}</span><span>${level.title}</span><span class="level-check" aria-label="已完成">${saved[level.id] ? '✓' : ''}</span></button>`).join('')}</nav>
+      <nav class="level-nav" aria-label="选择关卡">${LEVELS.map((level, i) => `<button class="level-tab" data-level="${i}"><span class="tab-number">${level.id}</span><span>${level.title}</span><span class="level-check" aria-label="已完成">${completedTraining.has(level.id) ? '✓' : ''}</span></button>`).join('')}</nav>
     </section>
     <div class="game-layout">
       <section class="console" aria-label="游戏区域">
@@ -129,29 +129,22 @@ const campaignUI = new CampaignUI(campaign, {
     }
   },
 });
+const storyUI = new StoryUI(campaign, () => {
+  clearInput(); accumulator = 0;
+  if (game.status === 'running') game.togglePause();
+}, () => { clearInput(); accumulator = 0; refreshUI(); }, () => {
+  sound.enabled = !sound.enabled; sound.unlock(); mediaUI.render(); return sound.enabled;
+}, () => sound.enabled);
 const operationUI = new OperationUI(() => { clearInput(); if (game.status === 'running') { game.togglePause(); refreshUI(); } });
-$('#mission-board').addEventListener('toggle', () => {
-  if ($<HTMLDetailsElement>('#mission-board').open && game.status === 'running') { game.togglePause(); clearInput(); refreshUI(); }
-});
-$('#security-panel').addEventListener('toggle', () => {
-  if ($<HTMLDetailsElement>('#security-panel').open && game.status === 'running') { game.togglePause(); clearInput(); refreshUI(); }
-});
-$('#power-panel').addEventListener('toggle', () => {
-  if ($<HTMLDetailsElement>('#power-panel').open && game.status === 'running') { game.togglePause(); clearInput(); refreshUI(); }
-});
-$('#relay-panel').addEventListener('toggle', () => {
-  if ($<HTMLDetailsElement>('#relay-panel').open && game.status === 'running') { game.togglePause(); clearInput(); refreshUI(); }
-});
-$('#suppression-panel').addEventListener('toggle', () => {
-  if ($<HTMLDetailsElement>('#suppression-panel').open && game.status === 'running') { game.togglePause(); clearInput(); refreshUI(); }
-});
-$('#delivery-panel').addEventListener('toggle', () => {
-  if ($<HTMLDetailsElement>('#delivery-panel').open && game.status === 'running') { game.togglePause(); clearInput(); refreshUI(); }
-});
+for (const selector of ['#mission-board', '#security-panel', '#power-panel', '#relay-panel', '#suppression-panel', '#delivery-panel']) {
+  $(selector).addEventListener('toggle', () => {
+    if ($<HTMLDetailsElement>(selector).open && game.status === 'running') { game.togglePause(); clearInput(); refreshUI(); }
+  });
+}
 $('#touch-lure').insertAdjacentHTML('afterend', '<button class="touch-lure" id="touch-interact">E 操作设备</button>');
 $('.clock-panel').insertAdjacentElement('afterend', $('.mission-actions'));
 $('#hint-text').insertAdjacentHTML('afterend', '<button id="more-hint" class="more-hint" hidden>再给一点提示</button>');
-$('#more-hint').addEventListener('click', () => { hintStep++; renderHint(); playtesting.event('hint', `tier ${hintStep + 1}`); });
+$('#more-hint').addEventListener('click', () => { hintStep++; renderHint(); });
 function renderHint() {
   const hints = game.level.hints ?? [game.level.hint];
   hintStep = Math.min(hintStep, hints.length - 1);
@@ -159,10 +152,7 @@ function renderHint() {
   $('#more-hint').hidden = hintStep >= hints.length - 1;
   $('#more-hint').textContent = `再给一点提示（${hintStep + 1} / ${hints.length}）`;
 }
-$('.version').textContent = 'VOL. 13.0';
 $('.manual-steps').insertAdjacentHTML('beforeend', '<li><strong>安排一场完整劫案</strong><p>行动档案中的序章会逐步解锁。每段成功后保存安全锚点，下一段重新录制同伙。点击阶段名称可以回退；之后的阶段需要重做。</p></li><li><strong>调整时序，先看结果</strong><p>回声下方的加减按钮以 0.25 秒调整出场；按 P 预演已保存的回声，拖动时间检查门禁与暴露。E 操作电源和凭据终端，录制会保留这次操作请求。轨道上的 ✓ 表示完成，× 表示受阻或留候取消；点击标记会暂停并显示时间、操作者和原因。「操作记录」保留本轮结果，可只看问题项。预演没有真人送件，结果可能与实际行动不同。</p></li>');
-const playtesting = new PlaytestUI(() => ({ zoneId: canonicalZoneId(game.level.id), missionId: campaignMode ? campaign.mission.id : game.level.id, phase: dialog.open ? 'help' : previewGame ? 'rehearsal' : game.status === 'running' ? 'execution' : 'planning' }), () => { if (game.status === 'running') game.togglePause(); clearInput(); });
-$('.hint').addEventListener('toggle', () => { if ($<HTMLDetailsElement>('.hint').open) playtesting.event('hint', `tier ${hintStep + 1}`); });
 
 function saveCampaign() {
   try { localStorage.setItem(CAMPAIGN_KEY, JSON.stringify(campaign.export())); campaignUI.checkpointSaved(true); }
@@ -174,6 +164,7 @@ function openMission(id: string, replay = true) {
   if (replay && campaign.cleared() === campaign.mission.stages.length) campaign.returnTo(0);
   campaignMode = true; levelIndex = -1;
   loadLevel(campaign.stage.level); saveCampaign();
+  storyUI.arrive();
 }
 
 function togglePreview() {
@@ -246,7 +237,8 @@ function loadLevel(level: Level) {
 
 function primaryAction() {
   sound.unlock();
-  if (campaignMode && campaign.ending && ['ready', 'won'].includes(game.status)) { clearInput(); endingUI.show(campaign.ending); return; }
+  if (campaignMode && campaign.ending && ['ready', 'won'].includes(game.status)) { clearInput(); endingUI.show(campaign.ending, storyUI.state.endingNote()); return; }
+  if (campaignMode && game.status === 'ready' && campaign.cleared() === campaign.mission.stages.length && campaign.nextMission) { openMission(campaign.nextMission.id); return; }
   if (game.status === 'ready') game.start();
   else if (game.status === 'paused') game.togglePause();
   else if (game.status === 'caught') game.restart();
@@ -263,12 +255,12 @@ function primaryAction() {
     else setLevel(0);
   }
   accumulator = 0;
-  focusGame();
+  if (!storyUI.open) focusGame();
 }
 
 function record() {
   sound.unlock();
-  if (game.status === 'ready') { game.start(); focusGame(); return; }
+  if (game.status === 'ready') { primaryAction(); return; }
   if (game.status === 'running') {
     const editing = game.editingIndex !== null;
     if (game.rewind()) { accumulator = 0; clearInput(); toast(editing ? '新路线已替换。按 Z 可撤销这次修改。' : '回声已就位。现在，和过去的自己合作。'); }
@@ -377,6 +369,9 @@ function refreshUI() {
     if (game.status === 'ready' && campaignMode && campaign.ending) {
       eyebrow = 'STORY COMPLETE'; title = '回声劫案 · 已完成'; copy = campaign.ending.title;
       action = '前往旧渡口'; extra = '<p class="overlay-footnote">尾声已保存 · 可回到最终选择锚点</p>';
+    } else if (game.status === 'ready' && campaignMode && campaign.cleared() === campaign.mission.stages.length && campaign.nextMission) {
+      eyebrow = 'EVIDENCE SECURED'; title = `${campaign.mission.title} · 完成`; copy = campaign.mission.evidence;
+      action = `下一任务：${campaign.nextMission.title}`;
     } else if (game.status === 'ready') {
       eyebrow = `OPERATION ${game.level.id} / BRIEFING`;
       title = game.level.title;
@@ -490,7 +485,7 @@ document.addEventListener('focusin', event => {
   if (game.status === 'running') { game.togglePause(); refreshUI(); }
 });
 window.addEventListener('keydown', event => {
-  if (dialog.open || endingUI.open || mediaUI.open) return;
+  if (dialog.open || endingUI.open || mediaUI.open || storyUI.open) return;
   if (event.ctrlKey || event.metaKey || event.altKey) return;
   if (isEditingControl(event.target)) return;
   if (event.code === 'KeyP' || (previewGame && event.code === 'Escape')) { event.preventDefault(); if (!event.repeat) togglePreview(); return; }
@@ -508,6 +503,7 @@ window.addEventListener('keydown', event => {
     if (game.status === 'running') { game.restart(); accumulator = 0; clearInput(); }
     else primaryAction();
   } else {
+    if (game.status === 'ready' && campaignMode && campaign.cleared() === campaign.mission.stages.length) return;
     keys.add(event.code);
     if (game.status === 'ready' && gameKeys.includes(event.code) && !event.code.startsWith('Shift')) game.start();
   }
@@ -526,6 +522,7 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-directi
   const code = button.id === 'touch-interact' ? 'KeyE' : button.id === 'touch-lure' ? 'Space' : touchCodes[button.dataset.direction!];
   button.addEventListener('pointerdown', event => {
     if (previewGame) return;
+    if (game.status === 'ready' && campaignMode && campaign.cleared() === campaign.mission.stages.length) return;
     event.preventDefault(); button.setPointerCapture(event.pointerId); keys.add(code); sound.unlock();
     if (game.status === 'ready') game.start();
   });
@@ -553,7 +550,6 @@ function loop(now: number) {
     }
   } else accumulator = 0;
   for (const event of game.drainEvents()) {
-    if (['start', 'rewind', 'plan', 'caught', 'won'].includes(event)) playtesting.event(event, event === 'caught' ? game.lastMessage : `take ${game.attempts}; echoes ${game.echoes.length}; frame ${game.frame}`);
     sound.play(event);
     if (event === 'deposit' || event === 'receipt') toast(game.signals.at(-1)?.text ?? game.deliveryStatus());
     if (event === 'plan') persistPlan();
@@ -563,19 +559,16 @@ function loop(now: number) {
     if (event === 'won') {
       if (campaignMode && campaign.commit(game)) {
         saveCampaign();
-        playtesting.event('checkpoint', `${game.level.id}; ${campaign.data.outcomes?.[canonicalZoneId(game.level.id)] ?? 'linear'}`);
+        storyUI.aftermath();
       }
-      const record = { echoes: game.echoes.length, seconds: game.seconds };
-      const previous = saved[game.level.id];
-      if (!previous || record.echoes < previous.echoes || (record.echoes === previous.echoes && record.seconds < previous.seconds)) {
-        saved[game.level.id] = record;
-        try { localStorage.setItem('echo-heist-progress-v1', JSON.stringify(saved)); } catch { /* Best-effort local progress. */ }
+      if (!campaignMode) {
+        completedTraining.add(game.level.id);
+        try { localStorage.setItem('echo-heist-progress-v1', JSON.stringify(Object.fromEntries([...completedTraining].map(id => [id, true])))); } catch { /* Best-effort local progress. */ }
+        $(`[data-level="${levelIndex}"] .level-check`).textContent = '✓';
       }
-      if (!campaignMode) $(`[data-level="${levelIndex}"] .level-check`).textContent = '✓';
     }
   }
-  playtesting.tick();
-  sound.updateScene(game.level.theme, game.status, game.alarm, !!previewGame, endingUI.open);
+  sound.updateScene(storyUI.open ? storyUI.theme : game.level.theme, game.status, game.alarm, !!previewGame || storyUI.open, endingUI.open);
   renderer.draw(previewGame ?? game, now / 1000);
   refreshUI();
   requestAnimationFrame(loop);

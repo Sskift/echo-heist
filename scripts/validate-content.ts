@@ -4,6 +4,17 @@ import { Game } from '../src/engine.ts';
 import { Campaign } from '../src/campaign.ts';
 import { playWitness } from '../src/witness.ts';
 import { doorPlates, WIDTH, HEIGHT, TILE } from '../src/levels.ts';
+import { STORY } from '../src/story.ts';
+
+assert.equal(new Set(STORY.map(s => s.id)).size, STORY.length, 'Duplicate story scene');
+for (const scene of STORY) {
+  assert.ok(MISSIONS.some(m => m.id === scene.mission && m.id.startsWith(`C${scene.chapter}-`)), `Unknown story checkpoint: ${scene.id}`);
+  assert.ok(scene.pages.length && scene.pages.every(p => p.speaker.trim() && p.text.trim()), `Empty scene: ${scene.id}`);
+  for (const page of scene.pages) if (page.response) {
+    const previous = STORY.find(s => s.id === page.response!.scene);
+    assert.ok(previous && STORY.indexOf(previous) < STORY.indexOf(scene) && Object.keys(page.response.options).every(id => previous.choice?.options.some(o => o.id === id)), `Invalid dialogue callback: ${scene.id}`);
+  }
+}
 
 const ids = new Set<string>();
 let zones = 0, layouts = 0;

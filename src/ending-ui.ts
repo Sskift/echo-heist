@@ -26,11 +26,11 @@ export class EndingUI {
     this.dialog.addEventListener('close', () => { if (this.previousFocus?.isConnected) this.previousFocus.focus({ preventScroll: true }); });
   }
   get open() { return this.dialog.open; }
-  show(ending: Ending) {
+  show(ending: Ending, reflection: string) {
     this.previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.dialog.querySelector('#ending-title')!.textContent = ending.title;
     this.dialog.querySelector('#ending-consequence')!.textContent = ending.consequence;
-    this.dialog.querySelector('#ending-reunion')!.replaceChildren(...ending.reunion.map(text => { const p = document.createElement('p'); p.textContent = text; return p; }));
+    this.dialog.querySelector('#ending-reunion')!.replaceChildren(...[reflection, ...ending.reunion].map(text => { const p = document.createElement('p'); p.textContent = text; return p; }));
     if (!this.dialog.open) this.dialog.showModal();
     // Start reading at the story, without arming the rollback button for Space.
     this.dialog.querySelector<HTMLElement>('#ending-title')!.focus({ preventScroll: true });
