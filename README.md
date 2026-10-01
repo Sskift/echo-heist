@@ -46,11 +46,11 @@ npm run dev
 ## 开发与验证
 
 ```sh
-npm test                 # 20 个核心机制、存档与叙事状态检查
+npm test                 # 22 个核心机制、存档与叙事状态检查
 npm run check:content    # 所有关卡参考路线与分支提交，仅在这里检查一次
 npm run build           # 严格类型检查、未使用代码检查与生产构建
 npx playwright install chromium
-npm run test:browser    # 5 个主要用户流程
+npm run test:browser    # 6 个主要用户流程
 npm run package:offline # 生成 .local/releases/echo-heist-v0.15.0.html
 ```
 
@@ -68,4 +68,4 @@ Windows 可设置 `$env:PLAYWRIGHT_CHANNEL='chrome'` 使用已安装的 Chrome�
 - `src/audio.ts`、`src/soundtrack.ts`：离线配乐、音效与场景混音。
 - `src/plans.ts`：回声计划存档；`src/witness.ts`：内容作者的参考路线执行器。
 
-[叙事编排](docs/story-bible.md) · [关卡创作](docs/authoring.md) · [制作状态](docs/production-status.md) · [素材与许可](docs/assets.md)
+[下一步制作计划](docs/next-steps.md) · [制作状态](docs/production-status.md) · [叙事编排](docs/story-bible.md) · [关卡创作](docs/authoring.md) · [素材与许可](docs/assets.md)

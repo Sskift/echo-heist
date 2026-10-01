@@ -1,6 +1,7 @@
 # ECHO HEIST contributor notes
 
 - Work directly on `main` as authorized by the project owner. Normal commits and pushes are authorized; do not force-push or delete unrelated work.
+- Use `docs/next-steps.md` as the current development plan and `docs/production-status.md` for completed work. The next gameplay priority is C4-6 cross-room credential handoff; do not revive retired scope or playtime budgets.
 - Keep gameplay deterministic at a fixed 60 Hz. The engine must remain usable without a browser.
 - Preserve exact-position replay, end-pose holding, maximum three echoes, and explicit handling of full slots.
 - Keep one playable route per training level and validate main-story routes with `npm run check:content`. Do not duplicate chapter walkthroughs across unit and browser tests.
