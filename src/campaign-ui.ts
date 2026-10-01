@@ -1,6 +1,6 @@
 import type { Game } from './engine.ts';
 import { FPS, MAX_FRAMES } from './levels.ts';
-import { MISSIONS, outcomeSelected } from './campaign-content.ts';
+import { MISSIONS, outcomeSelected, stageVersions } from './campaign-content.ts';
 import type { Campaign } from './campaign.ts';
 import './campaign.css';
 
@@ -25,7 +25,7 @@ export class CampaignUI {
       </section>`);
     $('.stage-bar').insertAdjacentHTML('afterend', '<section id="consequence-panel" class="consequence-panel" hidden aria-label="下一阶段后果"><strong>给下一段留下什么</strong><p>以下结果在成功抵达锚点时提交，由实际设备状态或交付位置决定；回退到本阶段可重新安排。</p><ul id="consequence-options"></ul></section>');
     $('.stage-bar').insertAdjacentHTML('afterend', '<section id="continuity-panel" class="continuity-panel" hidden aria-label="连续行动"><strong>配电室 → 封存室 → 原路撤离</strong><p id="continuity-status" role="status"></p><p>各区共用 12 秒节拍：每轮同时从录像起点播放，短录像在终点待命。留守者一直占用一个回声名额。失败只重试当前区；点击首段锚点可重排留守者，后段锚点与计划随之撤销。</p></section>');
-    $('.stage-bar').insertAdjacentHTML('afterend', '<section id="credential-journey" class="continuity-panel" hidden aria-label="凭据跨区交接"><strong>登记厅交出 → 对侧站台接回 → 货运档案接班</strong><p id="credential-location" role="status"></p><p id="credential-requirements"></p><details><summary>这张票如何跨过房间</summary><p>整场只有一张 B-17 货运凭据。成功到锚点才保存实际交接位置；失败从当前锚点恢复。回退会撤销后段物件状态与计划。每区重新开始十二秒，录像只能请求交接，不能复制凭据。RETURN 是只收不取的归还槽，空手也可录下交付请求，执行时仍须真正持有凭据。</p></details></section>');
+    $('.stage-bar').insertAdjacentHTML('afterend', '<section id="credential-journey" class="continuity-panel" hidden aria-label="凭据交接要求"><strong id="credential-route-title"></strong><p id="credential-location" role="status"></p><p id="credential-requirements"></p><details><summary id="credential-route-summary"></summary><p id="credential-route-help"></p></details></section>');
     $('.timeline').insertAdjacentHTML('afterend', `
       <div class="rehearsal-toolbar"><button id="preview-button" aria-pressed="false">◇ 预演回声</button><span id="interaction-tip">E 操作设备 · P 预演已保存的计划</span></div>
       <section id="preview-panel" class="preview-panel" hidden aria-label="回声预演"><div><strong>只读预演</strong><output id="preview-time">0.00s</output></div><p>仅播放已保存回声；真人不参与，也不会保存进度。拖动时间，检查门与设备。</p><input id="preview-frame" type="range" min="0" max="720" step="1" value="0" aria-label="预演时间"><ol id="preview-log"></ol></section>`);
@@ -54,7 +54,11 @@ export class CampaignUI {
       const input = event.target as HTMLInputElement;
       if (!input.matches('[data-delay-input]')) return;
       if (!input.checkValidity()) { input.reportValidity(); input.value = (Number(input.dataset.current) / FPS).toFixed(2); return; }
-      actions.delay(Number(input.dataset.delayInput), Math.round(Number(input.value) * FPS) - Number(input.dataset.current));
+      const frames = Math.round(Number(input.value) * FPS), delta = frames - Number(input.dataset.current);
+      // Re-rendering replaces the focused control and may commit its change
+      // again on blur. Mark the accepted value before triggering that render.
+      input.dataset.current = String(frames);
+      actions.delay(Number(input.dataset.delayInput), delta);
     });
   }
 
@@ -65,6 +69,15 @@ export class CampaignUI {
     $('#credential-journey').hidden = !game.level.credential;
     if (game.level.credential) {
       const c = game.level.credential;
+      if ($('#credential-journey').dataset.route !== `${this.campaign.mission.id}:${c.id}`) {
+        $('#credential-journey').dataset.route = `${this.campaign.mission.id}:${c.id}`;
+        const acrossRooms = this.campaign.mission.stages.some(base => stageVersions(base).some(stage => stage.level.credential?.from));
+        $('#credential-route-title').textContent = acrossRooms ? '登记厅交出 → 对侧站台接回 → 货运档案接班' : '真人取件 → 回声签入 → 本人接回原票';
+        $('#credential-route-summary').textContent = acrossRooms ? '这张票如何跨过房间' : '为什么签入后还要接回';
+        $('#credential-route-help').textContent = acrossRooms
+          ? '整场只有一张 B-17 货运凭据。成功到锚点才保存实际交接位置；失败从当前锚点恢复。回退会撤销后段物件状态与计划。每区重新开始十二秒，录像只能请求交接，不能复制凭据。RETURN 是只收不取的归还槽，空手也可录下交付请求，执行时仍须真正持有凭据。'
+          : `这份${c.label}只在当前行动区流转。授权不会收走凭据，签入者还需把它交到 ${c.receiveByPlayer}，再由本人按 E 接回；只完成签名、让回声拿着或由回声代收都不满足撤离。失败后从本区来源重新开始，物件不会复制。`;
+      }
       const location = `${preview ? '只读预演 · ' : ''}${c.label} · 现在：${world.credentialOwner()}${world.incoming ? ` · 入站位置：${world.incoming.owner === 'player' ? '本人持有' : world.incoming.owner.slice(9)}` : ' · 首次领取'}${c.incomingAuthorizations?.length ? ` · 前段签名：${c.incomingAuthorizations.join('、')}` : ''}`;
       const requirements = world.credentialBlockers().join('；') || '交接条件已完成，带齐目标后前往锚点。';
       if ($('#credential-location').textContent !== location) $('#credential-location').textContent = location;
@@ -128,6 +141,7 @@ export class CampaignUI {
       }
       $('#power-status').replaceChildren(...(world.level.circuits ?? []).map(circuit => {
         const feeds = world.level.doors.filter(d => d.power?.id === circuit.id).map(d => `${d.id} ${world.openDoors.has(d.id) ? '开' : '关'}（需${world.circuitState(circuit.id, d.power!.on)}）`);
+        world.level.terminals?.filter(t => t.power?.id === circuit.id).forEach(t => feeds.push(`${t.id} 柜面${world.powered(t.power) ? '可用' : '停用'}（需${world.circuitState(circuit.id, t.power!.on)}）`));
         world.level.suppressors?.filter(s => s.power?.id === circuit.id).forEach(s => feeds.push(`${s.id} 抑制供电${world.powered(s.power) ? '接通' : '断开'}`));
         world.level.guards.forEach((g, i) => {
           if (g.power?.id === circuit.id) feeds.push(`${world.guardName(i)} ${world.powered(g.power) ? '工作' : '停机'}`);

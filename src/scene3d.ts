@@ -129,7 +129,7 @@ export class Renderer {
       root.position.set(x, 0, z); this.levelRoot.add(root);
       const border = cx === 0 || cy === 0 || cx + w === 30 || cy + h === 18;
       const near = cx === 29 || cy === 17, furniture = !border && w <= 2 && h <= 2;
-      const height = near ? 0.25 : border ? 2.6 : furniture ? 1.5 : 1.45;
+      const height = near ? 0.25 : border ? 3.25 : furniture ? 1.5 : 1.45;
       if (furniture && this.dressing.cover(level, root, w, h, cx + cy)) {
         // The entire prop remains inside the existing occupied footprint.
       } else if (furniture && this.ready) {
@@ -139,8 +139,8 @@ export class Renderer {
       } else {
         this.box(root, 0, height / 2, 0, w, height, h, plaster);
         this.box(root, 0, Math.min(height / 2, 0.36), 0, w + 0.02, Math.min(height, 0.72), h + 0.02, panel);
-        this.box(root, 0, height + 0.035, 0, w + 0.04, 0.07, h + 0.04, look.cap);
-        if (this.detail) this.dressing.wallDetails(level, root, w, h, height);
+        this.box(root, 0, height + 0.035, 0, w + 0.04, 0.07, h + 0.04, look.panel);
+        if (this.detail) { this.dressing.wallDetails(level, root, w, h, height); this.dressing.architecture(level, root, w, h, height); }
         if (height > 1) {
           this.box(root, 0, 0.74, 0, w + 0.06, 0.055, h + 0.06, look.trim, 0.6);
           const count = Math.floor(Math.max(w, h) / 3);
@@ -156,10 +156,11 @@ export class Renderer {
             if (border && !near && this.detail && i % 2 === 1) {
               if (this.dressing.wallBay(level, root, px + (h > w ? w / 2 + 0.045 : 0), pz + (w > h ? h / 2 + 0.045 : 0), w > h, i)) continue;
               const window = new THREE.Group();
-              window.position.set(px + (h > w ? w / 2 + 0.045 : 0), 1.68, pz + (w > h ? h / 2 + 0.045 : 0));
+              window.position.set(px + (h > w ? w / 2 + 0.045 : 0), 1.94, pz + (w > h ? h / 2 + 0.045 : 0));
               if (h > w) window.rotation.y = Math.PI / 2;
               root.add(window);
               if (['museum', 'gala', 'station', 'civic'].includes(style)) {
+                window.scale.set(1.1, 1.3, 1);
                 const pane = this.dressing.archWindow(window, level);
                 if (level.handoff || level.continuity) this.civicWindows.push(pane);
                 continue;
@@ -231,6 +232,7 @@ export class Renderer {
     for (const plate of game.level.plates) {
       const active = game.activePlates.has(plate.id) || game.remote?.activePlates.has(plate.id);
       for (const d of game.level.doors.filter(d => doorPlates(d).includes(plate.id))) line([plate, { x: plate.x, y: d.y + d.h / 2 }, { x: d.x + d.w / 2, y: d.y + d.h / 2 }], active ? '#c3ed82a0' : '#4d6f6965', [4, 6]);
+      for (const terminal of game.level.terminals?.filter(t => t.plate === plate.id) ?? []) line([plate, { x: plate.x, y: terminal.y }, terminal], active ? '#c3ed82a0' : '#4d6f6965', [4, 6]);
       c.fillStyle = active ? '#c3ed8280' : '#234847b0'; c.fillRect(plate.x - 17, plate.y - 17, 34, 34); c.strokeStyle = active ? colors.lime : '#90ac9a'; c.lineWidth = 2; c.strokeRect(plate.x - 17, plate.y - 17, 34, 34);
       c.font = 'bold 15px sans-serif'; c.textAlign = 'center'; c.fillStyle = active ? '#fff8c5' : '#d2d9c0'; c.fillText(plate.id, plate.x, plate.y + 5); c.textAlign = 'left';
     }
@@ -239,6 +241,10 @@ export class Renderer {
       const active = !!game.circuits.get(circuit.id);
       if (source) line([source, { x: circuit.x, y: source.y }, circuit], active ? '#b8e6d7c0' : '#82aaa088', [3, 4]);
       for (const door of game.level.doors.filter(d => d.power?.id === circuit.id)) line([circuit, { x: circuit.x, y: door.y + door.h / 2 }, { x: door.x + door.w / 2, y: door.y + door.h / 2 }], active ? '#b8e6d7b0' : '#54798166', [3, 4]);
+    }
+    for (const terminal of game.level.terminals ?? []) if (terminal.power) {
+      const circuit = game.level.circuits?.find(c => c.id === terminal.power!.id);
+      if (circuit) line([circuit, { x: circuit.x, y: terminal.y }, terminal], game.powered(terminal.power) ? '#b8e6d7b0' : '#54798166', [3, 4]);
     }
     const exit = game.exitPoint; c.fillStyle = '#214c4380'; c.fillRect(exit.x - 24, exit.y - 24, 48, 48); c.strokeStyle = game.exitReady ? colors.lime : '#bdb092'; c.lineWidth = 2; c.setLineDash([7, 5]); c.strokeRect(exit.x - 26, exit.y - 26, 52, 52); c.setLineDash([]);
     game.guards.forEach((g, i) => {

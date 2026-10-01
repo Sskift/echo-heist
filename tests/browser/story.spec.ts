@@ -283,4 +283,11 @@ test('device inputs are recorded, previewed read-only, and restored as a saved p
   await expect(page.locator('#record-button')).toBeDisabled();
   expect(await page.evaluate(() => localStorage.getItem('echo-heist-plans-v1'))).toBe(saved);
   await page.goto('/'); await advance(page); await expect(page.locator('#echo-count')).toHaveText('1 / 3');
+  const delay = page.locator('[data-delay-input="0"]');
+  await delay.fill('2.50'); await delay.dispatchEvent('change'); await advance(page);
+  // A focused number input can commit again when its row is replaced. Its
+  // displayed seconds and the persisted plan must describe the same delay.
+  await page.locator('#overlay-action').click(); await advance(page);
+  await page.reload(); await advance(page);
+  await expect(page.locator('[data-delay-input="0"]')).toHaveValue('2.50');
 });

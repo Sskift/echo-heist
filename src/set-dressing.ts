@@ -30,6 +30,33 @@ export const sceneLook = (level: Level) => looks[setting(level)];
 export class SetDressing {
   constructor(private box: Box) {}
 
+  architecture(level: Level, root: THREE.Object3D, width: number, depth: number, height: number) {
+    if (height < 2.8) return;
+    const look = sceneLook(level), formal = ['museum', 'gala', 'station', 'civic', 'archive'].includes(setting(level));
+    const horizontal = width > depth, span = Math.max(width, depth), group = new THREE.Group();
+    group.position.set(horizontal ? 0 : width / 2, 0, horizontal ? depth / 2 : 0);
+    if (!horizontal) group.rotation.y = Math.PI / 2; root.add(group);
+    const parts: { p: number[]; s: number[]; color: string }[] = [];
+    const add = (x: number, y: number, z: number, w: number, h: number, d: number, color: string) => parts.push({ p: [x, y, z], s: [w, h, d], color });
+    // All pieces stay attached to the existing wall footprint. Batch the small
+    // mouldings into one draw call per wall, including their real shadows.
+    for (let x = -span / 2 + 0.5; x < span / 2; x += 6) {
+      add(x, height / 2, 0.06, 0.38, height, 0.2, formal ? look.cap : look.panel);
+      add(x, 0.2, 0.14, 0.58, 0.4, 0.33, look.panel);
+      add(x, 0.46, 0.14, 0.5, 0.12, 0.32, look.trim);
+      add(x, height - 0.38, 0.11, 0.49, 0.13, 0.28, look.cap);
+      add(x, height - 0.25, 0.12, 0.64, 0.14, 0.34, look.trim);
+      if (formal) for (const dx of [-0.12, 0, 0.12]) add(x + dx, height / 2, 0.171, 0.038, height - 1.25, 0.012, look.panel);
+      else for (const y of [0.65, height - 0.6]) add(x, y, 0.18, 0.16, 0.16, 0.045, look.trim);
+    }
+    add(0, height - 0.09, 0.1, span, 0.16, 0.36, look.panel);
+    if (formal) for (let x = -span / 2 + 0.2; x < span / 2; x += 0.4) add(x, height - 0.24, 0.12, 0.12, 0.09, 0.22, look.cap);
+    const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial({ roughness: 0.76 }), parts.length);
+    const transform = new THREE.Object3D(), color = new THREE.Color();
+    parts.forEach((part, i) => { transform.position.fromArray(part.p); transform.scale.fromArray(part.s); transform.updateMatrix(); mesh.setMatrixAt(i, transform.matrix); mesh.setColorAt(i, color.set(part.color)); });
+    mesh.castShadow = mesh.receiveShadow = true; mesh.userData.ownedGeometry = mesh.userData.ownedMaterial = true; group.add(mesh);
+  }
+
   foundation(level: Level, root: THREE.Object3D) {
     const industrial = ['power', 'retention', 'vault'].includes(setting(level));
     const stones: { x: number; y: number; z: number; w: number; h: number; d: number }[] = [];
@@ -59,8 +86,16 @@ export class SetDressing {
     const frameShape = outline(0.66, -0.76); frameShape.holes.push(new THREE.Path(outline(0.53, -0.64).getPoints()));
     const frame = new THREE.Mesh(new THREE.ExtrudeGeometry(frameShape, { depth: 0.09, bevelEnabled: true, bevelSegments: 1, steps: 1, bevelSize: 0.025, bevelThickness: 0.02 }), new THREE.MeshStandardMaterial({ color: sceneLook(level).trim, metalness: 0.35, roughness: 0.5 }));
     frame.castShadow = frame.receiveShadow = true; frame.userData.ownedGeometry = frame.userData.ownedMaterial = true; root.add(frame);
-    const pane = new THREE.Mesh(new THREE.ShapeGeometry(outline(0.53, -0.64)), new THREE.MeshStandardMaterial({ color: '#203b55', emissive: '#3e7596', emissiveIntensity: 0.3, metalness: 0.2, roughness: 0.26 }));
-    pane.position.z = 0.025; pane.userData.ownedGeometry = pane.userData.ownedMaterial = true; root.add(pane);
+    const glass = document.createElement('canvas'); glass.width = 128; glass.height = 192;
+    const c = glass.getContext('2d')!, sky = c.createLinearGradient(0, 0, 0, 192);
+    sky.addColorStop(0, '#203951'); sky.addColorStop(0.65, '#608d9f'); sky.addColorStop(1, '#adc5bd'); c.fillStyle = sky; c.fillRect(0, 0, 128, 192);
+    for (let i = 0; i < 8; i++) { const x = i * 19 - 7, y = 134 + i * 7 % 30; c.fillStyle = '#1a343f'; c.fillRect(x, y, 17, 192 - y); c.beginPath(); c.moveTo(x - 3, y); c.lineTo(x + 8, y - 12); c.lineTo(x + 20, y); c.fill(); c.fillStyle = '#d3bc7e'; c.fillRect(x + 6, y + 9, 3, 5); }
+    c.fillStyle = '#d4dfc4'; c.beginPath(); c.arc(95, 35, 12, 0, Math.PI * 2); c.fill();
+    const texture = new THREE.CanvasTexture(glass); texture.colorSpace = THREE.SRGBColorSpace;
+    const geometry = new THREE.ShapeGeometry(outline(0.53, -0.64)), positions = geometry.getAttribute('position'), uv = geometry.getAttribute('uv');
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (positions.getX(i) + 0.53) / 1.06, (positions.getY(i) + 0.64) / 1.32);
+    const pane = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ map: texture, color: '#99bcc8', emissive: '#3e7596', emissiveIntensity: 0.23, roughness: 0.35 }));
+    pane.position.z = 0.025; pane.userData.ownedGeometry = pane.userData.ownedTexture = true; root.add(pane);
     this.box(root, 0, -0.02, 0.13, 0.045, 1.41, 0.055, '#acb6a6', 0.5);
     this.box(root, 0, -0.19, 0.13, 1.06, 0.045, 0.055, '#acb6a6', 0.5);
     this.box(root, 0, -0.78, 0.13, 1.47, 0.12, 0.35, sceneLook(level).cap);
@@ -141,6 +176,21 @@ export class SetDressing {
         c.fillStyle = `rgba(29,24,18,${0.05 + n * 0.1})`; c.fillRect(x - offset, y, 71, 23);
         c.strokeStyle = '#382e2437'; c.lineWidth = 0.6; c.strokeRect(x - offset, y, 71, 23);
         if (detail) { c.strokeStyle = '#d2ba8520'; c.beginPath(); c.moveTo(x - offset + 4, y + 7); c.lineTo(x - offset + 62, y + 6); c.stroke(); }
+      }
+      if (detail && style === 'museum') {
+        // Alternating parquet blocks give the old gallery a crafted floor;
+        // this remains a single baked texture with no gameplay geometry.
+        c.fillStyle = '#584536'; c.fillRect(0, 0, 960, 576);
+        for (let y = 0; y < 576; y += 64) for (let x = 0; x < 960; x += 64) {
+          c.save(); c.translate(x + 32, y + 32); if ((x + y) % 128) c.rotate(Math.PI / 2);
+          for (let p = 0; p < 4; p++) {
+            const shade = (x * 7 + y * 11 + p * 17) % 31;
+            c.fillStyle = `rgb(${105 + shade},${78 + shade * 0.72},${51 + shade * 0.55})`; c.fillRect(-31.5, -31.5 + p * 16, 63, 15);
+            c.strokeStyle = '#dcc58d24'; c.lineWidth = 0.6;
+            for (let line = 0; line < 3; line++) { c.beginPath(); c.moveTo(-27, -28 + p * 16 + line * 4); c.bezierCurveTo(-12, -30 + p * 16 + line * 4, 12, -24 + p * 16 + line * 4, 27, -28 + p * 16 + line * 4); c.stroke(); }
+          }
+          c.restore();
+        }
       }
       if (detail && style === 'museum') {
         c.strokeStyle = '#283e36'; c.lineWidth = 13; c.strokeRect(55, 55, 850, 466);
@@ -309,17 +359,33 @@ export class SetDressing {
     this.box(parent, 0, 0.12, 0, width * 0.97, 0.24, depth * 0.97, '#344b43');
     this.box(parent, 0, 0.57, 0, width * 0.84, 0.76, depth * 0.84, '#85745b');
     this.box(parent, 0, 0.98, 0, width * 0.96, 0.1, depth * 0.96, '#b9a883', 0.2);
+    const artifact = new THREE.Group(); artifact.position.y = 1.06; artifact.scale.setScalar(Math.min(width, depth) * 0.75); parent.add(artifact);
+    const piece = (geometry: THREE.BufferGeometry, color: string, metal = 0) => {
+      const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color, metalness: metal, roughness: 0.42 }));
+      mesh.castShadow = mesh.receiveShadow = true; mesh.userData.ownedGeometry = mesh.userData.ownedMaterial = true; artifact.add(mesh); return mesh;
+    };
     if (index % 3 === 0) {
-      this.watch(parent, 1.07, Math.min(width, depth) * 0.9);
+      artifact.rotation.x = 0.4; this.watch(artifact, 0.03, 1);
     } else if (index % 3 === 1) {
-      this.box(parent, 0, 1.14, 0, width * 0.43, 0.24, depth * 0.48, '#4b6259');
-      this.box(parent, 0, 1.32, 0, width * 0.25, 0.16, depth * 0.31, '#bda578', 0.5);
+      // A brass armillary instrument with three intersecting rings.
+      const foot = piece(new THREE.CylinderGeometry(0.2, 0.28, 0.08, 16), '#63503a'); foot.position.y = 0.04;
+      const stem = piece(new THREE.CylinderGeometry(0.045, 0.075, 0.25, 12), '#bda578', 0.6); stem.position.y = 0.19;
+      for (let i = 0; i < 3; i++) { const ring = piece(new THREE.TorusGeometry(0.29, 0.019, 6, 24), '#c8aa6b', 0.65); ring.position.y = 0.46; ring.rotation.set(i * 0.72, i * 0.9, 0.3); }
+      const globe = piece(new THREE.SphereGeometry(0.11, 12, 8), '#7baba9', 0.15); globe.position.y = 0.46;
     } else {
-      this.box(parent, 0, 1.19, 0, width * 0.46, 0.33, depth * 0.43, '#6d4e38');
-      this.box(parent, 0, 1.28, 0.025, width * 0.32, 0.045, depth * 0.48, '#c6b580', 0.5);
+      // A salvaged telegraph: spool, contact lever and insulated terminals.
+      this.box(artifact, 0, 0.065, 0, 0.65, 0.13, 0.48, '#53372a');
+      const spool = piece(new THREE.CylinderGeometry(0.15, 0.15, 0.28, 16), '#a9814c', 0.5); spool.rotation.z = Math.PI / 2; spool.position.set(-0.1, 0.25, -0.04);
+      for (const x of [-0.26, 0.06]) { const flange = piece(new THREE.CylinderGeometry(0.19, 0.19, 0.025, 16), '#283f43', 0.4); flange.rotation.z = Math.PI / 2; flange.position.set(x, 0.25, -0.04); }
+      this.box(artifact, 0.1, 0.18, 0.15, 0.37, 0.045, 0.07, '#d3b674', 0.6);
+      const key = piece(new THREE.SphereGeometry(0.068, 10, 6), '#233438'); key.position.set(0.25, 0.22, 0.15);
     }
-    const glass = this.box(parent, 0, 1.26, 0, width * 0.81, 0.48, depth * 0.81, '#91b6af');
-    glass.material = new THREE.MeshStandardMaterial({ color: '#b1d6ca', transparent: true, opacity: 0.13, depthWrite: false, roughness: 0.2, metalness: 0.1 }); glass.castShadow = false; glass.userData.ownedMaterial = true;
+    const glassHeight = Math.max(0.56, Math.min(width, depth) * 0.63), top = 1.06 + glassHeight;
+    const glass = this.box(parent, 0, 1.06 + glassHeight / 2, 0, width * 0.81, glassHeight, depth * 0.81, '#91b6af');
+    glass.material = new THREE.MeshStandardMaterial({ color: '#b1d6ca', transparent: true, opacity: 0.08, depthWrite: false, roughness: 0.2, metalness: 0.1 }); glass.castShadow = false; glass.userData.ownedMaterial = true;
+    for (const x of [-1, 1]) for (const z of [-1, 1]) this.box(parent, x * width * 0.407, 1.06 + glassHeight / 2, z * depth * 0.407, 0.023, glassHeight, 0.023, '#ae9160', 0.5);
+    for (const z of [-1, 1]) this.box(parent, 0, top, z * depth * 0.407, width * 0.83, 0.027, 0.027, '#ae9160', 0.5);
+    for (const x of [-1, 1]) this.box(parent, x * width * 0.407, top, 0, 0.027, 0.027, depth * 0.83, '#ae9160', 0.5);
     this.box(parent, 0, 0.87, depth * 0.425, width * 0.25, 0.12, 0.018, '#dfd0a3');
   }
 
@@ -434,6 +500,31 @@ export class SetDressing {
 
   terminal(parent: THREE.Object3D, terminal: Terminal, station: boolean) {
     const group = new THREE.Group(), at = { x: terminal.x / 32 - 15, z: terminal.y / 32 - 9 - 0.38 }; group.position.set(at.x, 0, at.z); parent.add(group);
+    if (terminal.appearance) {
+      const old = terminal.appearance === 'legacy', casing = old ? '#664833' : '#385668', trim = old ? '#bd9956' : '#9aadb5';
+      this.box(group, 0, 0.08, 0, 0.93, 0.16, 0.64, '#263b40', 0.25);
+      this.box(group, 0, 0.47, 0, 0.86, 0.68, 0.55, casing, old ? 0 : 0.35);
+      this.box(group, 0, 0.84, 0, 1.04, 0.1, 0.73, trim, 0.4);
+      this.box(group, 0, 0.55, 0.29, 0.62, 0.27, 0.025, '#142c35');
+      this.box(group, 0, 0.41, 0.36, 0.48, 0.04, 0.15, trim, 0.6);
+      for (const x of [-0.37, 0.37]) {
+        this.box(group, x, 0.48, 0.295, old ? 0.055 : 0.085, 0.62, 0.055, trim, 0.4);
+        if (!old) for (const y of [0.21, 0.75]) this.box(group, x, y, 0.34, 0.035, 0.035, 0.025, '#283a43', 0.5);
+      }
+      const sign = new THREE.Group(); sign.position.set(0, 0.23, 0.22); group.add(sign);
+      this.panel(sign, 0.59, 0.19, c => {
+        c.fillStyle = old ? '#503c28' : '#213f52'; c.fillRect(0, 0, 512, 384);
+        c.fillStyle = '#e4d1a2'; c.textAlign = 'center'; c.font = 'bold 130px serif'; c.fillText(old ? '旧班' : '人工', 256, 244);
+      });
+      if (old) {
+        this.box(group, 0, 0.965, -0.23, 0.72, 0.16, 0.12, casing);
+        this.box(group, 0, 1.06, -0.23, 0.79, 0.04, 0.16, trim, 0.4);
+      }
+      const ticket = this.box(group, 0, 0.54, 0.325, 0.32, 0.07, 0.045, '#ffe0a0'); ticket.visible = false;
+      const screen = this.box(group, 0, 0.9, -0.05, 0.4, 0.045, 0.23, '#78bfc2');
+      screen.material = new THREE.MeshStandardMaterial({ color: '#78bfc2', emissive: '#78bfc2', emissiveIntensity: 0.35 }); screen.userData.ownedMaterial = true;
+      return { screen, ticket };
+    }
     if (station && ['FAST', 'SERVICE'].includes(terminal.id)) {
       const west = terminal.x < 448; group.position.set(terminal.x / 32 - 15 + (west ? 0.38 : -0.38), 0, terminal.y / 32 - 9);
       group.rotation.y = west ? -Math.PI / 2 : Math.PI / 2;

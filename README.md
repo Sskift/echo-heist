@@ -2,7 +2,11 @@
 
 一个关于配合、身份和记忆归属的 2.5D 潜入解谜游戏。你的同伙是过去十二秒里的自己：录下行动、安排回声出场，再让现在的你完成交接、取证与撤离。
 
-当前版本 **0.20.0**。八章主线、48 个任务、130 个必经行动区，另有 21 个分支布局、4 个机制演习和 3 个基础演习。所有内容本地运行，支持单 HTML 离线版。
+当前版本 **0.21.0**。八章主线、48 个任务、130 个必经行动区，另有 27 个分支布局、4 个机制演习和 3 个基础演习。所有内容本地运行，支持单 HTML 离线版。
+
+0.21 继续细化 2.5D 场景：提高后墙并补上柱式和檐口，窗内显示夜间街景；旧馆使用拼花木地板，玻璃展柜陈列怀表、浑仪和发报器。柱式小构件合批渲染，前景切墙与原始碰撞规则保持一致。旧班柜采用木材与黄铜，人工柜采用蓝色钢板与铆钉，接线提示按实际供电状态变化。
+
+0.21 新增两组证据准备、六个布局：C3-6 恢复的供电与 C4-3 的旧班次记录用于 C4-5，安排两名回声值守，换取不限时段的旧台复核；C4-6 的货单与 C5-2 的人工权限用于 C5-5，真人在抑制区取件并送出，回声负责签入，末段由本人接回原票。原有方案继续可选。
 
 0.20 重新调整夜间美术：冷色主光与暖色壁灯、墙脚接触阴影、木材与石材表面凹凸、拱窗、墙裙、檐口和可见的建筑底座。玩家采用长外套、铜色围巾与皮革背包。桌面加入轻微灯光晕染和抗锯齿；手机与简洁画面保留轻量渲染。全部显示从同一个 3D 场景生成。
 
@@ -12,9 +16,9 @@
 
 查看 [检修门闩与回声配合](docs/preparation-v019-museum.png) · [修表铺的宴会准备](docs/preparation-v019-watchmaker.png)。
 
-![0.20 旧馆实际游戏画面](docs/scene-v020-museum.png)
+![0.21 旧馆实际游戏画面](docs/scene-v021-museum.png)
 
-查看 [人物近景](docs/scene-v020-player.png) · [车站与交接柜](docs/scene-v020-station.png)。
+查看 [旧馆近景](docs/scene-v021-player.png) · [旧班复核台](docs/scene-v021-station.png) · [人工取件面](docs/scene-v021-retention.png)。
 
 场景采用真实 3D 模型、骨骼动画、材质与实时阴影，以固定等距镜头游玩。旧馆使用木地板镶边、城市旧影和失物展柜，[车站场景](docs/scene-v017-station.png)使用石材分区、时钟与双面交接柜。玩家、普通守卫、追踪器和回声分别有不同的服饰轮廓，凭据显示在实际持有者手中或柜槽里。
 
@@ -73,7 +77,7 @@ npm run check:content    # 所有关卡参考路线与分支提交，仅在这�
 npm run build           # 严格类型检查、未使用代码检查与生产构建
 npx playwright install chromium
 npm run test:browser    # 9 个主要用户流程，含 3D 资源、画面方向输入与出发准备
-npm run package:offline # 生成 .local/releases/echo-heist-v0.20.0.html
+npm run package:offline # 生成 .local/releases/echo-heist-v0.21.0.html
 ```
 
 Windows 可设置 `$env:PLAYWRIGHT_CHANNEL='chrome'` 使用已安装的 Chrome。关卡参考路线使用真实模拟输入，验证可完成性；不代表真人首玩难度或实际时长。
@@ -86,6 +90,7 @@ Windows 可设置 `$env:PLAYWRIGHT_CHANNEL='chrome'` 使用已安装的 Chrome�
 - `src/campaign*.ts`、`src/chapter-*.ts`：关卡、任务锚点、分支与结局。
 - `src/mission-preparations.ts`：证据来源、准备代价与对应的真实设施布局。
 - `src/grid-preparation.ts`：配电站旁路的三段值守、取件与复位配合。
+- `src/handoff-preparations.ts`：车站旧班复核与转存设施人工交接的证据准备。
 - `src/scene-finish.ts`：轻量灯光后处理与本地生成的材质凹凸。
 - `src/story.ts`：完整幕间剧本、解锁规则与对话存档。
 - `src/story-ui.ts`、`src/story.css`：修表铺插图、阅读器与调查回顾。
