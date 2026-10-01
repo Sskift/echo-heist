@@ -127,6 +127,8 @@ test('3D models load, screen-up input records correct world poses, and camera ch
   expect(await page.evaluate(() => localStorage.getItem('echo-heist-plans-v1'))).toBe(plan);
   await page.locator('#preview-button').click(); await advance(page);
   await page.setViewportSize({ width: 390, height: 844 }); await advance(page);
+  await page.locator('.hint summary').click();
+  await expect(page.locator('.map-directions')).toHaveText('地图方向：北 ↗ · 东 ↘ · 南 ↙ · 西 ↖');
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await page.locator('.arena').screenshot({ path: '.local/scene3d-phone.png' });
   expect(errors).toEqual([]);

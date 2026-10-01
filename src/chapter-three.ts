@@ -8,7 +8,7 @@ const panel = (id: string, x: number, y: number, initial: boolean, label = '分�
 const door = (id: string, x: number, y: number, circuit: string, on: boolean, extra: Partial<Door> = {}): Door => ({ id, x, y, w: 32, h: 64, power: power(circuit, on), ...extra });
 const camera = (id: string, x: number, y: number, facing: number, range: number, circuit: string): GuardDefinition => ({ id, route: [p(x, y)], kind: 'camera', facing, range, speed: 0, power: power(circuit, true) });
 const litGuard = (x: number, y: number, facing: number, range: number, circuit: string, on: boolean, darkRange = 96): GuardDefinition => ({ id: 'A', route: [p(x, y)], facing, range, speed: 100, hearing: 550, searchSeconds: 0.8, lighting: { ...power(circuit, on), darkRange } });
-const reach = { objective: 'reach' as const, exit: p(816, 432), objectiveLabel: '调整供电，抵达右侧安全锚点' };
+const reach = { objective: 'reach' as const, exit: p(816, 432), objectiveLabel: '调整供电，抵达东侧安全锚点' };
 function action(id: string, title: string, props: Partial<Level>, story: string, result: string, hints: [string, string, string], witness: WitnessAction[], previous?: string): Stage {
   const map = level(id, title, { subtitle: 'EVERY LIGHT HAS A COST', district: '配电站 / MUNICIPAL GRID', theme: 'industrial', noiseResponse: 'nearest', ...props, hint: hints[2], hints });
   const s = stage(map, story, result, [id + '-clear'], witness, previous ? previous + '-clear' : undefined);
@@ -20,41 +20,41 @@ export const CHAPTER_THREE: Mission[] = [
   { id: 'C3-1', chapter: '停电之夜', title: '借一盏灯', summary: '分流器有两种明确状态：电流去门禁，就不能同时去照明。', evidence: '档案库与市政服务共用的电网图', stages: [
     action('C3-1-a', '把电流借给门', { ...reach, par: 0, walls: room([[14, [8, 9]]]), circuits: [panel('S', 272, 304, false, '照明 / 门禁分流', ['照明', '门禁'])], doors: [door('ENTRY', 448, 256, 'S', true)], guards: [litGuard(656, 304, Math.PI, 420, 'S', false, 72)] },
       '联络员：转运单上的线路就在这里。S 不是万能的总开关：拨向门禁，巡逻区就失去照明。到面板旁按 E。', '门打开时，安保视野也缩短了。图纸另一端标着居民楼与泵站。',
-      ['S 的两条线分别通往门和照明。', '把 S 从照明拨向门禁，入口会打开，守卫仍在岗但只能看近处。', '沿左侧到 S 按 E，经中央门后先向南绕开守卫，再向东到锚点。'],
+      ['S 的两条线分别通往门和照明。', '把 S 从照明拨向门禁，入口会打开，守卫仍在岗但只能看近处。', '沿西侧到 S 按 E，经中央门后先向南绕开守卫，再向东到锚点。'],
       [g(112, 304), g(272, 304), e(), g(528, 304), g(528, 432), g(816, 432)]),
     action('C3-1-b', '应急门不吃同一口电', { loot: p(816, 176), exit: p(848, 432), par: 0, lootLabel: '共用电网图', objectiveLabel: '将 S 切到应急通道，取走电网图', walls: room([[14, [5, 6]]]), circuits: [panel('S', 272, 432, true, '照明 / 应急门分流', ['应急通道', '照明'])], doors: [door('SAFE', 448, 160, 'S', false)], guards: [litGuard(656, 176, Math.PI / 2, 330, 'S', true, 72)] },
       '你：上一扇门在亮起时打开，这扇却相反。我得看接线，不能只记住按钮按几次。', '民用线路没有独立电源。档案系统把整片街区接在了同一台设备上。',
-      ['SAFE 接在 S 的应急状态。', '先把 S 从照明切向应急通道，北侧入口才会放行。', '在左下 S 按 E，沿隔墙左侧上行，经北侧门取图，再从东侧撤离。'],
+      ['SAFE 接在 S 的应急状态。', '先把 S 从照明切向应急通道，北侧入口才会放行。', '在西南 S 按 E，沿隔墙西侧北行，经北侧门取图，再从东侧撤离。'],
       [g(272, 432), e(), g(400, 432), g(400, 176), g(816, 176), g(848, 432)], 'C3-1-a'),
   ] },
   { id: 'C3-2', chapter: '停电之夜', title: '亮着才危险', summary: '开门的电流也会启动摄像头。过去的自己负责开关，现在的自己穿过通道。', evidence: '入口与监控共用的联动规程', stages: [
     action('C3-2-a', '开门之后，再关一次', { loot: p(816, 432), exit: p(848, 464), lootLabel: '监控规程', walls: room([[14, [12, 13]]], [[10, []], [15, []]]), circuits: [panel('P', 272, 432, false, '入口与监控')], doors: [door('ENTRY', 448, 384, 'P', true)], guards: [camera('CAM', 688, 432, Math.PI, 200, 'P')], objectiveLabel: '穿过通电入口，再让同伙关掉同一线路上的摄像头' },
       '联络员：通电会开门，也会让镜头醒来。门后的人走过去，面板前的人留下。', '摄像头停下时，入口也关闭了。你已经在门的正确一侧。',
-      ['P 同时控制 ENTRY 和 CAM。', '录下接通、稍等、断开的动作。真人利用短暂开门进入，再继续向东。', '同伙在 P 接通后等约 1.3 秒，再断开并录制。真人沿下侧通道向东取件、撤离。'],
+      ['P 同时控制 ENTRY 和 CAM。', '录下接通、稍等、断开的动作。真人利用短暂开门进入，再继续向东。', '同伙在 P 接通后等约 1.3 秒，再断开并录制。真人沿南侧通道向东取件、撤离。'],
       [g(272, 432), e(), w(76), e(), r(), g(816, 432), g(848, 464)]),
     action('C3-2-b', '给回程留一次亮灯', { loot: p(816, 176), exit: p(112, 432), lootLabel: '联动时序表', walls: room([[14, [5, 6, 12, 13]]]), circuits: [panel('P', 272, 432, false, '两门与监控')], doors: [door('ENTRY', 448, 160, 'P', true), door('RETURN', 448, 384, 'P', true)], guards: [camera('CAM', 784, 176, Math.PI, 350, 'P')], objectiveLabel: '开北门进入、停机取件，再开南门返回出生处' },
       '你：不能永远停电。回来的门也在这条线上；最后一次接通，要等我离开镜头。', '回程窗口被留在录像后半段。供电顺序比一次停电更有用。',
-      ['两扇门都接 P，但镜头只覆盖北侧取件走廊。', '北门进，南门回；在真人取件时停机，回到南侧之后再接通。', '同伙在 P 接通，约第 3 秒断开，第 6.1 秒再接通。真人先沿西墙北上，赶在停机前通过北门，停机后取件，再走南门回到左下出口。'],
+      ['两扇门都接 P，但镜头只覆盖北侧取件走廊。', '北门进，南门回；在真人取件时停机，回到南侧之后再接通。', '同伙在 P 接通，约第 3 秒断开，第 6.1 秒再接通。真人先沿西墙北上，赶在停机前通过北门，停机后取件，再走南门回到西南出口。'],
       [g(272, 432), e(), w(133), e(), w(187), e(), r(), g(112, 176), g(400, 176), g(528, 176), g(816, 176), g(816, 432), g(400, 432), g(112, 432)], 'C3-2-a'),
   ] },
   { id: 'C3-3', chapter: '停电之夜', title: '没有免费的黑暗', summary: '熄灯会关掉安全门；守卫听觉还在，也能在近处发现你。', evidence: '电网中的民用支路标记', stages: [
     action('C3-3-a', '黑暗里的绕行', { loot: p(816, 176), exit: p(848, 464), par: 0, lootLabel: '支路标记', walls: room([[14, [8, 9, 14, 15]]]), circuits: [panel('L', 112, 432, true, '照明与中央门')], doors: [door('SHORT', 448, 256, 'L', true)], guards: [litGuard(720, 304, 2.3, 420, 'L', true, 112)], objectiveLabel: '熄灯后中央门失效，利用南侧检修口绕行' },
       '联络员：黑暗会缩短巡逻者的视野，也会锁住中央安全门。先找好停电后的路。', '南侧检修口不依赖电力。电网图上，类似的通道都留有手动接管方案。',
-      ['南侧开口没有接线。', '关闭 L 后不要再挤中央门；从最南侧绕到右区。', '出生处按 E，沿南侧检修口去东区，再从最东侧取件、撤离。别从守卫身边擦过。'],
+      ['南侧开口没有接线。', '关闭 L 后不要再挤中央门；从最南侧绕到东区。', '出生处按 E，沿南侧检修口去东区，再从最东侧取件、撤离。别从守卫身边擦过。'],
       [e(), g(112, 464), g(816, 464), g(816, 176), g(848, 464)]),
     action('C3-3-b', '让另一扇门接班', { loot: p(816, 176), exit: p(112, 432), par: 0, lootLabel: '手动接管方案', walls: room([[14, [5, 6, 12, 13]]]), circuits: [panel('L', 272, 432, true, '照明 / 应急分流', ['应急通道', '照明'])], doors: [door('NORTH', 448, 160, 'L', true), door('SOUTH', 448, 384, 'L', false)], guards: [litGuard(624, 176, Math.PI / 2, 420, 'L', true, 160)], lootPower: [power('L', false)], objectiveLabel: '停照明才能释放档案夹；改走南侧应急门' },
       '你：取物锁要求断开照明，北门却需要它。既然不能两全，就换一条回程。', '档案夹列出了泵站的应急接口。所谓安全门，保护的是设备的优先级。',
       ['断开照明会释放档案夹，也会关闭 NORTH、打开 SOUTH。', '整段可以走南门，取物时从东侧接近，避开暗中的近距视野。', '在 L 切到应急通道，走南门到最东侧，再北上取件，沿原路返回。'],
       [g(272, 432), e(), g(816, 432), g(816, 176), g(816, 432), g(112, 432)], 'C3-3-a'),
     action('C3-3-c', '熄灯以后，他仍听得见', { ...reach, walls: room([[14, [5, 6, 12, 13]]]), circuits: [panel('L', 112, 432, true, '入口与照明分流', ['应急通道', '照明'])], doors: [door('ENTRY', 448, 384, 'L', false)], guards: [litGuard(560, 432, Math.PI, 340, 'L', true, 180)], soundMarkers: [{ id: 'N1', x: 272, y: 176 }] },
-      '联络员：熄灯不会让人失聪。下方守卫仍然贴着入口，得再给他安排一次调查。', '照明、听觉和通道是三件不同的事。城市的支路也不能只靠一个总开关解决。',
-      ['暗中的 A 仍能看见近处，并响应声音。', '同伙先熄灯，再去北侧发声；真人使用南侧应急门。', '回声在出生处按 E，去 N1 发声，向北再向东退开待命。真人等两秒，从下方进入。'],
+      '联络员：熄灯不会让人失聪。南侧守卫仍然贴着入口，得再给他安排一次调查。', '照明、听觉和通道是三件不同的事。城市的支路也不能只靠一个总开关解决。',
+      ['暗中的 A 仍能看见近处，并响应声音。', '同伙先熄灯，再去北侧发声；真人使用南侧应急门。', '回声在出生处按 E，去 N1 发声，向北再向东退开待命。真人等两秒，从南侧进入。'],
       [e(), g(272, 432), g(272, 176), noise(), g(272, 80), g(400, 80), r(), w(120), g(816, 432)], 'C3-3-b'),
   ] },
   { id: 'C3-4', chapter: '停电之夜', title: '回声会接线', summary: '录像保存的是指定状态。把入口操作、内侧断电和留守拆给不同的自己。', evidence: '封存设备的独立供电接口', stages: [
     action('C3-4-a', '入口交给昨天', { loot: p(816, 176), exit: p(848, 432), lootLabel: '设备接线表', walls: room([[10, [12, 13]]]), circuits: [panel('P', 208, 176, false, '入口电源'), panel('Q', 528, 432, true, '内侧监控')], doors: [door('ENTRY', 320, 384, 'P', true, { window: [1.5, 2.5] })], guards: [camera('CAM', 784, 176, Math.PI, 350, 'Q')], objectiveLabel: '让回声赶上入口窗口，真人进入后关闭内侧监控' },
       '你：过去的我只需要记住“接通 P”。Q 还在门里面，留给现在的我。', 'P 与 Q 可以分开操作。封存设备并非真的只能和城市一起断电。',
-      ['入口只接受 1.5–2.5 秒的供电；P 在左上，Q 在右下。', '回声去 P，真人提前赶到入口。入内后关闭 Q 再去北侧取件。', '录下经左侧到 P 接通的路线。真人走下门，到 Q 断开，再沿右区中部北上取件，从东侧撤离。'],
+      ['入口只接受 1.5–2.5 秒的供电；P 在西北，Q 在东南。', '回声去 P，真人提前赶到入口。入内后关闭 Q 再去北侧取件。', '录下经西侧到 P 接通的路线。真人走南门，到 Q 断开，再沿东区中部北上取件，从东侧撤离。'],
       [g(208, 432), g(208, 176), e(), r(), g(528, 432), e(), g(592, 432), g(592, 176), g(816, 176), g(848, 432)]),
     action('C3-4-b', '让下一人接上内线', { loot: p(816, 176), exit: p(848, 432), par: 2, lootLabel: '独立接口编号', walls: room([[10, [12, 13]], [20, [8, 9]]]), circuits: [panel('P', 208, 176, false, '入口电源'), panel('Q', 528, 432, true, '内侧分流', ['检修通道', '监控'])], doors: [door('ENTRY', 320, 384, 'P', true, { window: [1.5, 2.5] }), door('INNER', 640, 256, 'Q', false)], guards: [camera('CAM', 784, 304, Math.PI, 300, 'Q')], objectiveLabel: '先打开外门，再把内侧电流从监控拨给检修通道' },
       '联络员：录第二名同伙时，第一名照常给你开门。内侧这次请求会在下一轮原样重放。', '录像里的 Q 请求写着“检修通道”，并不是盲目再拨一次开关。',

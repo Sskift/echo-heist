@@ -43,7 +43,7 @@ function receive(service: boolean): Stage {
     objectiveLabel: `本人从 ${cabinet} 接回原票，完成 PLATFORM 签入，再把票交到 ARCHIVE 留给下一段`,
   }, service ? '你：柜门就在我刚才投递的位置背面。人工柜没有时段限制，不过 HAND 接线和 STEP 放行都要有人留下。我去取票、签入，再把它送往档案区。' : '你：柜子背面的 FAST 灯亮了。先让一个我去 HAND，真人在 2–6 秒接回；快线替我省掉了第二个放行岗位。',
   '你亲手接回并签入了这张票，又把它交到 ARCHIVE。进入档案区后，它仍会在这里等你。',
-  [service ? 'HAND 负责柜门接收，STEP 负责人工放行；两处需要分别留守。' : 'HAND 负责打开柜门；FAST 的接收窗口是第 2–6 秒，提前按 E 可原地留候。', '本人接回后到 PLATFORM 签入，穿过中门，把同一张票交入 ARCHIVE，再去东南锚点。回声代取不能替代本人接回。', service ? '先录回声经南侧到 HAND；再录第二条停在左侧 STEP。本人到 SERVICE 按 E 等 HAND 就位，沿南侧去 PLATFORM 签入，通过 TICKET，在 ARCHIVE 按 E 交出，再东南撤离。' : '录一条先沿左侧南下、再到 HAND 的回声。本人在 FAST 按 E 原地等至第 2 秒，去北侧 PLATFORM 签入，再经中央门到 ARCHIVE 交付，从东南离开。'],
+  [service ? 'HAND 负责柜门接收，STEP 负责人工放行；两处需要分别留守。' : 'HAND 负责打开柜门；FAST 的接收窗口是第 2–6 秒，提前按 E 可原地留候。', '本人接回后到 PLATFORM 签入，穿过中门，把同一张票交入 ARCHIVE，再去东南锚点。回声代取不能替代本人接回。', service ? '先录回声经南侧到 HAND；再录第二条停在西侧 STEP。本人到 SERVICE 按 E 等 HAND 就位，沿南侧去 PLATFORM 签入，通过 TICKET，在 ARCHIVE 按 E 交出，再东南撤离。' : '录一条先沿西侧南下、再到 HAND 的回声。本人在 FAST 按 E 原地等至第 2 秒，去北侧 PLATFORM 签入，再经中央门到 ARCHIVE 交付，从东南离开。'],
   service
     ? [g(656, 432), g(656, 176), r(), g(528, 304), r(), g(496, 432), e(), w(120), g(656, 432), g(656, 304), e(), g(848, 304), e(), g(848, 464)]
     : [g(528, 432), g(656, 432), r(), g(496, 176), e(), w(125), g(656, 176), e(), g(656, 304), g(848, 304), e(), g(848, 464)], 'station-received', 'station-sent');
@@ -61,7 +61,7 @@ function cargo(service: boolean): Stage {
     objectiveLabel: '本人从 ARCHIVE 送票到 R，回声停监控、签 FINAL、交回 RETURN 并守 HOLD；本人带走货单',
   }, `联络员：ARCHIVE 里是你上一段交来的原票，PLATFORM 签名也还在。${service ? '人工通道还需要一个你守 POWER。' : '快线的通道已保持放行。'}另一个你在 R 等票，签完 FINAL 后把票留在 RETURN，继续守住 HOLD；货单只能由你带走。`,
   '票留给下一位接班人，实体货单跟着你离开。B-17 曾预留这条授权链，却没有抵达签收；货物最终转入了防投影设施。',
-  ['原票在右侧 ARCHIVE，不会从新来源生成。R 可以录制空手留候；PLATFORM 是上一段留下的签名。', '让回声在 R 等待你送件，再停监控、签 FINAL、交票到 RETURN、守 HOLD。本人取货后回到东南出口。', `${service ? '先录一条守 POWER 的回声。' : ''}接班者在 R 按 E 留候约 1.75 秒，沿右侧绕到 CAM-P 断电，再向南签 FINAL、北上交 RETURN，停在 HOLD 录制。本人从 ARCHIVE 取票，回 R 交出，随后经中央通道等北门打开，取货后原路东撤。`],
+  ['原票在东侧 ARCHIVE，不会从新来源生成。R 可以录制空手留候；PLATFORM 是上一段留下的签名。', '让回声在 R 等待你送件，再停监控、签 FINAL、交票到 RETURN、守 HOLD。本人取货后回到东南出口。', `${service ? '先录一条守 POWER 的回声。' : ''}接班者在 R 按 E 留候约 1.75 秒，沿东侧绕到 CAM-P 断电，再向南签 FINAL、北上交 RETURN，停在 HOLD 录制。本人从 ARCHIVE 取票，回 R 交出，随后经中央通道等北门打开，取货后原路东撤。`],
   [...(service ? [g(848, 496), r()] : []), ...courier, g(848, 304), e(), g(848, 432), e(), g(784, 432), g(784, 304), g(656, 304), g(656, 176), w(120), g(528, 176), g(656, 176), g(656, 304), g(848, 304), g(848, 464)], 'station-complete', 'station-received');
 }
 const platform = receive(false), final = cargo(false);
