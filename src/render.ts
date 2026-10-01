@@ -1,11 +1,14 @@
 import { Game, type Frame } from './engine.ts';
 import { doorPlates, ECHO_COLORS, HEIGHT, TILE, WIDTH, type Point } from './levels.ts';
+import { Scenery } from './scenery.ts';
 
 const C = { floor: '#17221e', grid: '#203029', wall: '#36443b', wallTop: '#465247', lime: '#c3ed82', ink: '#0c1712', muted: '#718578', amber: '#efbd72' };
 
 export class Renderer {
   ctx: CanvasRenderingContext2D;
   trails = true;
+  detail = true;
+  scenery = new Scenery();
   reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   rewindFlash = 0;
   lastTime = 0;
@@ -52,7 +55,7 @@ export class Renderer {
     if (stroke) { c.lineWidth = 1; c.strokeStyle = stroke; c.stroke(); }
   }
 
-  actor(actor: Frame, color: string, time: number, ghost = false, label = '') {
+  actor(actor: Frame, color: string, time: number, ghost = false, label = '', kind: 'agent' | 'guard' | 'tracker' | 'camera' = 'agent') {
     const c = this.ctx;
     c.save();
     if (ghost) c.globalAlpha *= 0.8;
@@ -62,6 +65,19 @@ export class Renderer {
     c.shadowColor = color;
     c.shadowBlur = ghost ? 12 : 8;
     c.rotate(actor.angle);
+    const sprite = this.detail && kind !== 'camera' ? this.scenery.sprite(kind, ghost ? color : undefined) : null;
+    if (kind === 'camera') {
+      c.fillStyle = '#25323a'; c.strokeStyle = color; c.lineWidth = 2;
+      c.fillRect(-13, -9, 22, 18); c.strokeRect(-13, -9, 22, 18);
+      c.fillStyle = color; c.fillRect(9, -6, 6, 12);
+      this.circle({ x: 0, y: 0 }, 3, '#a6baca');
+    } else if (sprite) {
+      c.shadowBlur = 0;
+      c.save(); c.rotate(-Math.PI / 2); c.drawImage(sprite, -13, -17, 26, 34); c.restore();
+      c.strokeStyle = color; c.lineWidth = 2;
+      c.beginPath(); c.arc(0, 0, 17, 0.8, Math.PI * 2 - 0.8); c.stroke();
+      c.fillStyle = color; c.beginPath(); c.moveTo(21, 0); c.lineTo(15, -3); c.lineTo(15, 3); c.closePath(); c.fill();
+    } else {
     c.fillStyle = color;
     c.beginPath();
     c.moveTo(13, 0); c.lineTo(2, -9); c.lineTo(-8, -7); c.lineTo(-10, 0); c.lineTo(-8, 7); c.lineTo(2, 9); c.closePath(); c.fill();
@@ -70,6 +86,8 @@ export class Renderer {
     c.fillRect(3, -5, 3, 10);
     c.fillStyle = ghost ? '#ffffff65' : '#f5f9e8';
     c.fillRect(-6, -4, 5, 8);
+    }
+    c.shadowBlur = 0;
     c.rotate(-actor.angle);
     if (ghost) {
       c.strokeStyle = `${color}90`; c.lineWidth = 1; c.setLineDash([2, 3]);
@@ -86,14 +104,15 @@ export class Renderer {
     this.lastTime = time;
     c.clearRect(0, 0, WIDTH, HEIGHT);
     c.fillStyle = palette.floor; c.fillRect(0, 0, WIDTH, HEIGHT);
+    if (this.detail) this.scenery.drawFloor(c, game.level);
     // A deliberately quiet blueprint grid keeps routes and silhouettes legible.
-    c.strokeStyle = palette.grid; c.lineWidth = 0.6;
+    c.strokeStyle = this.detail ? '#9daea51a' : palette.grid; c.lineWidth = 0.6;
     c.beginPath();
     for (let x = 0; x <= WIDTH; x += TILE) { c.moveTo(x, 0); c.lineTo(x, HEIGHT); }
     for (let y = 0; y <= HEIGHT; y += TILE) { c.moveTo(0, y); c.lineTo(WIDTH, y); }
     c.stroke();
 
-    // Pools of light are procedural and independent of external assets.
+    // Soft illumination stays below devices, sight cones and all rule labels.
     const goal = game.level.delivery ?? game.level.loot;
     for (const [x, y, r, tint] of [[game.level.spawn.x, game.level.spawn.y, 160, '139,187,132'], [goal.x, goal.y, 215, game.level.delivery ? '142,212,237' : '188,154,88']] as const) {
       const light = c.createRadialGradient(x, y, 0, x, y, r);
@@ -192,7 +211,7 @@ export class Renderer {
         if (!link) return;
         const at = game.guards[i], active = game.powered(link);
         this.line([circuit, { x: at.x, y: circuit.y }, at], active ? '#efbd7260' : '#7898a335', 1, [3, 6]);
-        if (def.lighting) { this.circle({ x: at.x + 25, y: at.y - 19 }, 5, active ? '#efbd72' : '#485866'); this.text(active ? '灯亮' : '灯灭', at.x + 25, at.y - 32, active ? C.amber : '#91a8bc', 8, 'center'); }
+        if (def.lighting) { this.circle({ x: at.x + 25, y: at.y - 19 }, 5, active ? '#efbd72' : '#485866'); this.text(active ? '灯亮' : '灯灭', at.x + 25, at.y - 43, active ? C.amber : '#91a8bc', 8, 'center'); }
       });
       c.fillStyle = '#283629'; c.fillRect(circuit.x - 18, circuit.y - 18, 36, 36);
       c.strokeStyle = color; c.strokeRect(circuit.x - 18, circuit.y - 18, 36, 36);
@@ -226,10 +245,11 @@ export class Renderer {
     }
 
     // Structural walls with offset shadows and fine surface detail.
-    for (const wall of game.level.walls) {
+    const texturedWalls = this.detail && this.scenery.drawWalls(c, game.level);
+    if (!texturedWalls) for (const wall of game.level.walls) {
       c.fillStyle = '#080f0c65'; c.fillRect(wall.x + 6, wall.y + 7, TILE, TILE);
     }
-    for (const wall of game.level.walls) {
+    if (!texturedWalls) for (const wall of game.level.walls) {
       const border = wall.x === 0 || wall.x === WIDTH - TILE || wall.y === 0 || wall.y === HEIGHT - TILE;
       c.fillStyle = border ? '#2b382e' : palette.wall;
       c.fillRect(wall.x, wall.y, TILE, TILE);
@@ -329,7 +349,7 @@ export class Renderer {
         this.line([guard, ...(guard.path ?? []), guard.investigate], '#efbd7260', 1, [4, 5]);
         this.circle(guard.investigate, 9, '#efbd7210', '#efbd72');
       }
-      this.actor({ ...guard, lure: false }, !enabled ? '#526153' : guard.suspicion > 0.2 ? '#ed947c' : C.amber, time, false, label);
+      this.actor({ ...guard, lure: false }, !enabled ? '#526153' : guard.suspicion > 0.2 ? '#ed947c' : C.amber, time, false, label, camera ? 'camera' : tracker ? 'tracker' : 'guard');
       if (game.evidenceReaders.has(game.guardName(index))) this.circle({ x: guard.x + 16, y: guard.y + 10 }, 5, '#8ed4ed');
       if (guard.suspicion > 0) {
         c.fillStyle = '#100e0a'; c.fillRect(guard.x - 15, guard.y + 21, 30, 3);

@@ -792,7 +792,7 @@
     }
   ],
   "implementation": {
-    "version": "0.12.1",
+    "version": "0.13.0",
     "mainMissions": 48,
     "mainActionZones": 132,
     "mechanicProbes": 4,

@@ -4,6 +4,7 @@ import { Game } from './engine.ts';
 import { ECHO_COLORS, FPS, LEVELS, LOOP_SECONDS, MAX_ECHOES, type Level } from './levels.ts';
 import { Renderer } from './render.ts';
 import { Sound } from './audio.ts';
+import { MediaUI } from './media-ui.ts';
 import { decodePlan, encodePlan, PLAN_KEY, type SavedPlan } from './plans.ts';
 import { CAMPAIGN_LEVELS, MISSIONS, canonicalZoneId } from './campaign-content.ts';
 import { Campaign, CAMPAIGN_KEY } from './campaign.ts';
@@ -95,6 +96,12 @@ let previewWasRunning = false;
 let game = new Game(LEVELS[0]);
 const renderer = new Renderer($('#game-canvas'));
 const sound = new Sound();
+let mediaWasRunning = false;
+const mediaUI = new MediaUI(sound, renderer, () => {
+  mediaWasRunning = game.status === 'running';
+  if (mediaWasRunning) game.togglePause();
+  clearInput();
+}, () => { if (mediaWasRunning && game.status === 'paused') game.togglePause(); });
 const keys = new Set<string>();
 let accumulator = 0;
 let lastFrame = performance.now();
@@ -152,7 +159,7 @@ function renderHint() {
   $('#more-hint').hidden = hintStep >= hints.length - 1;
   $('#more-hint').textContent = `再给一点提示（${hintStep + 1} / ${hints.length}）`;
 }
-$('.version').textContent = 'VOL. 12.1';
+$('.version').textContent = 'VOL. 13.0';
 $('.manual-steps').insertAdjacentHTML('beforeend', '<li><strong>安排一场完整劫案</strong><p>行动档案中的序章会逐步解锁。每段成功后保存安全锚点，下一段重新录制同伙。点击阶段名称可以回退；之后的阶段需要重做。</p></li><li><strong>调整时序，先看结果</strong><p>回声下方的加减按钮以 0.25 秒调整出场；按 P 预演已保存的回声，拖动时间检查门禁与暴露。E 操作电源和凭据终端，录制会保留这次操作请求。轨道上的 ✓ 表示完成，× 表示受阻或留候取消；点击标记会暂停并显示时间、操作者和原因。「操作记录」保留本轮结果，可只看问题项。预演没有真人送件，结果可能与实际行动不同。</p></li>');
 const playtesting = new PlaytestUI(() => ({ zoneId: canonicalZoneId(game.level.id), missionId: campaignMode ? campaign.mission.id : game.level.id, phase: dialog.open ? 'help' : previewGame ? 'rehearsal' : game.status === 'running' ? 'execution' : 'planning' }), () => { if (game.status === 'running') game.togglePause(); clearInput(); });
 $('.hint').addEventListener('toggle', () => { if ($<HTMLDetailsElement>('.hint').open) playtesting.event('hint', `tier ${hintStep + 1}`); });
@@ -455,10 +462,7 @@ $('#trails-button').addEventListener('click', () => {
 $('#sound-button').addEventListener('click', () => {
   sound.enabled = !sound.enabled;
   sound.unlock(); sound.play('door');
-  $('#sound-button').classList.toggle('active', sound.enabled);
-  $('#sound-button').setAttribute('aria-pressed', String(sound.enabled));
-  $('#sound-button').setAttribute('aria-label', sound.enabled ? '关闭音效' : '开启音效');
-  $('#sound-button').title = sound.enabled ? '关闭音效' : '开启音效';
+  mediaUI.render();
   focusGame();
 });
 $('#fullscreen-button').addEventListener('click', async () => {
@@ -486,7 +490,7 @@ document.addEventListener('focusin', event => {
   if (game.status === 'running') { game.togglePause(); refreshUI(); }
 });
 window.addEventListener('keydown', event => {
-  if (dialog.open || endingUI.open) return;
+  if (dialog.open || endingUI.open || mediaUI.open) return;
   if (event.ctrlKey || event.metaKey || event.altKey) return;
   if (isEditingControl(event.target)) return;
   if (event.code === 'KeyP' || (previewGame && event.code === 'Escape')) { event.preventDefault(); if (!event.repeat) togglePreview(); return; }
@@ -511,8 +515,10 @@ window.addEventListener('keydown', event => {
 window.addEventListener('keyup', event => keys.delete(event.code));
 function pauseOnLeave() { clearInput(); if (game.status === 'running') game.togglePause(); }
 window.addEventListener('blur', pauseOnLeave);
+window.addEventListener('blur', () => sound.focus(false));
+window.addEventListener('focus', () => sound.focus(true));
 window.addEventListener('pagehide', persistPlan);
-document.addEventListener('visibilitychange', () => { if (document.hidden) pauseOnLeave(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseOnLeave(); sound.focus(!document.hidden); });
 $('#game-canvas').addEventListener('pointerdown', () => { sound.unlock(); focusGame(); });
 
 const touchCodes: Record<string, string> = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
@@ -569,6 +575,7 @@ function loop(now: number) {
     }
   }
   playtesting.tick();
+  sound.updateScene(game.level.theme, game.status, game.alarm, !!previewGame, endingUI.open);
   renderer.draw(previewGame ?? game, now / 1000);
   refreshUI();
   requestAnimationFrame(loop);

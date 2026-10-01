@@ -1,0 +1,46 @@
+[
+  {
+    "title": "Kenney Top-down Shooter",
+    "author": "Kenney Vleugels",
+    "sourcePage": "https://kenney.nl/assets/top-down-shooter",
+    "download": "https://kenney.nl/media/pages/assets/top-down-shooter/230204340a-1677694684/kenney_top-down-shooter.zip",
+    "license": "CC0-1.0",
+    "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "verifiedDate": "2026-10-01",
+    "originalSHA256": "433a2aa4fd6b617cd143528bf12622811ebe9c56fe1975bb664461b58cd2f2f5",
+    "bundled": "src/assets/art/*"
+  },
+  {
+    "title": "Espionage",
+    "author": "brandon75689 (submitted by HaelDB)",
+    "sourcePage": "https://opengameart.org/content/espionage",
+    "download": "https://opengameart.org/sites/default/files/espionage.ogg",
+    "license": "CC0-1.0",
+    "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "verifiedDate": "2026-10-01",
+    "originalSHA256": "1b267502fd678b9e74c01947339797ce76d6270978422c641bd1a8b277ac9d4c",
+    "bundled": "src/assets/music/espionage.mp3"
+  },
+  {
+    "title": "Strange Experiments",
+    "author": "Alexander Ehlers / tricksntraps",
+    "sourcePage": "https://opengameart.org/content/t-t-free-cyberpunk-pack-2",
+    "download": "https://opengameart.org/sites/default/files/strange_experiments_80bpm.ogg",
+    "license": "CC0-1.0",
+    "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "verifiedDate": "2026-10-01",
+    "originalSHA256": "2e38cfcdc0d44bf6d67d95a2ba33883cf3d316d650f6e9352914afb956bcd14e",
+    "bundled": "src/assets/music/strange-experiments.mp3"
+  },
+  {
+    "title": "PYNCHON",
+    "author": "James Gargette / cinameng",
+    "sourcePage": "https://opengameart.org/content/pynchon",
+    "download": "https://opengameart.org/sites/default/files/pynchon.mp3",
+    "license": "CC0-1.0",
+    "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "verifiedDate": "2026-10-01",
+    "originalSHA256": "295bc30016587d909a8b1d494cc7fb13550f5c74807221e9eb0eb9f2769d4e3b",
+    "bundled": "src/assets/music/pynchon.mp3"
+  }
+]
