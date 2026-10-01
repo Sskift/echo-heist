@@ -4,6 +4,13 @@ import { Campaign } from '../../src/campaign.ts';
 import { MISSIONS } from '../../src/campaign-content.ts';
 import { playWitness } from '../../src/witness.ts';
 
+// Exercise story, input and persistence through the supported simple display.
+// Full-detail meshes, shadows and camera behavior run in render.spec.ts;
+// repeated software shadow rasterization must not dominate keyboard routes.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('echo-heist-scene-detail', 'false'));
+});
+
 function checkpoint(id: string, completed = false) {
   const before = MISSIONS.slice(0, MISSIONS.findIndex(m => m.id === id) + Number(completed));
   return { version: 1, selected: id, runs: Object.fromEntries(before.map(m => [m.id, [] as string[]])), completed: before.map(m => m.id) };
@@ -176,39 +183,9 @@ test('cross-room ticket UI survives retry, preview, reload and mission changes; 
   expect(errors).toEqual([]);
 });
 
-test('3D models load, screen-up input records correct world poses, and camera changes keep plans intact on phone', async ({ page }) => {
-  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
-  await clock(page); await page.goto('/?mode=training'); await advance(page);
-  await expect(page.locator('#game-canvas')).toHaveAttribute('data-scene-ready', 'ready');
-  await page.locator('#overlay-action').click(); await advance(page);
-  await page.keyboard.down('ArrowUp'); await advance(page, 12); await page.keyboard.up('ArrowUp');
-  await page.keyboard.press('r'); await advance(page);
-  const plan = await page.evaluate(() => localStorage.getItem('echo-heist-plans-v1'));
-  const frames = Object.values(JSON.parse(plan!))[0] as { echoes: { frames: { x: number; y: number }[] }[] };
-  const first = frames.echoes[0].frames[0], last = frames.echoes[0].frames.at(-1)!;
-  expect(last.x).toBeLessThan(first.x); expect(last.y).toBeLessThan(first.y);
-  expect(last.x - first.x).toBeCloseTo(last.y - first.y, 5);
-  await page.locator('#camera-button').click(); await advance(page);
-  await expect(page.locator('#camera-button')).toHaveText('全景');
-  expect(await page.evaluate(() => localStorage.getItem('echo-heist-plans-v1'))).toBe(plan);
-  await page.locator('.arena').screenshot({ path: '.local/scene3d-echo-close.png' });
-  await page.locator('#preview-button').click(); await advance(page);
-  await page.locator('#preview-frame').fill('180'); await page.locator('#preview-frame').dispatchEvent('input'); await advance(page);
-  expect(await page.evaluate(() => localStorage.getItem('echo-heist-plans-v1'))).toBe(plan);
-  await page.locator('#preview-button').click(); await advance(page);
-  await page.setViewportSize({ width: 390, height: 844 }); await advance(page);
-  await page.locator('.hint summary').click();
-  await expect(page.locator('.map-directions')).toHaveText('地图方向：北 ↗ · 东 ↘ · 南 ↙ · 西 ↖');
-  const drawingWidth = await page.locator('#game-canvas').evaluate(c => (c as HTMLCanvasElement).width);
-  expect(drawingWidth).toBeLessThanOrEqual(585); // Phone rendering must not retain the 1280px desktop buffer.
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-  await page.locator('.arena').screenshot({ path: '.local/scene3d-phone.png' });
-  expect(errors).toEqual([]);
-});
-
 test('opening pauses input, real keyboard cooperation saves evidence, and the journal has no future revelations', async ({ page }) => {
-  // Two complete missions plus reloads and browser teardown render through
-  // SwiftShader on CI. Keep their real keyboard route and every assertion.
+  // Two complete missions, reloads and browser teardown use the same real
+  // keyboard route and assertions on hardware and software WebGL.
   if (process.env.CI || process.env.ECHO_SOFTWARE_WEBGL) test.setTimeout(300_000);
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await clock(page); await page.goto('/'); await advance(page);
@@ -274,7 +251,6 @@ test('museum deposit, preview and reload preserve the real ending in simplified 
   // Full-detail models and camera rendering have a separate browser check.
   if (process.env.CI || process.env.ECHO_SOFTWARE_WEBGL) test.setTimeout(240_000);
   await clock(page);
-  await page.addInitScript(() => localStorage.setItem('echo-heist-scene-detail', 'false'));
   const finale = new Campaign(checkpoint('C7-6'));
   while (finale.cleared() < finale.mission.stages.length - 1) expect(finale.commit(playWitness(finale.stage, finale.carryFor(finale.stage.level.id), finale.credentialFor(finale.stage.level.id)))).toBe(true);
   await seed(page, finale.export(), {version: 1, seen: ['c5-departure', 'c7-arrival'], choices: {'c5-departure': 'verify'}});
