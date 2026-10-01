@@ -7,6 +7,7 @@ import { VIEW_WIDTH, VIEW_HEIGHT } from './isometric.ts';
 import { SetDressing, setting, sceneLook } from './set-dressing.ts';
 import { SceneFinish, SurfaceRelief } from './scene-finish.ts';
 import { WindowLight } from './window-light.ts';
+import { passageLandmarks } from './room-journey.ts';
 
 type Actor = ReturnType<Models3D['character']>;
 type Label = { at: Point; height: number; text: string; color: string };
@@ -20,6 +21,10 @@ export class Renderer {
   closeup = false;
   rewindFlash = 0;
   reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  private arrival?: { at: Point; elapsed: number };
+  get arriving() { return !!this.arrival; }
+  beginArrival(at: Point) { this.arrival = this.reducedMotion ? undefined : {at: {...at}, elapsed: 0}; }
+  finishArrival() { this.arrival = undefined; }
   readonly ctx: CanvasRenderingContext2D;
   private readonly gl: THREE.WebGLRenderer;
   private readonly finish: SceneFinish;
@@ -201,6 +206,7 @@ export class Renderer {
       }
       this.doors.set(door.id, panelGroup);
     }
+    for (const landmark of passageLandmarks(level)) this.dressing.passage(this.levelRoot, landmark);
     if (level.lostProperty) this.propertyCabinet = this.dressing.lostProperty(this.levelRoot, level.lostProperty);
     for (const terminal of level.terminals ?? []) {
       const { screen, ticket } = terminal.appearance === 'lost-property' && this.propertyCabinet ? this.propertyCabinet : this.dressing.terminal(this.levelRoot, terminal, style === 'station');
@@ -341,8 +347,17 @@ export class Renderer {
     if (this.level !== game.level || this.detail !== this.lastDetail) this.build(game.level);
     const focus = game.spectator && game.activeEchoes[0] ? game.echoAt(game.activeEchoes[0].echo) : game.player;
     const target = this.closeup ? world(focus, 0.45) : new THREE.Vector3(0, 0.3, 0);
-    this.camera.position.copy(target).add(new THREE.Vector3(30, 27, 30)); this.camera.lookAt(target); this.camera.zoom = this.closeup ? this.canvas.clientWidth < 600 ? 2.65 : 1.65 : 1; this.camera.updateProjectionMatrix(); this.camera.updateMatrixWorld();
+    let arrivalZoom = 1, arrivalShade = 0;
+    if (this.arrival && !this.reducedMotion) {
+      this.arrival.elapsed += Math.max(0, dt);
+      const progress = Math.min(1, this.arrival.elapsed / .9), remaining = (1 - progress) ** 3;
+      target.lerp(world(this.arrival.at, .45), remaining * .45); arrivalZoom += remaining * .08;
+      arrivalShade = remaining * .6;
+      if (progress >= 1) this.arrival = undefined;
+    } else this.arrival = undefined;
+    this.camera.position.copy(target).add(new THREE.Vector3(30, 27, 30)); this.camera.lookAt(target); this.camera.zoom = (this.closeup ? this.canvas.clientWidth < 600 ? 2.65 : 1.65 : 1) * arrivalZoom; this.camera.updateProjectionMatrix(); this.camera.updateMatrixWorld();
     this.groundEffects(game); this.labels = [];
+    for (const landmark of passageLandmarks(game.level)) this.label(landmark.at, .2, landmark.label, colors.brass);
     if (this.propertyCabinet && game.level.lostProperty) {
       const received = game.tokenOwner === 'terminal:HOME';
       this.propertyCabinet.names[0].visible = !received; this.propertyCabinet.names[1].visible = received;
@@ -407,5 +422,6 @@ export class Renderer {
     for (const s of game.level.suppressors ?? []) { const active = game.suppressionActive(s); this.suppressors.get(s.id)!.emissiveIntensity = active ? 1.6 : 0.03; this.label({ x: s.x + s.w / 2, y: s.y }, 0.15, `${s.id} · ${active ? '抑制' : '空档'}`, '#d2a0ef'); }
     for (const r of game.level.delivery?.receivers ?? []) this.label(r.at, 0.1, `${r.guard} 回执${game.evidenceReceipts.has(r.guard) ? ' ✓' : ' …'}`, colors.cyan);
     this.finish.draw(this.scene, this.camera, this.detail, width); this.hud(game, dt);
+    if (arrivalShade > 0) { this.ctx.fillStyle = `rgba(6,18,26,${arrivalShade})`; this.ctx.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT); }
   }
 }

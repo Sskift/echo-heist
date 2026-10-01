@@ -5,6 +5,7 @@ import { Campaign } from '../src/campaign.ts';
 import { playWitness } from '../src/witness.ts';
 import { doorPlates, WIDTH, HEIGHT, TILE } from '../src/levels.ts';
 import { STORY } from '../src/story.ts';
+import { passageLandmarks, roomJourney } from '../src/room-journey.ts';
 
 assert.equal(new Set(STORY.map(s => s.id)).size, STORY.length, 'Duplicate story scene');
 for (const scene of STORY) {
@@ -116,6 +117,7 @@ for (const mission of MISSIONS) {
     for (const point of [level.spawn, level.exit ?? level.spawn, ...level.plates, ...level.circuits ?? [], ...level.terminals ?? [], ...(level.delivery ? [level.delivery, ...level.delivery.receivers?.map(r => r.at) ?? []] : level.objective === 'reach' ? [] : [level.loot])]) {
       assert.ok(!game.blocked(point.x, point.y), `Entity inside obstacle: ${level.id} at ${point.x},${point.y}`);
     }
+    for (const {at, label} of passageLandmarks(level)) assert.ok(label.trim() && at.x >= TILE && at.x <= WIDTH - TILE && at.y >= TILE && at.y <= HEIGHT - TILE && !game.blocked(at.x, at.y), `Invalid passage landmark in ${level.id}`);
     const source = level.continuity ? wins.get(level.continuity.source) : undefined;
     const carry = source ? { level: source.level, echo: source.echoes[0] } : undefined;
     if (level.continuity) assert.ok(carry && source?.level.handoff, `Missing retained recording for ${level.id}`);
@@ -163,6 +165,13 @@ for (const mission of MISSIONS.filter(m => m.preparations?.length || m.stages.so
       for (const witness of [stage.witness, ...stage.alternatives ?? []]) {
         const win = playWitness({ ...stage, witness }, prefix.carryFor(stage.level.id), prefix.credentialFor(stage.level.id)), campaign = new Campaign(prefix.export());
         assert.ok(campaign.commit(win), `Cannot commit ${stage.level.id}`);
+        const saved = campaign.export(), journey = roomJourney(campaign, win);
+        if (index + 1 < mission.stages.length) {
+          assert.ok(journey, `Missing room journey after ${stage.level.id}`);
+          assert.ok(journey.title.trim() && journey.detail.trim(), `Empty room journey after ${stage.level.id}`);
+          assert.deepEqual(journey.arrival, campaign.stage.level.spawn, `Journey enters the wrong branch after ${stage.level.id}`);
+        } else assert.equal(journey, undefined, `Journey invented after the end of ${mission.id}`);
+        assert.deepEqual(campaign.export(), saved, `Presentation changed checkpoint facts after ${stage.level.id}`);
         const selected = campaign.data.outcomes?.[mission.stages[index].level.id];
         if (selected) reached.add(selected);
         const restored = new Campaign(campaign.export());

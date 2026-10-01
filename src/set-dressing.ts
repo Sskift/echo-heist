@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Circuit, Level, Point, Terminal } from './levels.ts';
+import type { PassageLandmark } from './room-journey.ts';
 
 type Box = (parent: THREE.Object3D, x: number, y: number, z: number, w: number, h: number, d: number, color: string, metal?: number) => THREE.Mesh;
 type Setting = 'museum' | 'gala' | 'records' | 'power' | 'station' | 'retention' | 'civic' | 'vault' | 'archive';
@@ -30,6 +31,19 @@ export const sceneLook = (level: Level) => looks[setting(level)];
 // wall art stays on wall faces, and painted floor markings add no cover.
 export class SetDressing {
   constructor(private box: Box) {}
+
+  passage(parent: THREE.Object3D, landmark: PassageLandmark) {
+    const group = new THREE.Group(); group.position.set(landmark.at.x / 32 - 15, 0, landmark.at.y / 32 - 9); parent.add(group);
+    const stair = landmark.kind !== 'threshold', depth = stair ? 1.35 : .52;
+    this.box(group, 0, .017, 0, 1.35, .025, depth, '#233f47', .25);
+    for (const x of [-.64, .64]) this.box(group, x, .039, 0, .045, .045, depth, '#b9a26c', .55);
+    for (const z of [-depth / 2, depth / 2]) this.box(group, 0, .039, z, 1.35, .045, .045, '#b9a26c', .55);
+    if (stair) {
+      for (let i = 0; i < 5; i++) this.box(group, 0, .04, -.47 + i * .235, 1.17, .018, .15, landmark.kind === 'hatch' ? '#4c696a' : '#7c8277', .2);
+      this.box(group, .78, .38, -.44, .065, .75, .065, '#b9a26c', .65);
+      this.box(group, .78, .78, -.44, .16, .075, .16, '#a8c2b4', .2);
+    } else for (const x of [-.35, 0, .35]) this.box(group, x, .04, 0, .1, .02, .22, '#b9a26c', .4);
+  }
 
   lostProperty(parent: THREE.Object3D, at: Point) {
     const group = new THREE.Group(); group.position.set(at.x / 32 - 15, 0, at.y / 32 - 9); parent.add(group);

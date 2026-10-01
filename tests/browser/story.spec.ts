@@ -98,6 +98,32 @@ test('a retained teammate is visible across rooms, survives local-plan reload an
   expect(errors).toEqual([]);
 });
 
+test('a room arrival follows the actual cabinet choice, clears held input and preserves the ready checkpoint', async ({ page }) => {
+  await clock(page); await seed(page, checkpoint('C4-6'), {version: 1, seen: ['c4-arrival'], choices: {}});
+  await page.goto('/'); await advance(page); await page.locator('#overlay-action').click();
+  await move(page, 'w', 69); await move(page, 'e', 1); await move(page, 's', 69);
+  await move(page, 'd', 77); await move(page, 'e', 1); await move(page, 'w', 34);
+  await expect(page.locator('#overlay-card h2')).toHaveText('这一段，已经安全了。');
+  const checkpointSave = await page.evaluate(() => localStorage.getItem('echo-heist-campaign-v1'));
+  await page.keyboard.down('d'); await page.keyboard.down('s');
+  await page.locator('#overlay-action').click(); await advance(page);
+  await expect(page.locator('#journey-route')).toHaveText('登记厅楼梯 → 站台南侧');
+  await expect(page.locator('#journey-detail')).toContainText('原票仍留在 SERVICE 柜中');
+  await expect(page.locator('#credential-owner')).toContainText('SERVICE');
+  await page.locator('#journey-skip').click(); await advance(page, 90);
+  await expect(page.locator('#seconds')).toHaveText('12');
+  await expect(page.locator('#record-label')).toHaveText('STANDBY');
+  expect(await page.evaluate(() => localStorage.getItem('echo-heist-campaign-v1'))).toBe(checkpointSave);
+  await page.locator('#overlay-action').click(); await advance(page, 20); await page.keyboard.press('r'); await advance(page);
+  await page.keyboard.up('d'); await page.keyboard.up('s');
+  const plan = await page.evaluate(() => JSON.parse(localStorage.getItem('echo-heist-plans-v1')!)['C4-6-receive-service']);
+  expect(plan.echoes[0].frames.every((f: {x: number; y: number}) => f.x === 528 && f.y === 432)).toBe(true);
+  await page.reload(); await advance(page);
+  await expect(page.locator('#journey-panel')).not.toBeVisible();
+  await expect(page.locator('#credential-owner')).toContainText('SERVICE');
+  await expect(page.locator('#seconds')).toHaveText('12');
+});
+
 test('cross-room ticket UI survives retry, preview, reload and mission changes; backtracking clears its dependents', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   const campaign = new Campaign(checkpoint('C4-6'));
@@ -225,10 +251,7 @@ test('chapter aftermath resumes after reload and leads to the next chapter openi
   await page.reload(); await advance(page); await expect(page.locator('#story-dialog')).not.toBeVisible();
 });
 
-test('a dialogue answer changes the following chapter and the real ending; replay preserves it', async ({ page }) => {
-  // This flow now also plays the museum return, retries its receipt and
-  // reloads the final archive. Software WebGL needs time for those scenes.
-  if (process.env.CI || process.env.ECHO_SOFTWARE_WEBGL) test.setTimeout(240_000);
+test('a dialogue answer changes the following chapter and replay preserves the saved answer', async ({ page }) => {
   await clock(page); await seed(page, checkpoint('C5-6', true)); await page.goto('/'); await advance(page);
   await page.locator('#story-next').click(); await page.locator('#story-next').click();
   await expect(page.locator('#story-next')).toBeDisabled();
@@ -243,10 +266,19 @@ test('a dialogue answer changes the following chapter and the real ending; repla
   await page.locator('#story-next').click(); await page.locator('#story-next').click();
   await expect(page.locator('[data-answer="testify"]')).toBeDisabled();
   await page.locator('#story-next').click(); await page.locator('#story-close').click();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('echo-heist-story-v1')!).choices['c5-departure'])).toBe('verify');
+});
+
+test('museum deposit, preview and reload preserve the real ending in simplified graphics', async ({ page }) => {
+  // Exercise the supported low-detail display through the whole archive flow.
+  // Full-detail models and camera rendering have a separate browser check.
+  if (process.env.CI || process.env.ECHO_SOFTWARE_WEBGL) test.setTimeout(240_000);
+  await clock(page);
+  await page.addInitScript(() => localStorage.setItem('echo-heist-scene-detail', 'false'));
   const finale = new Campaign(checkpoint('C7-6'));
   while (finale.cleared() < finale.mission.stages.length - 1) expect(finale.commit(playWitness(finale.stage, finale.carryFor(finale.stage.level.id), finale.credentialFor(finale.stage.level.id)))).toBe(true);
-  await page.evaluate(save => localStorage.setItem('echo-heist-campaign-v1', JSON.stringify(save)), finale.export());
-  await page.reload(); await advance(page);
+  await seed(page, finale.export(), {version: 1, seen: ['c5-departure', 'c7-arrival'], choices: {'c5-departure': 'verify'}});
+  await page.goto('/'); await advance(page);
   await expect(page.locator('#mission-title')).toHaveText('把名字带回第一扇门');
   await expect(page.locator('#credential-location')).toContainText('公共身份恢复回执');
   await expect(page.locator('#credential-owner')).toContainText('当前的你');

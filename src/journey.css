@@ -1,0 +1,11 @@
+.journey-panel { display:flex; align-items:center; gap:22px; padding:17px 22px; color:#e5dfbd; background:#132e39; border-top:1px solid #c7aa6755; border-bottom:1px solid #c7aa6755; }
+.journey-panel[hidden] { display:none; }
+.journey-panel>div { flex:1; min-width:0; }
+.journey-route { font-size:9px; color:#bba873; letter-spacing:.08em; margin:0 0 5px; }
+.journey-panel strong { display:block; font-size:15px; font-weight:500; }
+.journey-panel #journey-detail { font-size:11px; line-height:1.7; color:#b9c6c7; margin:7px 0 3px; }
+.journey-panel small { font-size:9px; color:#91a5a8; }
+.journey-panel button { flex-shrink:0; padding:8px 11px; border:1px solid #bba87388; color:#eee0ad; background:transparent; font-size:10px; }
+.journey-panel button:hover { background:#bba87322; }
+.journey-panel button:focus-visible { outline:2px solid #d6eab0; outline-offset:3px; }
+@media(max-width:550px) { .journey-panel { padding:12px; gap:10px; align-items:flex-start; } .journey-panel strong { font-size:12px; } .journey-panel #journey-detail { font-size:10px; } .journey-route { font-size:8px; } .journey-panel button { padding:7px; font-size:9px; } }

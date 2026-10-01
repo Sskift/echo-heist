@@ -14,6 +14,8 @@ import { CampaignUI } from './campaign-ui.ts';
 import { StoryUI } from './story-ui.ts';
 import { EndingUI } from './ending-ui.ts';
 import { OperationUI, operationText } from './operation-ui.ts';
+import { roomJourney } from './room-journey.ts';
+import { JourneyUI } from './journey-ui.ts';
 
 const ALL_LEVELS = [...LEVELS, ...CAMPAIGN_LEVELS];
 const demoName = new URLSearchParams(location.search).get('demo') ?? '';
@@ -105,6 +107,7 @@ let previewGame: Game | null = null;
 let previewWasRunning = false;
 let game = new Game(LEVELS[0]);
 const renderer = new Renderer($('#game-canvas'));
+const journeyUI = new JourneyUI($('.arena'), () => { renderer.finishArrival(); clearInput(); focusGame(); });
 $('#fullscreen-button').insertAdjacentHTML('beforebegin', '<button id="camera-button" class="media-button" title="切换全景 / 跟随近景" aria-label="切换跟随近景" aria-pressed="false">近景</button>');
 $('#camera-button').addEventListener('click', () => {
   renderer.closeup = !renderer.closeup;
@@ -207,6 +210,7 @@ function changePreparation(id?: string): boolean {
 }
 
 function startAction() {
+  renderer.finishArrival(); journeyUI.clear();
   game.start();
   if (campaignMode && campaign.depart(game)) saveCampaign();
 }
@@ -272,6 +276,7 @@ function setLevel(index: number) {
 }
 
 function loadLevel(level: Level) {
+  journeyUI.clear(); renderer.finishArrival();
   if (initialized) persistPlan();
   previewGame = null; previewWasRunning = false;
   game = new Game(level, campaignMode ? campaign.carryFor(level.id) : undefined, campaignMode ? campaign.credentialFor(level.id) : undefined);
@@ -318,7 +323,11 @@ function primaryAction() {
   else if (game.status === 'caught') game.restart();
   else if (game.status === 'won') {
     if (campaignMode) {
-      if (campaign.cleared() < campaign.mission.stages.length) loadLevel(campaign.stage.level);
+      if (campaign.cleared() < campaign.mission.stages.length) {
+        const journey = roomJourney(campaign, game);
+        loadLevel(campaign.stage.level);
+        if (journey) { renderer.beginArrival(journey.arrival); journeyUI.show(journey, renderer.arriving); }
+      }
       else {
         const next = campaign.nextMission;
         if (next) openMission(next.id);
@@ -662,6 +671,7 @@ function loop(now: number) {
   }
   sound.updateScene(storyUI.open ? storyUI.theme : game.level.theme, game.status, game.alarm, !!previewGame || storyUI.open, endingUI.open);
   renderer.draw(previewGame ?? game, now / 1000);
+  journeyUI.update(renderer.arriving);
   refreshUI();
   requestAnimationFrame(loop);
 }
