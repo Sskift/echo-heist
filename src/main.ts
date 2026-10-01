@@ -132,9 +132,7 @@ const campaignUI = new CampaignUI(campaign, {
 const storyUI = new StoryUI(campaign, () => {
   clearInput(); accumulator = 0;
   if (game.status === 'running') game.togglePause();
-}, () => { clearInput(); accumulator = 0; refreshUI(); }, () => {
-  sound.enabled = !sound.enabled; sound.unlock(); mediaUI.render(); return sound.enabled;
-}, () => sound.enabled);
+}, () => { clearInput(); accumulator = 0; refreshUI(); }, sound);
 const operationUI = new OperationUI(() => { clearInput(); if (game.status === 'running') { game.togglePause(); refreshUI(); } });
 for (const selector of ['#mission-board', '#security-panel', '#power-panel', '#relay-panel', '#suppression-panel', '#delivery-panel']) {
   $(selector).addEventListener('toggle', () => {

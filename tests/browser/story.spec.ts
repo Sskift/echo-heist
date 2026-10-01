@@ -96,6 +96,7 @@ test('phone journal fits, pauses an active run, restores focus, and media prefer
   await page.keyboard.press('Escape'); await expect(page.locator('#story-button')).toBeFocused();
   await page.reload(); await advance(page); await page.locator('#story-button').click();
   await expect(page.locator('#story-sound')).toHaveText('声音：开');
+  await expect(page.locator('#now-playing')).toContainText('Espionage');
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 

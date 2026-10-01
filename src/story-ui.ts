@@ -1,4 +1,5 @@
 import type { Campaign } from './campaign.ts';
+import type { Sound } from './audio.ts';
 import { MISSIONS, stageVersions } from './campaign-content.ts';
 import { chapterFor, evidence, sceneUnlocked, STORY, STORY_KEY, StoryState, type StoryScene } from './story.ts';
 import './story.css';
@@ -36,7 +37,7 @@ export class StoryUI {
   private journalChapter = 0;
   private previousFocus: HTMLElement | null = null;
   private saved = true;
-  constructor(private campaign: Campaign, private onOpen: () => void, private onClose: () => void, private toggleSound: () => boolean, private soundEnabled: () => boolean) {
+  constructor(private campaign: Campaign, private onOpen: () => void, private onClose: () => void, private sound: Sound) {
     let raw: unknown;
     try { raw = JSON.parse(localStorage.getItem(STORY_KEY) ?? 'null'); } catch { /* New journal. */ }
     this.state = new StoryState(raw);
@@ -47,9 +48,12 @@ export class StoryUI {
       <h2 id="story-title" tabindex="-1"></h2><div id="story-body"></div><div id="story-actions"></div><p id="story-save" role="status"></p></div>
     </dialog>`);
     this.dialog = document.querySelector('#story-dialog')!;
-    document.querySelector('#story-button')!.addEventListener('click', () => this.journal());
+    document.querySelector('#story-button')!.addEventListener('click', () => { this.sound.unlock(); this.journal(); });
     this.el('#story-close').addEventListener('click', () => this.dialog.close());
-    this.el('#story-sound').addEventListener('click', () => { this.toggleSound(); this.renderSound(); });
+    this.el('#story-sound').addEventListener('click', () => { this.sound.enabled = !this.sound.enabled; this.renderSound(); });
+    // Returning readers already opted in, but browsers still need a new
+    // gesture after reload. Advancing or opening the journal supplies it.
+    this.dialog.addEventListener('click', () => this.sound.unlock());
     this.dialog.addEventListener('close', () => {
       this.scene = undefined;
       this.onClose();
@@ -90,7 +94,7 @@ export class StoryUI {
     this.focusTitle();
   }
   private focusTitle() { this.el('#story-title').focus({ preventScroll: true }); this.dialog.scrollTop = 0; this.el('.story-content').scrollTop = 0; }
-  private renderSound() { this.el('#story-sound').textContent = this.soundEnabled() ? '声音：开' : '声音：关'; }
+  private renderSound() { this.el('#story-sound').textContent = this.sound.enabled ? '声音：开' : '声音：关'; }
   private save() {
     try { localStorage.setItem(STORY_KEY, JSON.stringify(this.state.data)); this.saved = true; }
     catch { this.saved = false; }
