@@ -226,6 +226,9 @@ test('chapter aftermath resumes after reload and leads to the next chapter openi
 });
 
 test('a dialogue answer changes the following chapter and the real ending; replay preserves it', async ({ page }) => {
+  // This flow now also plays the museum return, retries its receipt and
+  // reloads the final archive. Software WebGL needs time for those scenes.
+  if (process.env.CI || process.env.ECHO_SOFTWARE_WEBGL) test.setTimeout(240_000);
   await clock(page); await seed(page, checkpoint('C5-6', true)); await page.goto('/'); await advance(page);
   await page.locator('#story-next').click(); await page.locator('#story-next').click();
   await expect(page.locator('#story-next')).toBeDisabled();
