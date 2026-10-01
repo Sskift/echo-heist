@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { MISSIONS, stageVersions } from '../src/campaign-content.ts';
+import { MISSIONS, stageVersions, type Mission } from '../src/campaign-content.ts';
+import { CONTRACTS, CONTRACT_FAMILIES } from '../src/contract-content.ts';
+import { ContractBook } from '../src/contracts.ts';
 import { Game } from '../src/engine.ts';
 import { Campaign } from '../src/campaign.ts';
 import { playWitness } from '../src/witness.ts';
@@ -20,7 +22,8 @@ for (const scene of STORY) {
 const ids = new Set<string>();
 const wins = new Map<string, Game>();
 let zones = 0, layouts = 0;
-for (const mission of MISSIONS) {
+const contractMissions: Mission[]=CONTRACTS.map(c=>({id:c.stage.level.id,chapter:'夜班委托',title:c.title,summary:c.request,evidence:'委托已交差',stages:[c.stage]}));
+for (const mission of [...MISSIONS,...contractMissions]) {
   const preparations = mission.preparations ?? [];
   const facts = new Set(preparations.map(p => p.id));
   assert.equal(facts.size, preparations.length, `Duplicate preparation in ${mission.id}`);
@@ -43,6 +46,7 @@ for (const mission of MISSIONS) {
     }
     for (const stage of stageVersions(base)) {
     const level = stage.level;
+    assert.ok(level.echoLimit===undefined || [1,2,3].includes(level.echoLimit), `Invalid echo limit in ${level.id}`);
     if (level.lostProperty) assert.ok(level.lostProperty.x >= TILE && level.lostProperty.x <= WIDTH - TILE && level.lostProperty.y >= TILE && level.lostProperty.y <= HEIGHT - TILE, `Invalid lost-property landmark in ${level.id}`);
     if (stage.ending) assert.ok(base === mission.stages.at(-1) && mission.endingAnchor !== undefined && stage.ending.title.trim() && stage.ending.consequence.trim() && stage.ending.reunion.length >= 2 && stage.ending.reunion.every(p => p.trim()), `Incomplete ending in ${level.id}`);
     assert.ok(!ids.has(level.id), `Duplicate action zone ${level.id}`); ids.add(level.id);
@@ -186,4 +190,18 @@ for (const mission of MISSIONS.filter(m => m.preparations?.length || m.stages.so
   if (mission.endingAnchor !== undefined) assert.ok(prefixes.every(c => c.ending && c.data.endings?.includes(c.ending.id)), `Ending not committed after final delivery in ${mission.id}`);
   console.log(`${mission.id}: ${prefixes.length} complete choice combinations survived checkpoint reloads`);
 }
-console.log(`${MISSIONS.length} missions / ${zones} action zones / ${layouts} branch layouts: references and executable solutions passed. This does not measure first-play duration.`);
+assert.equal(new Set(CONTRACTS.map(c=>c.id)).size,CONTRACTS.length,'Duplicate contract');
+for (const family of CONTRACT_FAMILIES) assert.ok(CONTRACTS.filter(c=>c.family===family).length>=2,`Insufficient arrangements for ${family}`);
+for (const c of CONTRACTS) {
+  assert.ok(c.conditions.length>=3 && c.stage.level.echoLimit && c.stage.level.setting,`Incomplete contract briefing ${c.id}`);
+  assert.equal(c.stage.level.briefing[0],c.request,`Opening must present the commission in ${c.id}`);
+  assert.ok(!c.stage.level.briefing.includes(c.stage.level.hint),`Full solution leaked into opening in ${c.id}`);
+  const book=new ContractBook(undefined,()=>true);
+  while (!book.offers.some(o=>o.id===c.id)) book.refresh();
+  assert.ok(book.accept(c.id));
+  const win=wins.get(c.stage.level.id)!;
+  assert.ok(win.echoes.length<=win.echoLimit && book.commit(win),`Invalid contract completion ${c.id}`);
+  const restored=new ContractBook(book.export(),()=>true);
+  assert.equal(restored.active?.id,c.id); assert.deepEqual(restored.score(c.id),book.score(c.id));
+}
+console.log(`${MISSIONS.length} missions + ${CONTRACTS.length} contracts / ${zones} action zones / ${layouts} layouts: references and executable solutions passed. This does not measure first-play duration.`);

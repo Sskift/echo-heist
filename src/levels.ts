@@ -40,6 +40,7 @@ export type Level = {
   spawn: Point;
   loot: Point;
   par: number;
+  echoLimit?: 1 | 2 | 3;
   exit?: Point;
   objective?: 'collect' | 'reach' | 'deliver';
   delivery?: Delivery;
@@ -47,7 +48,7 @@ export type Level = {
   lootLabel?: string;
   district?: string;
   theme?: 'archive' | 'gala' | 'industrial' | 'clockwork' | 'audit';
-  setting?: 'museum';
+  setting?: 'museum' | 'station' | 'power' | 'civic';
   lostProperty?: Point;
   circuits?: Circuit[];
   terminals?: Terminal[];

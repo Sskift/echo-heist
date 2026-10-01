@@ -1,7 +1,7 @@
 import './style.css';
 import './planning.css';
 import { Game } from './engine.ts';
-import { ECHO_COLORS, FPS, LEVELS, LOOP_SECONDS, MAX_ECHOES, type Level } from './levels.ts';
+import { ECHO_COLORS, FPS, LEVELS, LOOP_SECONDS, type Level } from './levels.ts';
 import { Renderer } from './render.ts';
 import { screenMovement } from './isometric.ts';
 import './scene.css';
@@ -16,6 +16,9 @@ import { EndingUI } from './ending-ui.ts';
 import { OperationUI, operationText } from './operation-ui.ts';
 import { roomJourney } from './room-journey.ts';
 import { JourneyUI } from './journey-ui.ts';
+import { CONTRACTS, contractForLevel } from './contract-content.ts';
+import { ContractBook, CONTRACT_KEY, CONTRACT_PLAN_KEY } from './contracts.ts';
+import { ContractUI } from './contract-ui.ts';
 
 const ALL_LEVELS = [...LEVELS, ...CAMPAIGN_LEVELS];
 const demoName = new URLSearchParams(location.search).get('demo') ?? '';
@@ -29,6 +32,17 @@ let campaign: Campaign;
 try { campaign = new Campaign(JSON.parse(localStorage.getItem(campaignKey) ?? 'null') ?? demoStart); }
 catch { campaign = new Campaign(demoStart); }
 if (demo) campaign.select(demoMission);
+let contractSave: unknown;
+try { contractSave=JSON.parse(localStorage.getItem(CONTRACT_KEY)??'null'); } catch { /* Invalid save starts with three offers. */ }
+const contracts=new ContractBook(contractSave,()=>!demo && campaign.data.completed.includes('C7-6'));
+const contractPlans: Record<string,SavedPlan>={};
+try {
+  const raw=JSON.parse(localStorage.getItem(CONTRACT_PLAN_KEY)??'{}');
+  for (const c of CONTRACTS) {
+    const id=c.stage.level.id, echoes=decodePlan(raw?.[id],id);
+    if (echoes) contractPlans[id]=encodePlan(id,echoes.slice(0,c.stage.level.echoLimit));
+  }
+} catch { /* Invalid or unavailable plans start empty. */ }
 
 const icons = {
   echo: '<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M6 6h20v6H12v4h12v5H12v5h14" stroke="currentColor" stroke-width="3"/><path d="M2 11v19h19" stroke="currentColor" opacity=".4" stroke-width="2"/></svg>',
@@ -103,6 +117,7 @@ $('#app').innerHTML = `
 
 let levelIndex = 0;
 let campaignMode = false;
+let contractMode = false;
 let previewGame: Game | null = null;
 let previewWasRunning = false;
 let game = new Game(LEVELS[0]);
@@ -167,6 +182,14 @@ $('#stage-bar').insertAdjacentHTML('beforebegin', '<section id="preparation-stri
 $('#open-preparation').addEventListener('click', () => storyUI.prepare());
 if (demo) $('#story-button').hidden = true;
 const operationUI = new OperationUI(() => { clearInput(); if (game.status === 'running') { game.togglePause(); refreshUI(); } });
+const contractUI = new ContractUI(contracts, {
+  open: () => { clearInput(); accumulator=0; if (game.status==='running') game.togglePause(); refreshUI(); },
+  close: () => { clearInput(); accumulator=0; focusGame(); },
+  accept: id => openContract(id),
+  refresh: () => { if (contracts.refresh()) saveContracts(); },
+  leave: () => openMission(campaign.data.selected,false),
+  readOnly: () => !!previewGame,
+});
 for (const selector of ['#mission-board', '#security-panel', '#power-panel', '#relay-panel', '#suppression-panel', '#delivery-panel', '#credential-journey details']) {
   const details = $<HTMLDetailsElement>(selector);
   const pauseForReading = () => {
@@ -193,6 +216,22 @@ $('.manual-steps').insertAdjacentHTML('beforeend', '<li><strong>安排一场完�
 function saveCampaign() {
   try { localStorage.setItem(campaignKey, JSON.stringify(campaign.export())); campaignUI.checkpointSaved(true); }
   catch { campaignUI.checkpointSaved(false); }
+}
+
+function saveContracts() {
+  try { localStorage.setItem(CONTRACT_KEY,JSON.stringify(contracts.export())); contractUI.saved(true); }
+  catch { contractUI.saved(false); }
+}
+function openContract(id: string) {
+  if (previewGame || !contracts.accept(id)) return;
+  if (initialized) persistPlan();
+  initialized=false; contractMode=true; campaignMode=false; levelIndex=-1;
+  saveContracts(); loadLevel(contracts.active!.stage.level); focusGame();
+}
+function leaveContractMode() {
+  if (!contractMode) return;
+  if (initialized) persistPlan();
+  initialized=false; contracts.leave(); contractMode=false; saveContracts();
 }
 
 function changePreparation(id?: string): boolean {
@@ -228,6 +267,7 @@ function rewindCampaign(index: number): boolean {
 
 function openMission(id: string, replay = true) {
   if (!campaign.select(id)) return;
+  leaveContractMode();
   if (replay && campaign.cleared() === campaign.mission.stages.length) rewindCampaign(0);
   campaignMode = true; levelIndex = -1;
   loadLevel(campaign.stage.level); saveCampaign(); persistPlan();
@@ -253,9 +293,10 @@ function clearInput() { keys.clear(); pointerFastForward = false; }
 function isFastForwarding() { return game.status === 'running' && (pointerFastForward || keys.has('ShiftLeft') || keys.has('ShiftRight')); }
 
 function persistPlan() {
-  plans[game.level.id] = encodePlan(game.level.id, game.localPlan);
+  const isContract=!!contractForLevel(game.level.id), target=isContract?contractPlans:plans;
+  target[game.level.id] = encodePlan(game.level.id, game.localPlan);
   try {
-    localStorage.setItem(planKey, JSON.stringify(plans));
+    localStorage.setItem(isContract?CONTRACT_PLAN_KEY:planKey, JSON.stringify(target));
     $('#plan-status').textContent = '计划已保存到本机';
   } catch { $('#plan-status').textContent = '仅本次有效 · 无法写入本机存档'; }
 }
@@ -270,6 +311,7 @@ function toast(text: string) {
 function focusGame() { $('#game-canvas').focus({ preventScroll: true }); }
 
 function setLevel(index: number) {
+  leaveContractMode();
   campaignMode = false;
   levelIndex = index;
   loadLevel(LEVELS[index]);
@@ -280,7 +322,7 @@ function loadLevel(level: Level) {
   if (initialized) persistPlan();
   previewGame = null; previewWasRunning = false;
   game = new Game(level, campaignMode ? campaign.carryFor(level.id) : undefined, campaignMode ? campaign.credentialFor(level.id) : undefined);
-  const restored = decodePlan(plans[game.level.id], game.level.id);
+  const restored = decodePlan((contractMode?contractPlans:plans)[game.level.id], game.level.id);
   if (restored) game.restorePlan(restored);
   if (campaignMode && campaign.ending && level.lostProperty) {
     const archived = campaign.data.credentials?.[campaign.mission.stages[campaign.stageIndex].level.id];
@@ -299,7 +341,7 @@ function loadLevel(level: Level) {
   $('#toast').classList.remove('visible');
   $('#mission-number').textContent = level.id;
   if (campaignMode) $('#mission-number').textContent = `${campaign.indexOf(level.id) + 1} / ${campaign.mission.stages.length}`;
-  $('#mission-number').parentElement!.lastChild!.textContent = campaignMode ? '' : ' / 03';
+  $('#mission-number').parentElement!.lastChild!.textContent = campaignMode || contractMode ? '' : ' / 03';
   $('#mission-title').textContent = level.title;
   $('#mission-subtitle').textContent = level.subtitle;
   $('#mission-description').textContent = level.description;
@@ -315,6 +357,7 @@ function loadLevel(level: Level) {
 
 function primaryAction() {
   sound.unlock();
+  if (contractMode && game.status==='won') { contractUI.show(); return; }
   if (demo && campaign.cleared() === campaign.mission.stages.length && ['ready', 'won'].includes(game.status)) { openMission(demoMission); return; }
   if (campaignMode && campaign.ending && ['ready', 'won'].includes(game.status)) { clearInput(); endingUI.show(campaign.ending, storyUI.state.endingNote()); return; }
   if (campaignMode && game.status === 'ready' && campaign.cleared() === campaign.mission.stages.length && campaign.nextMission) { openMission(campaign.nextMission.id); return; }
@@ -361,20 +404,24 @@ function refreshUI() {
     if ($('#preparation-description').textContent !== preparation.effect) $('#preparation-description').textContent = preparation.effect;
   }
   campaignUI.render(game, campaignMode, previewGame, demo);
+  contractUI.render(contractMode,demo);
+  $('.level-nav').hidden=campaignMode || contractMode;
+  $('#mission-board').hidden=demo || contractMode;
+  $('#story-button').hidden=demo || contractMode;
   $('.game-layout').classList.toggle('previewing', !!previewGame);
   const key = `${game.tokenOwner}:${[...game.authorized].join(',')}:${game.status}:${game.editingIndex}:${game.canUndo}:${game.echoes.length}:${game.echoes.map(e => `${e.colorIndex}-${e.frames.length}-${e.delay ?? 0}`).join(',')}:${game.attempts}:${game.hasLoot}:${[...game.openDoors].join('')}:${[...game.circuits].join(',')}`;
   if (uiKey !== key) {
     uiKey = key;
     $('#loop-number').textContent = `TAKE ${String(game.attempts).padStart(2, '0')}`;
-    $('#echo-count').textContent = `${game.echoes.length} / ${MAX_ECHOES}`;
+    $('#echo-count').textContent = `${game.echoes.length} / ${game.echoLimit}`;
     $('#record-label').textContent = game.status === 'running' ? 'REC ●' : game.status === 'paused' ? 'PAUSED' : game.status === 'won' ? 'EXTRACTED' : 'STANDBY';
     $('.arena-badge').classList.toggle('recording', game.status === 'running');
-    $('#echo-slots').innerHTML = Array.from({ length: MAX_ECHOES }, (_, i) => {
+    $('#echo-slots').innerHTML = Array.from({ length: game.echoLimit }, (_, i) => {
       const echo = game.echoes[i];
       if (echo && i < game.lockedSlots) return `<div class="echo-slot filled retained-slot" style="--echo-color:${ECHO_COLORS[echo.colorIndex]}"><span class="echo-avatar">${icons.echo}</span><div class="echo-info"><strong>回声 01 · 配电室<span>留守</span></strong><small data-echo-state="0"></small></div><span class="retained-lock" title="回到首段锚点可调整">已留守</span></div>`;
       return echo ? `<div class="echo-slot filled ${game.editingIndex === i ? 'editing' : ''}" style="--echo-color:${ECHO_COLORS[echo.colorIndex]}"><span class="echo-avatar">${icons.echo}</span><div class="echo-info"><strong>回声 0${i + 1}<span>${(echo.frames.length / FPS).toFixed(1)}s</span></strong><small data-echo-state="${i}"></small></div><button class="rerecord-button" data-rerecord="${i}" aria-label="重录回声 ${i + 1}" ${game.editingIndex !== null ? 'disabled' : ''}>重录</button><button data-delete="${i}" title="删除回声 ${i + 1} 并重新规划" aria-label="删除回声 ${i + 1}" ${game.editingIndex !== null ? 'disabled' : ''}>×</button></div>` : `<div class="echo-slot empty"><span class="empty-cross">＋</span><span>等待另一个你</span><span class="slot-number">0${i + 1}</span></div>`;
     }).join('');
-    $('#tracks').innerHTML = Array.from({ length: MAX_ECHOES }, (_, i) => {
+    $('#tracks').innerHTML = Array.from({ length: game.echoLimit }, (_, i) => {
       const echo = game.echoes[i];
       return `<div class="track ${game.editingIndex === i ? 'editing-track' : ''}"><span class="track-label" style="color:${echo ? ECHO_COLORS[echo.colorIndex] : '#62766a'}">E${i + 1}</span><div class="track-line" style="--echo-color:${echo ? ECHO_COLORS[echo.colorIndex] : '#526153'}">${echo ? `<span class="recorded-segment" style="width:${echo.frames.length / FPS / LOOP_SECONDS * 100}%"></span><span class="hold-segment" style="left:${echo.frames.length / FPS / LOOP_SECONDS * 100}%"></span>` : '<span class="empty-track"></span>'}${game.editingIndex === i ? '<span class="draft-segment"></span>' : ''}<span class="track-playhead"></span></div></div>`;
     }).join('');
@@ -499,6 +546,13 @@ function refreshUI() {
         action = !final ? '进入下一行动区' : demo ? '再玩这场连续行动' : campaign.ending ? '前往旧渡口' : next ? `下一任务：${next.title}` : '重玩这场行动';
         extra = `<div class="win-stamp">${final ? `◇ ${mission.evidence}` : `✓ 安全锚点 ${stageIndex + 1} / ${mission.stages.length}`}</div>`;
       }
+      if (contractMode) {
+        const score=contracts.score(contracts.active!.id);
+        eyebrow='CONTRACT COMPLETE'; title=`${game.level.title} · 已交差`;
+        copy=`本次成功回合 ${game.seconds.toFixed(2)} 秒 · 使用 ${game.echoes.length} 名回声`;
+        action='查看成绩，再接委托';
+        extra=score ? `<div class="win-stamp">最快 ${(score.fastestFrames/FPS).toFixed(2)} 秒 · 最少 ${score.fewestEchoes} 名回声</div><p class="overlay-footnote">两项最佳可来自不同次完成 · 可重试本单改进方案</p>` : '';
+      }
     }
     $('#overlay-card').innerHTML = `<p class="overlay-eyebrow">${eyebrow}</p><h2>${title}</h2><p class="overlay-copy">${copy}</p>${extra}<button class="primary-button" id="overlay-action">${action} ${icons.arrow}</button>`;
     $('#overlay-action').addEventListener('click', primaryAction);
@@ -579,7 +633,7 @@ document.addEventListener('focusin', event => {
   if (game.status === 'running') { game.togglePause(); refreshUI(); }
 });
 window.addEventListener('keydown', event => {
-  if (dialog.open || endingUI.open || mediaUI.open || storyUI.open) return;
+  if (dialog.open || endingUI.open || mediaUI.open || storyUI.open || contractUI.open) return;
   if (event.ctrlKey || event.metaKey || event.altKey) return;
   if (isEditingControl(event.target)) return;
   if (event.code === 'KeyP' || (previewGame && event.code === 'Escape')) { event.preventDefault(); if (!event.repeat) togglePreview(); return; }
@@ -658,11 +712,12 @@ function loop(now: number) {
     if (event === 'loot') toast(game.level.onLoot?.message ?? (!game.exitReady ? `目标已取得；撤离前需 ${game.powerRequirements(game.unmetPower(game.level.exitPower))}。` : '目标已取得。前往标记的撤离点！'));
     if (event === 'won' || event === 'caught') $('#toast').classList.remove('visible');
     if (event === 'won') {
+      if (contractMode && contracts.commit(game)) saveContracts();
       if (campaignMode && campaign.commit(game)) {
         saveCampaign();
         if (!demo) storyUI.aftermath();
       }
-      if (!campaignMode) {
+      if (!campaignMode && !contractMode) {
         completedTraining.add(game.level.id);
         try { localStorage.setItem('echo-heist-progress-v1', JSON.stringify(Object.fromEntries([...completedTraining].map(id => [id, true])))); } catch { /* Best-effort local progress. */ }
         $(`[data-level="${levelIndex}"] .level-check`).textContent = '✓';
@@ -676,6 +731,10 @@ function loop(now: number) {
   requestAnimationFrame(loop);
 }
 
-if (!demo && new URLSearchParams(location.search).get('mode') === 'training') setLevel(0);
+if (!demo && new URLSearchParams(location.search).get('mode') === 'training') {
+  if (contracts.inContracts) { contracts.leave(); saveContracts(); }
+  setLevel(0);
+}
+else if (contracts.inContracts) openContract(contracts.active!.id);
 else openMission(campaign.data.selected, false);
 requestAnimationFrame(loop);

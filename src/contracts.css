@@ -1,0 +1,22 @@
+#contracts-dialog { width:min(1120px,calc(100% - 32px)); max-width:1120px; max-height:90dvh; padding:32px; color:var(--ink,#243d36); background:#f2f0e2; border:1px solid #a6ad8b; border-radius:6px; }
+.contracts-dialog::backdrop { background:#061913d9; }
+.contracts-dialog h2 { font-size:clamp(23px,3vw,34px); margin:8px 0 14px; }
+.contracts-dialog>p { max-width:850px; line-height:1.8; }
+.contract-offers { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin:24px 0; }
+.contract-card { display:flex; flex-direction:column; padding:22px; background:#fffef4; border:1px solid #c4c8ab; border-top:4px solid #637950; border-radius:3px; }
+.contract-card h3 { font-size:22px; margin:8px 0; }
+.contract-card p,.contract-card li { font-size:14px; line-height:1.8; }
+.contract-card ul { padding-left:19px; }
+.contract-card .primary-button { margin-top:auto; width:100%; }
+.contract-record { color:#566746; font-weight:600; }
+.contract-actions { display:flex; gap:12px; flex-wrap:wrap; margin:20px 0; }
+.contract-actions button,.contract-strip button,#contracts-button { border:1px solid #9aa881; background:#edf0dc; color:#344d3e; padding:10px 14px; border-radius:3px; cursor:pointer; }
+.contract-strip { display:flex; justify-content:space-between; align-items:center; gap:20px; margin:14px 0; padding:18px 22px; border:1px solid #b8c3a5; background:#e8ecd9; }
+.contract-strip strong { font-size:19px; }
+.contract-strip p { line-height:1.7; margin:5px 0; }
+.contract-strip button { flex-shrink:0; }
+.contract-record-note { border-top:1px solid #c0c9ad; padding-top:18px; font-size:13px; color:#5e6b56; }
+.contracts-dialog button:disabled { opacity:.5; cursor:default; }
+#contract-scores p { padding:12px 0; border-bottom:1px solid #d2d6c2; line-height:1.8; }
+#contracts-save { font-size:13px; color:#5e6b56; }
+@media(max-width:900px) { .contract-offers { grid-template-columns:1fr; } #contracts-dialog { padding:24px 18px; } .contract-strip { flex-direction:column; align-items:flex-start; } .campaign-toolbar { flex-wrap:wrap; } }

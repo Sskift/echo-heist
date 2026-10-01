@@ -92,6 +92,7 @@ export class Game {
   get seconds(): number { return this.frame / FPS; }
   get remaining(): number { return Math.max(0, LOOP_SECONDS - this.seconds); }
   get lockedSlots(): number { return this.carried ? 1 : 0; }
+  get echoLimit(): number { return this.level.echoLimit ?? MAX_ECHOES; }
   get localPlan(): Echo[] { return this.echoes.slice(this.lockedSlots); }
   get exitPoint(): Point { return this.level.alternateExit && this.powered(this.level.alternateExit.power) ? this.level.alternateExit.at : this.level.exit ?? this.level.spawn; }
   get activeEchoes() { return this.echoes.map((echo, index) => ({ echo, index })).filter(({ echo, index }) => !(this.remote && index === 0) && index !== this.editingIndex && this.frame >= (echo.delay ?? 0)); }
@@ -108,7 +109,7 @@ export class Game {
 
   restorePlan(echoes: Echo[]) {
     this.echoes = this.carried ? [cloneEcho(this.carried.echo)] : [];
-    for (const echo of echoes.slice(0, MAX_ECHOES - this.lockedSlots)) {
+    for (const echo of echoes.slice(0, this.echoLimit - this.lockedSlots)) {
       const used = new Set(this.echoes.map(e => e.colorIndex));
       this.echoes.push({ ...cloneEcho(echo), colorIndex: used.has(echo.colorIndex) ? [0, 1, 2].find(i => !used.has(i))! : echo.colorIndex });
     }
@@ -533,7 +534,7 @@ export class Game {
 
   rewind(): boolean {
     if (this.status !== 'running' || this.recording.length < 2) return false;
-    if (this.echoes.length >= MAX_ECHOES && this.editingIndex === null) {
+    if (this.echoes.length >= this.echoLimit && this.editingIndex === null) {
       this.lastMessage = '回声槽已满。点击回声的「重录」修改路线，或按 Enter 重试本轮。';
       this.events.push('full');
       return false;
@@ -774,7 +775,7 @@ export class Game {
     if (this.frame % FPS === 0 && this.remaining <= 3) this.events.push('tick');
     if (this.frame >= MAX_FRAMES) {
       if (this.spectator) { this.status = 'paused'; return; }
-      if (this.echoes.length < MAX_ECHOES || this.editingIndex !== null) this.rewind();
+      if (this.echoes.length < this.echoLimit || this.editingIndex !== null) this.rewind();
       else {
         this.status = 'caught';
         this.lastMessage = '12 秒已用完。回声槽已满，按 Enter 重试，或删除一条回声重新安排。';
