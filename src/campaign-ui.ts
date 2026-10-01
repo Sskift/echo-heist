@@ -1,6 +1,6 @@
 import type { Game } from './engine.ts';
 import { FPS, MAX_FRAMES } from './levels.ts';
-import { MISSIONS } from './campaign-content.ts';
+import { MISSIONS, outcomeSelected } from './campaign-content.ts';
 import type { Campaign } from './campaign.ts';
 import './campaign.css';
 
@@ -23,8 +23,9 @@ export class CampaignUI {
         <div id="story-strip" class="story-strip"><div><p class="eyebrow" id="chapter-label"></p><h2 id="operation-title"></h2></div><p id="story-line"></p></div>
         <div class="stage-bar" id="stage-bar"><nav id="stage-rail" aria-label="任务阶段"></nav><span id="checkpoint-note" role="status">锚点自动保存在本机</span></div>
       </section>`);
-    $('.stage-bar').insertAdjacentHTML('afterend', '<section id="consequence-panel" class="consequence-panel" hidden aria-label="下一阶段后果"><strong>给下一段留下什么</strong><p>以下是成功抵达锚点时才提交的结果。操作电路可改变选择；回退到本阶段可重新决定。</p><ul id="consequence-options"></ul></section>');
+    $('.stage-bar').insertAdjacentHTML('afterend', '<section id="consequence-panel" class="consequence-panel" hidden aria-label="下一阶段后果"><strong>给下一段留下什么</strong><p>以下结果在成功抵达锚点时提交，由实际设备状态或交付位置决定；回退到本阶段可重新安排。</p><ul id="consequence-options"></ul></section>');
     $('.stage-bar').insertAdjacentHTML('afterend', '<section id="continuity-panel" class="continuity-panel" hidden aria-label="连续行动"><strong>配电室 → 封存室 → 原路撤离</strong><p id="continuity-status" role="status"></p><p>各区共用 12 秒节拍：每轮同时从录像起点播放，短录像在终点待命。留守者一直占用一个回声名额。失败只重试当前区；点击首段锚点可重排留守者，后段锚点与计划随之撤销。</p></section>');
+    $('.stage-bar').insertAdjacentHTML('afterend', '<section id="credential-journey" class="continuity-panel" hidden aria-label="凭据跨区交接"><strong>登记厅交出 → 对侧站台接回 → 货运档案接班</strong><p id="credential-location" role="status"></p><p id="credential-requirements"></p><details><summary>这张票如何跨过房间</summary><p>整场只有一张 B-17 货运凭据。成功到锚点才保存实际交接位置；失败从当前锚点恢复。回退会撤销后段物件状态与计划。每区重新开始十二秒，录像只能请求交接，不能复制凭据。RETURN 是只收不取的归还槽，空手也可录下交付请求，执行时仍须真正持有凭据。</p></details></section>');
     $('.timeline').insertAdjacentHTML('afterend', `
       <div class="rehearsal-toolbar"><button id="preview-button" aria-pressed="false">◇ 预演回声</button><span id="interaction-tip">E 操作设备 · P 预演已保存的计划</span></div>
       <section id="preview-panel" class="preview-panel" hidden aria-label="回声预演"><div><strong>只读预演</strong><output id="preview-time">0.00s</output></div><p>仅播放已保存回声；真人不参与，也不会保存进度。拖动时间，检查门与设备。</p><input id="preview-frame" type="range" min="0" max="720" step="1" value="0" aria-label="预演时间"><ol id="preview-log"></ol></section>`);
@@ -61,6 +62,14 @@ export class CampaignUI {
 
   render(game: Game, campaignMode: boolean, preview: Game | null, demo = false) {
     const world = preview ?? game;
+    $('#credential-journey').hidden = !game.level.credential;
+    if (game.level.credential) {
+      const c = game.level.credential;
+      const location = `${preview ? '只读预演 · ' : ''}${c.label} · 现在：${world.credentialOwner()}${world.incoming ? ` · 入站位置：${world.incoming.owner === 'player' ? '本人持有' : world.incoming.owner.slice(9)}` : ' · 首次领取'}${c.incomingAuthorizations?.length ? ` · 前段签名：${c.incomingAuthorizations.join('、')}` : ''}`;
+      const requirements = world.credentialBlockers().join('；') || '交接条件已完成，带齐目标后前往锚点。';
+      if ($('#credential-location').textContent !== location) $('#credential-location').textContent = location;
+      if ($('#credential-requirements').textContent !== requirements) $('#credential-requirements').textContent = requirements;
+    }
     $('#continuity-panel').hidden = !game.level.handoff && !game.level.continuity;
     if (!$('#continuity-panel').hidden) {
       const status = game.level.handoff ? '准备入口 · 窗那边的核心就是下一段目标。仅一条回声留守 HOLD，另外两格留给后续行动。' : `${preview ? '预演 · ' : ''}${game.level.continuity?.home ? '回到原处' : '隔窗协作'} · 回声 01 · ${world.echoActivity(0)} · 本区可用 2 格`;
@@ -142,14 +151,14 @@ export class CampaignUI {
     const mission = this.campaign.mission;
     const stageIndex = this.campaign.indexOf(game.level.id);
     const current = stageIndex >= 0 ? this.campaign.stageAt(stageIndex) : undefined;
-    const consequenceKey = `${campaignMode}:${world.level.id}:${[...world.circuits].join(',')}:${game.status}:${!!preview}`;
+    const consequenceKey = `${campaignMode}:${world.level.id}:${world.tokenOwner}:${[...world.circuits].join(',')}:${game.status}:${!!preview}`;
     if (consequenceKey !== this.consequenceKey) {
       this.consequenceKey = consequenceKey;
       $('#consequence-panel').hidden = !campaignMode || !current?.outcomes?.length;
       $('#consequence-options').replaceChildren(...(current?.outcomes ?? []).map(o => {
-        const item = document.createElement('li'), selected = world.powered(o.power);
+        const item = document.createElement('li'), selected = outcomeSelected(o, world);
         item.dataset.selected = String(selected);
-        item.textContent = `${selected ? preview ? '预演状态' : game.status === 'won' ? '已提交' : '当前结果' : '另一方案'} · ${o.label}（${o.power.id} ${world.circuitState(o.power.id, o.power.on)}）：${o.consequence}`;
+        item.textContent = `${selected ? preview ? '预演状态' : game.status === 'won' ? '已提交' : '当前结果' : '另一方案'} · ${o.label}（${'power' in o ? `${o.power.id} ${world.circuitState(o.power.id, o.power.on)}` : `凭据交入 ${o.credentialAt.slice(9)}`}）：${o.consequence}`;
         return item;
       }));
     }

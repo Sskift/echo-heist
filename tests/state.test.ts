@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Game } from '../src/engine.ts';
-import { LEVELS } from '../src/levels.ts';
+import { LEVELS, type CredentialSnapshot, type Level } from '../src/levels.ts';
 import { decodePlan, encodePlan } from '../src/plans.ts';
 import { Campaign } from '../src/campaign.ts';
 import { MISSIONS } from '../src/campaign-content.ts';
@@ -12,6 +12,93 @@ function lastLight() {
   const before = MISSIONS.slice(0, MISSIONS.findIndex(m => m.id === 'C3-6'));
   return new Campaign({ version: 1, selected: 'C3-6', runs: Object.fromEntries(before.map(m => [m.id, []])), completed: before.map(m => m.id) });
 }
+
+const incomingTicket: CredentialSnapshot = { id: 'ticket', owner: 'terminal:IN', authorizations: ['STAMP'] };
+const transferRoom: Level = {
+  ...LEVELS[0], id: 'transfer-fixture', walls: [], doors: [], plates: [], guards: [],
+  spawn: { x: 100, y: 100 }, exit: { x: 800, y: 500 }, objective: 'reach',
+  credential: { id: 'ticket', label: '凭据', from: 'previous', incomingOwners: ['terminal:IN'], incomingAuthorizations: ['STAMP'], receiveByPlayer: 'IN', exitOwners: ['terminal:RETURN'], exitAuthorizations: ['STAMP', 'FINAL'] },
+  terminals: [{ id: 'IN', kind: 'relay', x: 100, y: 100 }, { id: 'FINAL', kind: 'lock', authorization: 'FINAL', x: 200, y: 100 }, { id: 'RETURN', kind: 'relay', transfer: 'give', x: 300, y: 100 }],
+};
+function interact(game: Game) {
+  game.step({ x: 0, y: 0, lure: false, interact: true });
+  game.step({ x: 0, y: 0, lure: false });
+}
+function walkToX(game: Game, x: number) {
+  for (let n = 0; Math.abs(game.player.x - x) > 4; n++) {
+    assert.ok(n < 100); game.step({ x: Math.sign(x - game.player.x), y: 0, lure: false });
+  }
+}
+
+test('one incoming ticket resets to its checkpoint, inherits only declared signatures and requires a personal pickup', () => {
+  for (const invalid of [undefined, { ...incomingTicket, id: 'other' }, { ...incomingTicket, owner: 'echo:0' }, { ...incomingTicket, authorizations: [] }]) {
+    const game = new Game(transferRoom, undefined, invalid);
+    assert.equal(game.tokenOwner, null); assert.equal(game.exitReady, false);
+  }
+  const input = structuredClone(incomingTicket);
+  input.authorizations.push('UNDECLARED');
+  const game = new Game(transferRoom, undefined, input);
+  input.owner = 'player'; input.authorizations.length = 0;
+  assert.equal(game.tokenOwner, 'terminal:IN'); assert.deepEqual([...game.authorized], ['STAMP']);
+  game.start(); interact(game); assert.equal(game.tokenOwner, 'player');
+  walkToX(game, 200); interact(game); walkToX(game, 300); interact(game);
+  assert.deepEqual(game.credentialCheckpoint(), { id: 'ticket', owner: 'terminal:RETURN', authorizations: ['STAMP', 'FINAL'], receivedFrom: 'IN' });
+  interact(game); assert.equal(game.tokenOwner, 'terminal:RETURN'); // Give-only slots cannot create a new pickup.
+  assert.ok(game.rewind());
+  assert.equal(game.tokenOwner, 'terminal:IN'); assert.deepEqual([...game.authorized], ['STAMP']);
+  assert.match(game.credentialBlockers().join(), /本人/);
+  const preview = game.previewAt(200);
+  assert.equal(preview.tokenOwner, 'terminal:RETURN'); assert.ok(preview.authorized.has('FINAL'));
+  assert.equal(preview.credentialCheckpoint(), undefined); // An echo cannot substitute for the current player's receipt.
+  assert.equal(game.frame, 0); assert.equal(game.tokenOwner, 'terminal:IN');
+  interact(game); // The recorded and live pickup collide in the same frame.
+  assert.equal(game.tokenOwner, 'terminal:IN'); assert.match(game.signals.map(s => s.text).join(), /接收冲突/);
+  game.restart(); assert.equal(game.tokenOwner, 'terminal:IN'); assert.equal(game.echoes.length, 1);
+  assert.deepEqual([...game.authorized], ['STAMP']);
+});
+
+test('an empty-handed rehearsal records a return request without inventing possession', () => {
+  const game = new Game({ ...transferRoom, spawn: { x: 300, y: 100 } }, undefined, incomingTicket);
+  game.start(); interact(game);
+  assert.deepEqual(game.recording[0].intent, { type: 'give', id: 'RETURN' });
+  assert.equal(game.tokenOwner, 'terminal:IN');
+  assert.ok(game.operationLog.some(op => op.intent.id === 'RETURN' && op.result === 'blocked'));
+  assert.equal(game.credentialCheckpoint(), undefined);
+});
+
+test('ticket checkpoints reject corrupt provenance, restore across mission changes and roll back downstream facts', () => {
+  const before = MISSIONS.slice(0, MISSIONS.findIndex(m => m.id === 'C4-6'));
+  const campaign = new Campaign({ version: 1, selected: 'C4-6', runs: Object.fromEntries(before.map(m => [m.id, []])), completed: before.map(m => m.id) });
+  assert.ok(campaign.commit(playWitness(campaign.stage)));
+  const stage = campaign.stage, inbound = campaign.credentialFor(stage.level.id)!;
+  const received = playWitness(stage, undefined, inbound);
+  assert.ok(received.exitReady);
+  received.incoming!.authorizations.push('invented');
+  assert.equal(campaign.commit(received), false);
+  received.incoming!.authorizations.pop();
+  assert.ok(campaign.commit(received));
+  const saved = campaign.export();
+  const restored = new Campaign(saved), cargo = restored.stage.level;
+  assert.deepEqual(restored.credentialFor(cargo.id), saved.credentials!['C4-6-receive']);
+  assert.ok(restored.select('C4-1')); assert.ok(restored.select('C4-6'));
+  assert.equal(new Game(cargo, undefined, restored.credentialFor(cargo.id)).tokenOwner, 'terminal:ARCHIVE');
+  for (const corrupt of [undefined, { ...saved.credentials!['C4-6-receive'], receivedFrom: undefined }, { ...saved.credentials!['C4-6-receive'], authorizations: [] }]) {
+    const broken = structuredClone(saved);
+    if (corrupt) broken.credentials!['C4-6-receive'] = corrupt; else delete broken.credentials!['C4-6-receive'];
+    const repaired = new Campaign(broken);
+    assert.equal(repaired.cleared(), 1); assert.equal(repaired.stage.level.id, 'C4-6-receive');
+    assert.equal(repaired.data.credentials!['C4-6-receive'], undefined);
+  }
+  const mismatch = structuredClone(saved); mismatch.credentials!['C4-6-send'].owner = 'terminal:SERVICE';
+  assert.equal(new Campaign(mismatch).cleared(), 0);
+  restored.returnTo(0);
+  assert.deepEqual(restored.data.credentials, {}); assert.equal(restored.data.outcomes!['C4-6-send'], undefined);
+  const old = structuredClone(saved);
+  old.runs['C4-6'] = ['C4-6-a', 'C4-6-b', 'C4-6-c', 'C4-6-d']; old.completed.push('C4-6'); old.selected = 'C5-1';
+  const migrated = new Campaign(old);
+  assert.equal(migrated.data.selected, 'C5-1'); assert.ok(migrated.available('C5-1'));
+  migrated.select('C4-6'); assert.equal(migrated.cleared(), 0); assert.deepEqual(migrated.data.credentials, {});
+});
 
 test('retained recording survives reload, drives real remote power and shares the three-slot limit', () => {
   const campaign = lastLight();

@@ -1,8 +1,12 @@
-# 声画素材 / v0.15.0
+# 声画素材 / v0.16.0
+
+0.16 使用真实 3D 家具与人物模型、骨骼动画、物理材质和实时阴影。固定正交镜头形成 2.5D 视角。建筑墙面、铜框窗、门禁、地板纹理、灯光和交互提示由项目代码生成，家具与人物来自下表列出的 CC0 资源。旧的 Top-down Shooter 平面精灵与场景绘制代码已移除。
+
+模型、贴图、动画与音乐均内嵌在本地构建中。GLB 与 FBX 原文件不改，运行时调整尺寸与材质；家具木材统一调色，人物使用 criminalMaleA 皮肤，Idle / Run 动画按模拟时间播放，回声透明着色。模型包中的 Targeting Pose 不作为跑步动作使用。3D 渲染库 Three.js 使用 MIT 许可，全文见 [Three-MIT.txt](../licenses/Three-MIT.txt)。
 
 0.15 的观察窗、街区灯窗、留守回声标记为 Canvas 原创绘制，复用已有房间材质与角色图。CIV 重接后的远处电车铃由 Web Audio 合成，不新增第三方素材或网络请求。
 
-本版将免费素材实际用于游戏场景、人物和配乐。素材文件打包进本地构建，运行时不请求素材网站；无需账号、订阅或 API key。游戏内「声画 → 素材与音乐鸣谢」可查看作者与原始页面。
+素材文件打包进本地构建，运行时不请求素材网站；无需账号、订阅或 API key。游戏内「声画 → 素材与音乐鸣谢」可查看作者与原始页面。
 
 0.14 新增的修表铺为 `src/story-ui.ts` 内的原创 SVG：夜间街景、工作台、怀表、车票、收音机、文件和两只杯子。章节对话聚焦不同物件，C6 联系搭档后杯子重新摆正。它不引入第三方图片或外部请求。阅读时使用该章已有音乐的低音量规划混音；旧渡口继续使用尾声曲。
 
@@ -10,12 +14,13 @@
 
 | 内容 | 作者 | 原始页面 | 采用许可 | 使用与修改 |
 | --- | --- | --- | --- | --- |
-| Top-down Shooter | Kenney Vleugels | [Kenney](https://kenney.nl/assets/top-down-shooter) | CC0 1.0 | 原 PNG 中的三个人物、三种地板、木箱和纸张；原文件不改，运行时缩放、调色与合成 |
+| Furniture Kit | Kenney Vleugels | [Kenney 家具](https://kenney.nl/assets/furniture-kit) | CC0 1.0 | 8 个 GLB：档案柜、书架、抽屉柜、桌子、壁灯、书、植物和收音机；运行时缩放、调整高度与材质 |
+| Animated Characters Protagonists | Kenney Vleugels | [Kenney 人物](https://kenney.nl/assets/animated-characters-protagonists) | CC0 1.0 | characterMedium 模型、criminalMaleA 皮肤、Idle / Run 动画；保持原文件，运行时着色与骨骼播放 |
 | Espionage | brandon75689，HaelDB 上传 | [OpenGameArt](https://opengameart.org/content/espionage) | CC0 1.0（从页面列出的许可中选用） | 旧馆、夜场与转运场景配乐；从 OGG 转为 MP3，统一响度 |
 | Strange Experiments | Alexander Ehlers / tricksntraps | [OpenGameArt](https://opengameart.org/content/t-t-free-cyberpunk-pack-2) | CC0 1.0 | 工业与核验场景配乐；从 OGG 转为 MP3，统一响度 |
 | PYNCHON | James Gargette / cinameng | [OpenGameArt](https://opengameart.org/content/pynchon) | CC0 1.0 | 旧渡口结局配乐；重新编码并统一响度 |
 
-2026-10-01 核对以上原始发布页面。许可全文保留在 [CC0-1.0.txt](../licenses/CC0-1.0.txt)，Kenney 随包许可保留在 [Kenney-Topdown-CC0.txt](../licenses/Kenney-Topdown-CC0.txt)。来源、下载地址、原始包 SHA-256 见 [asset-sources.json](../licenses/asset-sources.json)，实际入库文件的大小和 SHA-256 见 [asset-hashes.json](../licenses/asset-hashes.json)。CC0 不要求署名，本项目仍保留作者鸣谢。
+2026-10-01 核对原始发布页面。许可全文保留在 [CC0-1.0.txt](../licenses/CC0-1.0.txt)，模型包许可保留在 [家具许可](../licenses/Kenney-Furniture-CC0.txt) 和 [人物许可](../licenses/Kenney-Characters-CC0.txt)。来源、下载地址、原始包 SHA-256 见 [asset-sources.json](../licenses/asset-sources.json)，实际打包文件的大小和 SHA-256 见 [asset-hashes.json](../licenses/asset-hashes.json)。CC0 不要求署名，本项目仍保留作者鸣谢。
 
 音乐转换使用 FFmpeg：`loudnorm=I=-23:TP=-3:LRA=9`，44.1 kHz、112 kbit/s MP3；保留整曲，不加速或重编旋律。原始文件留在被 Git 忽略的 `.local/asset-sources`，运行时只使用仓库内的成品。未采用候选 Night Club，发布包也不包含它。
 
@@ -23,9 +28,11 @@
 
 ## 画面
 
-五种已有场景主题分别使用旧馆木地板、夜场石砖、工业混凝土、转运木地板和核验石砖，配合不同色温。墙顶亮边、侧面阴影、柜体与箱件均服从原有实体墙格。装饰物只画在已有墙体上，不把可通行地面伪装成掩体。
+五种章节主题使用不同的墙面、护墙板与地板配色。相邻实体墙合并为建筑段，前景墙切低，玩家附近形成遮挡的墙降低；原始实体碰撞不变。书架与档案柜位于已有墙体范围内，窗框与壁灯附着在边墙，不把可通行地面伪装成掩体。
 
-玩家、回声、守卫与追踪器使用人物精灵；摄像头使用独立设备轮廓。回声保留颜色、编号、虚线圈和路径；方向箭头、警觉条、视锥、门禁、字母与条件文字继续根据实际模拟绘制。静态材质按关卡缓存，低动态偏好仍生效；可在「声画」关闭材质和人物，使用简洁图形。
+玩家、回声、守卫与追踪器使用带骨骼的人物；摄像头使用支架和机身。回声保留颜色、编号、透明度与路径；凭据持有者、授权、视锥、门禁和危险范围继续根据实际模拟绘制。危害和连线贴在地面，名字与操作提示保持正向。全景与跟随近景分别用于规划与观察，手机文字按实际显示尺寸缩放。
+
+低动态偏好停止人物动作摆动与重录闪光。可在「声画」关闭附加纹理、窗框与局部灯光，保留 3D 人物与规则。章节切换清理每区创建的纹理、材质和骨骼资源，共享模型保留。需要支持 WebGL 2 的浏览器。
 
 ## 音乐与操作
 

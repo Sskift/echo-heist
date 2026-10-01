@@ -1,45 +1,5 @@
 [
   {
-    "file": "src/assets/art/agent.png",
-    "bytes": 1203,
-    "sha256": "a46b28788a0103278de214e0d7e47aef0c546634d0bbdd0ad3813d4c22f6dee9"
-  },
-  {
-    "file": "src/assets/art/crate.png",
-    "bytes": 1288,
-    "sha256": "fb322aec200590e1680a83821c1ee8a2a0906162077fe1a43bf7189c638d55bf"
-  },
-  {
-    "file": "src/assets/art/floor-concrete.png",
-    "bytes": 1516,
-    "sha256": "a332f8af2eae97bffaac231a2d75f582617677a0aa032246be0a3e498232144c"
-  },
-  {
-    "file": "src/assets/art/floor-stone.png",
-    "bytes": 1575,
-    "sha256": "afcf3e2d123d1c2a6b979b6cd678cdeaad2833f4148e730aab24e73651823336"
-  },
-  {
-    "file": "src/assets/art/floor-wood.png",
-    "bytes": 1065,
-    "sha256": "abeacd347663fe1d95d7565dacd9515f0db036d6933d034c709cd68be13ce8aa"
-  },
-  {
-    "file": "src/assets/art/guard.png",
-    "bytes": 1279,
-    "sha256": "f3adea431ebe62cb0c74c14d1c217f9ccceb2fc04bc619d1029e27264f4d2cc4"
-  },
-  {
-    "file": "src/assets/art/papers.png",
-    "bytes": 2500,
-    "sha256": "2ea034c35800b73fe301c817ba37ac6843b59e2885b94738326824ab646ed4c6"
-  },
-  {
-    "file": "src/assets/art/tracker.png",
-    "bytes": 1218,
-    "sha256": "1a307cd6405ade9b1c341eacc4b1234490d6e66305839de86517e2eeeede997c"
-  },
-  {
     "file": "src/assets/music/espionage.mp3",
     "bytes": 1065003,
     "sha256": "e2a48284abb2cb2a82ac6e784e7e89354b02ac86d90023253666622db9f9a0a0"
@@ -53,5 +13,65 @@
     "file": "src/assets/music/strange-experiments.mp3",
     "bytes": 3445072,
     "sha256": "f66c9bd257f831e82de423b2702ab5831f88a4349df76fce6ff10c4d3d3b1d93"
+  },
+  {
+    "file": "src/assets/models/agent-skin.png",
+    "bytes": 35033,
+    "sha256": "e2f66e682c95253fbb45206ab44bdb4fe61b03af3481abbd0e4344a6958a0530"
+  },
+  {
+    "file": "src/assets/models/agent.fbx",
+    "bytes": 167212,
+    "sha256": "18835fef534eede635b081ee7fe647d01a885550a591d2e6bf071010906167d8"
+  },
+  {
+    "file": "src/assets/models/bookcaseClosedWide.glb",
+    "bytes": 23140,
+    "sha256": "55b9903e9646dc407ed5237a1c41c1f0a14f9edc22e3392bdb9a4804d846af6a"
+  },
+  {
+    "file": "src/assets/models/bookcaseOpen.glb",
+    "bytes": 18020,
+    "sha256": "750702218d68c062b15dfef6ab06a4014d1cfa8bd05f02e57c53b7e13bec157c"
+  },
+  {
+    "file": "src/assets/models/books.glb",
+    "bytes": 6864,
+    "sha256": "b8dc56e5d29f6fc1f4727fccb1b9642627fee9942c48060a00034e98df02701c"
+  },
+  {
+    "file": "src/assets/models/cabinetBedDrawer.glb",
+    "bytes": 16088,
+    "sha256": "e3dfd2e120af3d4d29b66509e317452cd15bd3f57ac8945575462c582adc6de8"
+  },
+  {
+    "file": "src/assets/models/desk.glb",
+    "bytes": 15048,
+    "sha256": "0164fe828f028b321730fb8c74502e353583f751be74da1682d42fff7d3c5a42"
+  },
+  {
+    "file": "src/assets/models/idle.fbx",
+    "bytes": 608188,
+    "sha256": "c8a24e0294376ee5a195c56752a13310e1c0b5f8588a4db50e094120e3e4cc74"
+  },
+  {
+    "file": "src/assets/models/lampWall.glb",
+    "bytes": 4828,
+    "sha256": "a9679ecd3be05731846f22ade97c37069598ca7a06dd9319f50230e63a1ea83c"
+  },
+  {
+    "file": "src/assets/models/pottedPlant.glb",
+    "bytes": 7576,
+    "sha256": "5b760eda2766f75fda36b2c5df652a1662f82981ef64cd8fa7fe7bcd386b3a15"
+  },
+  {
+    "file": "src/assets/models/radio.glb",
+    "bytes": 25020,
+    "sha256": "1ba93d6ba6f049750853b4652b92f286f2898e527695a0705b75cc7615897fed"
+  },
+  {
+    "file": "src/assets/models/run.fbx",
+    "bytes": 572732,
+    "sha256": "e635461fc8dace85ec67a7f7941e949a7c3f108b51ae4d2da1557e6e01749df8"
   }
 ]

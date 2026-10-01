@@ -3,6 +3,8 @@ import './planning.css';
 import { Game } from './engine.ts';
 import { ECHO_COLORS, FPS, LEVELS, LOOP_SECONDS, MAX_ECHOES, type Level } from './levels.ts';
 import { Renderer } from './render.ts';
+import { screenMovement } from './isometric.ts';
+import './scene.css';
 import { Sound } from './audio.ts';
 import { MediaUI } from './media-ui.ts';
 import { decodePlan, encodePlan, PLAN_KEY, type SavedPlan } from './plans.ts';
@@ -14,15 +16,17 @@ import { EndingUI } from './ending-ui.ts';
 import { OperationUI, operationText } from './operation-ui.ts';
 
 const ALL_LEVELS = [...LEVELS, ...CAMPAIGN_LEVELS];
-const demo = new URLSearchParams(location.search).get('demo') === 'last-light';
-const campaignKey = CAMPAIGN_KEY + (demo ? '-last-light-demo' : '');
-const planKey = PLAN_KEY + (demo ? '-last-light-demo' : '');
-const predecessors = demo ? MISSIONS.slice(0, MISSIONS.findIndex(m => m.id === 'C3-6')) : [];
-const demoStart = demo ? { version: 1, selected: 'C3-6', runs: Object.fromEntries(predecessors.map(m => [m.id, []])), completed: predecessors.map(m => m.id) } : undefined;
+const demoName = new URLSearchParams(location.search).get('demo') ?? '';
+const demoMission = ({ 'last-light': 'C3-6', 'station-transfer': 'C4-6' } as Record<string, string>)[demoName];
+const demo = !!demoMission;
+const campaignKey = CAMPAIGN_KEY + (demo ? `-${demoName}-demo` : '');
+const planKey = PLAN_KEY + (demo ? `-${demoName}-demo` : '');
+const predecessors = demo ? MISSIONS.slice(0, MISSIONS.findIndex(m => m.id === demoMission)) : [];
+const demoStart = demo ? { version: 1, selected: demoMission, runs: Object.fromEntries(predecessors.map(m => [m.id, []])), completed: predecessors.map(m => m.id) } : undefined;
 let campaign: Campaign;
 try { campaign = new Campaign(JSON.parse(localStorage.getItem(campaignKey) ?? 'null') ?? demoStart); }
 catch { campaign = new Campaign(demoStart); }
-if (demo) campaign.select('C3-6');
+if (demo) campaign.select(demoMission);
 
 const icons = {
   echo: '<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M6 6h20v6H12v4h12v5H12v5h14" stroke="currentColor" stroke-width="3"/><path d="M2 11v19h19" stroke="currentColor" opacity=".4" stroke-width="2"/></svg>',
@@ -58,7 +62,7 @@ try {
 $('#app').innerHTML = `
   <header class="site-header">
     <a class="brand" href="./" aria-label="ECHO HEIST 首页"><span class="brand-symbol">${icons.echo}</span><span>ECHO HEIST<span class="brand-cn">回声劫案</span></span></a>
-    <div class="header-note"><span class="status-dot"></span> A SOLO CO-OP HEIST <span class="version">VOL. 15.0</span></div>
+    <div class="header-note"><span class="status-dot"></span> A SOLO CO-OP HEIST <span class="version">VOL. 16.0</span></div>
     <button class="text-button" id="help-button">行动手册 <span class="key">?</span></button>
   </header>
   <main>
@@ -70,7 +74,7 @@ $('#app').innerHTML = `
       <section class="console" aria-label="游戏区域">
         <div class="console-bar"><div class="feed-label"><span class="status-dot"></span> LIVE FEED <span class="divider">/</span> <span id="map-code">ANNEX_01</span></div><div class="console-controls"><button class="fast-forward-button" id="fast-forward" title="按住快进，或按住 Shift" aria-label="按住三倍快进" aria-pressed="false">3× <span>快进</span></button><button class="icon-button active" id="trails-button" title="显示 / 隐藏回声轨迹" aria-label="显示回声轨迹" aria-pressed="true">${icons.eye}</button><button class="icon-button" id="sound-button" title="开启音效" aria-label="开启音效" aria-pressed="false">${icons.sound}<span class="sound-off"></span></button><button class="icon-button pause-button" id="pause-button" title="暂停 / 继续 (Esc)" aria-label="暂停游戏">Ⅱ</button><button class="icon-button" id="fullscreen-button" title="全屏" aria-label="切换全屏">⛶</button></div></div>
         <div class="arena">
-          <canvas id="game-canvas" tabindex="0" aria-label="俯视角金库。用 WASD 或方向键移动，R 保存回声，空格制造声响。详细操作见行动手册。"></canvas>
+          <canvas id="game-canvas" tabindex="0" aria-label="2.5D 等距场景。用 WASD 或方向键按画面方向移动，R 保存回声，空格制造声响。详细操作见行动手册。"></canvas>
           <div class="arena-badge"><span id="speed-indicator" hidden>3× FAST FORWARD</span><span class="rec-dot"></span><span id="record-label">STANDBY</span></div>
           <div class="edit-banner" id="edit-banner" hidden><span id="edit-label"></span><button id="cancel-rerecord">取消，保留原路线</button></div>
           <div class="arena-caption">ARCHIVE SECURITY SYSTEM <span>CAM_04</span></div>
@@ -101,6 +105,14 @@ let previewGame: Game | null = null;
 let previewWasRunning = false;
 let game = new Game(LEVELS[0]);
 const renderer = new Renderer($('#game-canvas'));
+$('#fullscreen-button').insertAdjacentHTML('beforebegin', '<button id="camera-button" class="media-button" title="切换全景 / 跟随近景" aria-label="切换跟随近景" aria-pressed="false">近景</button>');
+$('#camera-button').addEventListener('click', () => {
+  renderer.closeup = !renderer.closeup;
+  $('#camera-button').textContent = renderer.closeup ? '全景' : '近景';
+  $('#camera-button').setAttribute('aria-pressed', String(renderer.closeup));
+  $('#camera-button').setAttribute('aria-label', renderer.closeup ? '切换全景' : '切换跟随近景');
+  focusGame();
+});
 const sound = new Sound();
 let mediaWasRunning = false;
 const mediaUI = new MediaUI(sound, renderer, () => {
@@ -145,7 +157,7 @@ const storyUI = new StoryUI(campaign, () => {
 }, () => { clearInput(); accumulator = 0; refreshUI(); }, sound);
 if (demo) $('#story-button').hidden = true;
 const operationUI = new OperationUI(() => { clearInput(); if (game.status === 'running') { game.togglePause(); refreshUI(); } });
-for (const selector of ['#mission-board', '#security-panel', '#power-panel', '#relay-panel', '#suppression-panel', '#delivery-panel']) {
+for (const selector of ['#mission-board', '#security-panel', '#power-panel', '#relay-panel', '#suppression-panel', '#delivery-panel', '#credential-journey details']) {
   $(selector).addEventListener('toggle', () => {
     if ($<HTMLDetailsElement>(selector).open && game.status === 'running') { game.togglePause(); clearInput(); refreshUI(); }
   });
@@ -231,7 +243,7 @@ function setLevel(index: number) {
 function loadLevel(level: Level) {
   if (initialized) persistPlan();
   previewGame = null; previewWasRunning = false;
-  game = new Game(level, campaignMode ? campaign.carryFor(level.id) : undefined);
+  game = new Game(level, campaignMode ? campaign.carryFor(level.id) : undefined, campaignMode ? campaign.credentialFor(level.id) : undefined);
   const restored = decodePlan(plans[game.level.id], game.level.id);
   if (restored) game.restorePlan(restored);
   $('#plan-status').textContent = restored?.length ? `已恢复 ${restored.length} 条回声` : '录制后自动保存';
@@ -257,7 +269,7 @@ function loadLevel(level: Level) {
 
 function primaryAction() {
   sound.unlock();
-  if (demo && campaign.cleared() === campaign.mission.stages.length && ['ready', 'won'].includes(game.status)) { openMission('C3-6'); return; }
+  if (demo && campaign.cleared() === campaign.mission.stages.length && ['ready', 'won'].includes(game.status)) { openMission(demoMission); return; }
   if (campaignMode && campaign.ending && ['ready', 'won'].includes(game.status)) { clearInput(); endingUI.show(campaign.ending, storyUI.state.endingNote()); return; }
   if (campaignMode && game.status === 'ready' && campaign.cleared() === campaign.mission.stages.length && campaign.nextMission) { openMission(campaign.nextMission.id); return; }
   if (game.status === 'ready') game.start();
@@ -293,7 +305,7 @@ function record() {
 function refreshUI() {
   campaignUI.render(game, campaignMode, previewGame, demo);
   $('.game-layout').classList.toggle('previewing', !!previewGame);
-  const key = `${game.status}:${game.editingIndex}:${game.canUndo}:${game.echoes.length}:${game.echoes.map(e => `${e.colorIndex}-${e.frames.length}-${e.delay ?? 0}`).join(',')}:${game.attempts}:${game.hasLoot}:${[...game.openDoors].join('')}:${[...game.circuits].join(',')}`;
+  const key = `${game.tokenOwner}:${[...game.authorized].join(',')}:${game.status}:${game.editingIndex}:${game.canUndo}:${game.echoes.length}:${game.echoes.map(e => `${e.colorIndex}-${e.frames.length}-${e.delay ?? 0}`).join(',')}:${game.attempts}:${game.hasLoot}:${[...game.openDoors].join('')}:${[...game.circuits].join(',')}`;
   if (uiKey !== key) {
     uiKey = key;
     $('#loop-number').textContent = `TAKE ${String(game.attempts).padStart(2, '0')}`;
@@ -325,6 +337,7 @@ function refreshUI() {
     $('#loot-status').textContent = game.editingIndex !== null ? '重录中：这一轮只录路线' : game.status === 'won' ? '安全撤离，行动完成' : game.level.objectiveLabel ? (game.hasLoot ? '目标已取得，前往标记的撤离点' : game.level.objectiveLabel) : game.hasLoot ? '已拿到藏品，返回左下角！' : '藏品位于右上角';
     $('#objective-loot > div').firstChild!.textContent = game.level.objective === 'deliver' ? '植入证据，确认送达' : game.level.objective === 'reach' ? '抵达安全锚点' : '取得目标，安全撤离';
     if (!game.handoffReady) $('#loot-status').textContent = '前往下一间之前，只留一条停在 HOLD 的回声；多余回声请删除。';
+    else if (game.credentialBlockers().length) $('#loot-status').textContent = game.credentialBlockers().join('；');
     else if (!game.exitReady && (game.hasLoot || game.level.objective === 'reach')) $('#loot-status').textContent = `撤离前需：${game.powerRequirements(game.unmetPower(game.level.exitPower))}`;
     else if (!game.hasLoot && !game.canCollect) $('#loot-status').textContent = `取物前需：${game.powerRequirements(game.unmetPower(game.level.lootPower))}`;
     if (game.level.circuits?.length) {
@@ -562,8 +575,10 @@ function loop(now: number) {
       const before = game.frame;
       const operationCount = game.operationLog.length;
       game.step({
-        x: Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')),
-        y: Number(keys.has('KeyS') || keys.has('ArrowDown')) - Number(keys.has('KeyW') || keys.has('ArrowUp')),
+        ...screenMovement(
+          Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')),
+          Number(keys.has('KeyS') || keys.has('ArrowDown')) - Number(keys.has('KeyW') || keys.has('ArrowUp')),
+        ),
         lure: keys.has('Space'),
         interact: keys.has('KeyE'),
       });

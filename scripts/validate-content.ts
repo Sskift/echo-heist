@@ -43,9 +43,14 @@ for (const mission of MISSIONS) {
     if (stage.outcomes) {
       unique(stage.outcomes);
       assert.equal(stage.outcomes.length, 2, `A circuit decision needs two outcomes in ${level.id}`);
-      assert.equal(stage.outcomes[0].power.id, stage.outcomes[1].power.id, `Outcomes must inspect the same circuit in ${level.id}`);
-      assert.notEqual(stage.outcomes[0].power.on, stage.outcomes[1].power.on, `Outcomes must cover opposite states in ${level.id}`);
-      for (const outcome of stage.outcomes) assert.ok(level.circuits?.some(c => c.id === outcome.power.id) && /^[a-zA-Z0-9-]+$/.test(outcome.id) && outcome.label.trim() && outcome.consequence.trim(), `Invalid outcome in ${level.id}`);
+      const [a, b] = stage.outcomes;
+      if ('power' in a && 'power' in b) {
+        assert.equal(a.power.id, b.power.id, `Outcomes must inspect the same circuit in ${level.id}`);
+        assert.notEqual(a.power.on, b.power.on, `Outcomes must cover opposite states in ${level.id}`);
+      } else {
+        assert.ok('credentialAt' in a && 'credentialAt' in b && a.credentialAt !== b.credentialAt, `Ambiguous credential outcome in ${level.id}`);
+      }
+      for (const outcome of stage.outcomes) assert.ok(('power' in outcome ? level.circuits?.some(c => c.id === outcome.power.id) : level.credential?.exitOwners.includes(outcome.credentialAt)) && /^[a-zA-Z0-9-]+$/.test(outcome.id) && outcome.label.trim() && outcome.consequence.trim(), `Invalid outcome in ${level.id}`);
     }
     unique(level.guards.filter(g => g.id !== undefined) as { id: string }[]);
     if (level.noiseResponse === 'nearest') assert.ok(level.guards.every(g => g.id), `Stable guard IDs required in ${level.id}`);
@@ -61,13 +66,14 @@ for (const mission of MISSIONS) {
     for (const terminal of level.terminals ?? []) {
       if (terminal.window) assert.ok(terminal.window[0] >= 0 && terminal.window[1] > terminal.window[0] && terminal.window[1] <= 12, `Invalid terminal window in ${level.id}`);
       if (terminal.plate) assert.ok(level.plates.some(p => p.id === terminal.plate), `Unknown terminal plate in ${level.id}`);
-      if (terminal.requiresAuthorization) assert.ok(level.terminals?.some(t => t.authorization === terminal.requiresAuthorization && t.id !== terminal.id), `Unknown prerequisite authorization in ${level.id}`);
-      if (terminal.kind === 'lock') assert.ok(terminal.authorization && !terminal.waitForDelivery, `Invalid lock in ${level.id}`);
+      if (terminal.requiresAuthorization) assert.ok(level.credential?.incomingAuthorizations?.includes(terminal.requiresAuthorization) || level.terminals?.some(t => t.authorization === terminal.requiresAuthorization && t.id !== terminal.id), `Unknown prerequisite authorization in ${level.id}`);
+      if (terminal.kind === 'lock') assert.ok(terminal.authorization && !terminal.waitForDelivery && !terminal.transfer, `Invalid lock in ${level.id}`);
       else assert.ok(!terminal.authorization, `Only locks grant authorization in ${level.id}`);
+      if (terminal.transfer === 'give') assert.ok(!terminal.waitForDelivery, `A return slot cannot wait for pickup in ${level.id}`);
     }
     for (const door of level.doors) {
       for (const plate of doorPlates(door)) assert.ok(level.plates.some(p => p.id === plate), `Unknown plate in ${level.id}`);
-      if (door.authorization) assert.ok(level.terminals?.some(t => t.authorization === door.authorization), `Missing authorization in ${level.id}`);
+      if (door.authorization) assert.ok(level.credential?.incomingAuthorizations?.includes(door.authorization) || level.terminals?.some(t => t.authorization === door.authorization), `Missing authorization in ${level.id}`);
     }
     for (const cycle of [...level.scanners ?? [], ...(level.suppressors ?? []).flatMap(s => s.cycle ? [s.cycle] : [])]) {
       assert.ok(cycle.period > 0 && cycle.period <= 12 && cycle.active[0] >= 0 && cycle.active[1] > cycle.active[0] && cycle.active[1] <= cycle.period && Number.isFinite(cycle.phase ?? 0), `Invalid facility cycle ${level.id}`);
@@ -105,10 +111,25 @@ for (const mission of MISSIONS) {
     const carry = source ? { level: source.level, echo: source.echoes[0] } : undefined;
     if (level.continuity) assert.ok(carry && source?.level.handoff, `Missing retained recording for ${level.id}`);
     for (const c of level.circuits ?? []) if (c.feed) assert.ok((c.feed.remote ? carry?.level : level)?.plates.some(p => p.id === c.feed!.plate), `Unknown feeder plate in ${level.id}`);
-    const win = playWitness(stage, carry);
-    wins.set(level.id, win);
-    for (const witness of stage.alternatives ?? []) playWitness({ ...stage, witness }, carry);
-    console.log(`${level.id.padEnd(14)} ${win.seconds.toFixed(2)}s / ${win.echoes.length} echoes / validated`);
+    if (level.credential) {
+      const c = level.credential, stableOwner = (o: string) => o === 'player' || !!level.terminals?.some(t => t.kind !== 'lock' && o === `terminal:${t.id}`);
+      assert.ok(c.id && c.label && c.exitOwners.length && c.exitOwners.every(stableOwner), `Invalid checkpoint owner in ${level.id}`);
+      if (c.receiveByPlayer) assert.ok(level.terminals?.some(t => t.id === c.receiveByPlayer), `Missing personal pickup in ${level.id}`);
+      for (const auth of c.exitAuthorizations ?? []) assert.ok(c.incomingAuthorizations?.includes(auth) || level.terminals?.some(t => t.authorization === auth), `Missing exported signature in ${level.id}`);
+      if (c.from) {
+        const upstream = mission.stages.find(s => s.level.id === c.from);
+        assert.ok(upstream && mission.stages.indexOf(upstream) < mission.stages.indexOf(base), `Invalid credential dependency in ${level.id}`);
+        assert.ok(!level.terminals?.some(t => t.kind === 'source'), `Credential was regenerated in ${level.id}`);
+        assert.ok(c.incomingOwners?.length && c.incomingOwners.every(stableOwner), `Invalid arrival owner in ${level.id}`);
+        assert.ok(stageVersions(upstream).some(s => s.level.credential?.id === c.id && c.incomingOwners?.every(o => s.level.credential?.exitOwners.includes(o)) && c.incomingAuthorizations?.every(a => s.level.credential?.exitAuthorizations?.includes(a)) !== false), `Credential provenance missing in ${level.id}`);
+      }
+    }
+    if (!level.credential?.from) {
+      const win = playWitness(stage, carry);
+      wins.set(level.id, win);
+      for (const witness of stage.alternatives ?? []) playWitness({ ...stage, witness }, carry);
+      console.log(`${level.id.padEnd(14)} ${win.seconds.toFixed(2)}s / ${win.echoes.length} echoes / validated`);
+    }
     layouts++;
     }
     stageVersions(base).forEach(s => { s.grants.forEach(f => facts.add(f)); s.outcomes?.forEach(o => facts.add(o.id)); });
@@ -117,7 +138,7 @@ for (const mission of MISSIONS) {
 }
 // Validate reachable combinations, not just each layout in isolation. Every
 // outcome must have a real input witness from every prefix that reaches it.
-for (const mission of MISSIONS.filter(m => m.stages.some(s => stageVersions(s).some(v => v.outcomes?.length)))) {
+for (const mission of MISSIONS.filter(m => m.stages.some(s => stageVersions(s).some(v => v.outcomes?.length || v.level.credential?.from)))) {
   const before = MISSIONS.slice(0, MISSIONS.indexOf(mission));
   let prefixes = [new Campaign({ version: 1, selected: mission.id, runs: Object.fromEntries(before.map(m => [m.id, []])), completed: before.map(m => m.id) })];
   for (let index = 0; index < mission.stages.length; index++) {
@@ -126,7 +147,7 @@ for (const mission of MISSIONS.filter(m => m.stages.some(s => stageVersions(s).s
       assert.ok((mission.stages[index].variants ?? []).filter(v => prefix.flags.includes(v.when)).length <= 1, `Ambiguous branch in ${mission.id} stage ${index}`);
       const stage = prefix.stage, reached = new Set<string>();
       for (const witness of [stage.witness, ...stage.alternatives ?? []]) {
-        const win = playWitness({ ...stage, witness }, prefix.carryFor(stage.level.id)), campaign = new Campaign(prefix.export());
+        const win = playWitness({ ...stage, witness }, prefix.carryFor(stage.level.id), prefix.credentialFor(stage.level.id)), campaign = new Campaign(prefix.export());
         assert.ok(campaign.commit(win), `Cannot commit ${stage.level.id}`);
         const selected = campaign.data.outcomes?.[mission.stages[index].level.id];
         if (selected) reached.add(selected);

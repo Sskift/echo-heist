@@ -1,12 +1,14 @@
 import type { Carry, Game } from './engine.ts';
-import { MISSIONS, resolveStage, stageVersions, type Mission, type Stage } from './campaign-content.ts';
+import { MISSIONS, outcomeSelected, resolveStage, stageVersions, type Mission, type Stage } from './campaign-content.ts';
 import { decodePlan, encodePlan, type SavedPlan } from './plans.ts';
+import type { CredentialSnapshot } from './levels.ts';
+import { incomingCredential, outgoingCredential } from './credentials.ts';
 
 export const CAMPAIGN_KEY = 'echo-heist-campaign-v1';
-type CampaignSave = { version: 1; selected: string; runs: Record<string, string[]>; completed: string[]; outcomes?: Record<string, string>; endings?: string[]; carries?: Record<string, SavedPlan> };
+type CampaignSave = { version: 1; selected: string; runs: Record<string, string[]>; completed: string[]; outcomes?: Record<string, string>; endings?: string[]; carries?: Record<string, SavedPlan>; credentials?: Record<string, CredentialSnapshot> };
 
 export class Campaign {
-  data: CampaignSave = { version: 1, selected: MISSIONS[0].id, runs: {}, completed: [], outcomes: {}, endings: [], carries: {} };
+  data: CampaignSave = { version: 1, selected: MISSIONS[0].id, runs: {}, completed: [], outcomes: {}, endings: [], carries: {}, credentials: {} };
   constructor(raw?: unknown) {
     if (!raw || typeof raw !== 'object') return;
     const save = raw as CampaignSave;
@@ -15,7 +17,7 @@ export class Campaign {
       const cleared = save.runs[mission.id];
       // The old four-room finale has no retained recording. Preserve its
       // historical unlock but restart this newly authored operation safely.
-      if (mission.id === 'C3-6' && Array.isArray(cleared) && cleared.some(id => /^C3-6-[a-d]$/.test(id))) {
+      if (['C3-6', 'C4-6'].includes(mission.id) && Array.isArray(cleared) && cleared.some(id => new RegExp(`^${mission.id}-[a-d]$`).test(id))) {
         this.data.runs[mission.id] = [];
         if (save.completed.includes(mission.id)) this.data.completed.push(mission.id);
         continue;
@@ -27,6 +29,13 @@ export class Campaign {
           const outcome = current.outcomes?.find(o => o.id === save.outcomes?.[id]);
           // A missing or invalid decision cannot silently turn into the default route.
           if (current.outcomes?.length && !outcome) break;
+          if (current.level.credential) {
+            const rule = current.level.credential;
+            if (rule.from && !incomingCredential(current.level, this.data.credentials![rule.from])) break;
+            const checkpoint = outgoingCredential(current.level, save.credentials?.[id]);
+            if (!checkpoint || (outcome && 'credentialAt' in outcome && checkpoint.owner !== outcome.credentialAt)) break;
+            this.data.credentials![id] = checkpoint;
+          }
           if (current.level.handoff) {
             const plan = decodePlan(save.carries?.[id], id), plate = current.level.plates.find(p => p.id === current.level.handoff!.plate);
             if (!plan || plan.length !== 1 || !plate || Math.hypot(plan[0].frames.at(-1)!.x - plate.x, plan[0].frames.at(-1)!.y - plate.y) >= 23) break;
@@ -72,6 +81,12 @@ export class Campaign {
     if (source && echo) return { level: source, echo };
   }
   get ending() { return this.cleared() === this.mission.stages.length ? this.stage.ending : undefined; }
+  credentialFor(levelId: string): CredentialSnapshot | undefined {
+    const index = this.indexOf(levelId);
+    if (index < 0) return;
+    const level = this.stageAt(index).level;
+    return incomingCredential(level, this.data.credentials?.[level.credential?.from ?? '']);
+  }
   revisitEnding(): boolean {
     return !!this.ending && this.mission.endingAnchor !== undefined && this.returnTo(this.mission.endingAnchor);
   }
@@ -98,10 +113,14 @@ export class Campaign {
     if (required && !this.flags.includes(required)) return false;
     if (!game.exitReady) return false;
     if (current.level.continuity && JSON.stringify(game.carried?.echo) !== JSON.stringify(this.carryFor(game.level.id)?.echo)) return false;
-    const outcomes = current.outcomes?.filter(o => game.powered(o.power)) ?? [];
+    if (current.level.credential?.from && JSON.stringify(game.incoming) !== JSON.stringify(this.credentialFor(game.level.id))) return false;
+    const credential = game.credentialCheckpoint();
+    if (current.level.credential && !credential) return false;
+    const outcomes = current.outcomes?.filter(o => outcomeSelected(o, game)) ?? [];
     if (current.outcomes?.length && outcomes.length !== 1) return false;
     if (outcomes[0]) (this.data.outcomes ??= {})[base.level.id] = outcomes[0].id;
     if (current.level.handoff) (this.data.carries ??= {})[base.level.id] = encodePlan(base.level.id, game.echoes);
+    if (credential) (this.data.credentials ??= {})[base.level.id] = credential;
     (this.data.runs[this.mission.id] ??= []).push(base.level.id);
     if (this.cleared() === this.mission.stages.length && !this.data.completed.includes(this.mission.id)) this.data.completed.push(this.mission.id);
     if (current.ending && !this.data.endings?.includes(current.ending.id)) (this.data.endings ??= []).push(current.ending.id);
@@ -112,6 +131,7 @@ export class Campaign {
     for (const stage of this.mission.stages.slice(index)) {
       delete this.data.outcomes?.[stage.level.id];
       delete this.data.carries?.[stage.level.id];
+      delete this.data.credentials?.[stage.level.id];
     }
     this.data.runs[this.mission.id] = (this.data.runs[this.mission.id] ?? []).slice(0, index);
     // Historical mission completion remains a permanent unlock; the current

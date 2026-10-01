@@ -1,5 +1,7 @@
 import { doorPlates, FPS, LOOP_SECONDS, MAX_ECHOES, MAX_FRAMES, TILE, type Cycle, type Level, type Point, type Power, type Scanner, type Suppressor, type Terminal } from './levels.ts';
 import { findRoute } from './navigation.ts';
+import type { CredentialSnapshot } from './levels.ts';
+import { incomingCredential, outgoingCredential } from './credentials.ts';
 
 export type Intent = { type: 'circuit'; id: string; on: boolean } | { type: 'take' | 'give' | 'authorize' | 'deposit'; id: string };
 export type Input = { x: number; y: number; lure: boolean; interact?: boolean };
@@ -57,9 +59,12 @@ export class Game {
   private wallCells = new Map<number, Map<number, Point[]>>();
   readonly carried?: Carry;
   readonly remote?: Game;
+  readonly incoming?: CredentialSnapshot;
+  private receivedFrom?: string;
 
-  constructor(level: Level, carried?: Carry) {
+  constructor(level: Level, carried?: Carry, credential?: CredentialSnapshot) {
     this.level = level;
+    this.incoming = incomingCredential(level, credential);
     if (carried && level.continuity?.source === carried.level.id) {
       this.carried = { level: carried.level, echo: cloneEcho(carried.echo) };
       this.echoes = [cloneEcho(carried.echo)];
@@ -120,7 +125,7 @@ export class Game {
   }
 
   previewAt(frame: number): Game {
-    const preview = new Game(this.level, this.carried);
+    const preview = new Game(this.level, this.carried, this.incoming);
     preview.spectator = true;
     preview.restorePlan(this.localPlan); preview.start();
     for (let i = 0; i < Math.min(MAX_FRAMES, Math.max(0, Math.floor(frame))); i++) {
@@ -143,7 +148,22 @@ export class Game {
     const echo = this.echoes[0];
     return this.echoes.length === 1 && !!plate && !!echo && distance(echo.frames.at(-1)!, plate) < 23 && this.activePlates.has(plate.id);
   }
-  get exitReady(): boolean { return this.handoffReady && (!this.level.continuity || !!this.carried) && !this.unmetPower(this.level.exitPower).length; }
+  credentialCheckpoint(): CredentialSnapshot | undefined {
+    const rule = this.level.credential;
+    if (!rule || (rule.from && !this.incoming) || !this.tokenOwner) return;
+    return outgoingCredential(this.level, { id: rule.id, owner: this.tokenOwner, authorizations: (rule.exitAuthorizations ?? []).filter(a => this.authorized.has(a)), ...(this.receivedFrom ? { receivedFrom: this.receivedFrom } : {}) });
+  }
+  credentialBlockers(): string[] {
+    const rule = this.level.credential;
+    if (!rule) return [];
+    return [
+      ...(rule.from && !this.incoming ? ['缺少前段交接记录，请回到准备锚点'] : []),
+      ...(rule.receiveByPlayer && this.receivedFrom !== rule.receiveByPlayer ? [`需本人从 ${rule.receiveByPlayer} 接回凭据`] : []),
+      ...((rule.exitAuthorizations ?? []).filter(a => !this.authorized.has(a)).map(a => `需完成 ${a} 签入`)),
+      ...(!rule.exitOwners.includes(this.tokenOwner ?? '') ? [`离开前需${rule.exitOwners.map(o => o === 'player' ? '本人持有凭据' : `把凭据交入 ${o.slice(9)}`).join('或')}`] : []),
+    ];
+  }
+  get exitReady(): boolean { return this.handoffReady && (!this.level.credential || !!this.credentialCheckpoint()) && (!this.level.continuity || !!this.carried) && !this.unmetPower(this.level.exitPower).length; }
   get objectiveComplete(): boolean {
     return this.level.objective === 'deliver' ? !!this.level.delivery && this.evidenceDeposited && (this.level.delivery.receivers ?? []).every(r => this.evidenceReceipts.has(r.guard)) : this.level.objective === 'reach' || this.hasLoot;
   }
@@ -265,7 +285,7 @@ export class Game {
     const circuit = this.level.circuits?.find(c => !c.feed && distance(c, this.player) < 30);
     if (circuit) return { type: 'circuit', id: circuit.id, on: !this.circuits.get(circuit.id) };
     const terminal = this.level.terminals?.find(t => distance(t, this.player) < 30);
-    if (terminal) return { type: terminal.kind === 'lock' ? 'authorize' : this.tokenOwner === 'player' ? 'give' : 'take', id: terminal.id };
+    if (terminal) return { type: terminal.kind === 'lock' ? 'authorize' : terminal.transfer ?? (this.tokenOwner === 'player' ? 'give' : 'take'), id: terminal.id };
   }
 
   credentialOwner(): string {
@@ -289,7 +309,7 @@ export class Game {
     const names = [...this.waitingReceivers].filter(([, id]) => id === terminal.id).map(([actor]) => actor === 'player' ? '你' : `回声 ${this.echoes.findIndex(e => `echo:${e.colorIndex}` === actor) + 1}`);
     const window = terminal.window ? this.seconds < terminal.window[0] ? `距开放 ${(terminal.window[0] - this.seconds).toFixed(1)}s` : this.seconds < terminal.window[1] ? `剩余 ${(terminal.window[1] - this.seconds).toFixed(1)}s` : '时段已过' : '不限时段';
     const conditions = [terminal.plate ? `需守 ${terminal.plate}` : '', terminal.power ? `${terminal.power.id} 需${this.circuitState(terminal.power.id, terminal.power.on)}` : '', terminal.requiresAuthorization ? `先签 ${terminal.requiresAuthorization}` : ''].filter(Boolean).join('、');
-    return `${terminal.id} · ${terminal.kind === 'lock' ? '授权' : terminal.kind === 'source' ? '凭据源' : '交接'} · ${terminal.window ? `${terminal.window.join('–')}s，` : ''}${window}${conditions ? ` · ${conditions}` : ''} · ${blockers.length ? '条件未满足' : '可操作'}${this.tokenOwner === `terminal:${terminal.id}` ? ' · 存有凭据' : ''}${terminal.authorization && this.authorized.has(terminal.authorization) ? ' · 已授权' : ''}${names.length ? ` · ${names.join('、')} 等候接收` : ''}${terminal.waitForDelivery ? ' · 按 E 留候，离开取消' : ''}`;
+    return `${terminal.id} · ${terminal.kind === 'lock' ? '授权' : terminal.kind === 'source' ? '凭据源' : terminal.transfer === 'give' ? '归还槽（只收不取）' : terminal.transfer === 'take' ? '取件面' : '交接'} · ${terminal.window ? `${terminal.window.join('–')}s，` : ''}${window}${conditions ? ` · ${conditions}` : ''} · ${blockers.length ? '条件未满足' : '可操作'}${this.tokenOwner === `terminal:${terminal.id}` ? ' · 存有凭据' : ''}${terminal.authorization && this.authorized.has(terminal.authorization) ? ' · 已授权' : ''}${names.length ? ` · ${names.join('、')} 等候接收` : ''}${terminal.waitForDelivery ? ' · 按 E 留候，离开取消' : ''}`;
   }
 
   private resolveIntents() {
@@ -334,6 +354,7 @@ export class Game {
       if (!target) this.traceOperation(request, 'blocked', '这个终端不在当前行动区');
       else if (distance(request.at, target) >= 30) this.traceOperation(request, 'blocked', '操作位置已超出终端范围');
       else if ((request.intent.type === 'authorize') !== (target.kind === 'lock')) this.traceOperation(request, 'blocked', '请求类型与终端用途不符');
+      else if (target.transfer && request.intent.type !== target.transfer) this.traceOperation(request, 'blocked', target.transfer === 'give' ? '这是归还槽，只接受交付' : '这是取件面，只接受领取');
     }
     // Only marked terminals retain a take request. Leaving range, suppression,
     // or a new request cancels it; end-pose holding can wait but never reissues E.
@@ -368,6 +389,7 @@ export class Game {
         const group = requests.filter(r => r.intent.type === phase && r.intent.id === terminal.id && distance(r.at, terminal) < 30);
         if (!group.length) continue;
         if ((phase === 'authorize') !== (terminal.kind === 'lock')) continue;
+        if (terminal.transfer && phase !== terminal.transfer) continue;
         const blockers = this.terminalBlockers(terminal);
         const waiting = phase === 'take' && terminal.waitForDelivery;
         if (blockers.length) {
@@ -390,6 +412,7 @@ export class Game {
             group.forEach(r => this.traceOperation(r, 'blocked', '多人同时接收，本次请求全部取消'));
           } else if (this.tokenOwner === `terminal:${terminal.id}`) {
             this.tokenOwner = group[0].id; this.signal(`${group[0].label} 收到 ${terminal.id} 的凭据`);
+            if (group[0].id === 'player' && terminal.id === this.level.credential?.receiveByPlayer) this.receivedFrom = terminal.id;
             this.traceOperation(group[0], 'success', `已收到 ${terminal.id} 的唯一凭据`);
           } else {
             this.signal(`${group[0].label} 接收未满足：${terminal.id} 尚无凭据`);
@@ -466,7 +489,9 @@ export class Game {
     this.circuits = new Map((this.level.circuits ?? []).map(c => [c.id, c.initial]));
     this.authorized.clear();
     const source = this.level.terminals?.find(t => t.kind === 'source');
-    this.tokenOwner = source ? `terminal:${source.id}` : null;
+    this.receivedFrom = undefined;
+    this.tokenOwner = this.level.credential?.from ? this.incoming?.owner ?? null : source ? `terminal:${source.id}` : null;
+    for (const id of this.level.credential?.incomingAuthorizations ?? []) if (this.incoming?.authorizations.includes(id)) this.authorized.add(id);
     this.waitingReceivers.clear();
     this.openDoors.clear();
     this.activePlates.clear();

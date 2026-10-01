@@ -1,9 +1,10 @@
 import { Game, type Carry } from './engine.ts';
 import type { Stage } from './campaign-content.ts';
+import type { CredentialSnapshot } from './levels.ts';
 
 // Author tool: all routes use movement and interaction inputs, never teleports.
-export function playWitness(stage: Stage, carry?: Carry): Game {
-  const game = new Game(stage.level, carry); game.start();
+export function playWitness(stage: Stage, carry?: Carry, credential?: CredentialSnapshot): Game {
+  const game = new Game(stage.level, carry, credential); game.start();
   const step = (x = 0, y = 0, interact = false, lure = false) => {
     if (game.status === 'ready') game.start();
     if (game.status !== 'running') throw new Error(`${stage.level.id}: ${game.status} / ${game.lastMessage}`);
@@ -30,6 +31,6 @@ export function playWitness(stage: Stage, carry?: Carry): Game {
     }
     else if (!game.setDelay(action.echo, action.delay)) throw new Error(`${stage.level.id}: invalid delay`);
   }
-  if (game.status !== 'won') throw new Error(`${stage.level.id}: reference plan did not finish`);
+  if (game.status !== 'won') throw new Error(`${stage.level.id}: reference plan did not finish at ${Math.round(game.player.x)},${Math.round(game.player.y)} / objective=${game.objectiveComplete} / owner=${game.tokenOwner} / ${game.credentialBlockers().join('; ')} / ${game.signals.slice(-3).map(s => s.text).join('; ')}`);
   return game;
 }

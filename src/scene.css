@@ -1,0 +1,16 @@
+.arena { isolation: isolate; background: #14252d; }
+.arena #game-canvas { display: block; width: 100%; height: auto; aspect-ratio: 8 / 5; }
+.arena .scene-labels { position: absolute; inset: 0; display: block; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.arena .overlay { z-index: 5; }
+.arena .toast, .arena .edit-banner { z-index: 7; }
+.arena .arena-caption, .arena .arena-badge { display: none; }
+.console { background: #14252d; }
+.console-bar { background: #14272f; border-bottom-color: #3e5558; }
+.timeline { background: #172c32; }
+.overlay-card { background: #13272dea; border-color: #768879; box-shadow: 0 20px 80px #0006; }
+#camera-button { min-width: 42px; color: #ddcfac; border-color: #7d866b; }
+@media(max-width:550px) {
+  .console-controls { gap: 5px; }
+  .feed-label .divider, #map-code { display: none; }
+  #camera-button { min-width: 30px; padding: 4px; font-size: 9px; }
+}

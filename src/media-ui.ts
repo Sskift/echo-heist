@@ -16,9 +16,9 @@ export class MediaUI {
       <label class="volume-label" for="music-volume">音乐 <output id="music-value"></output></label><input id="music-volume" type="range" min="0" max="100" step="1" aria-label="音乐音量">
       <label class="volume-label" for="effects-volume">音效 <output id="effects-value"></output></label><input id="effects-volume" type="range" min="0" max="100" step="1" aria-label="音效音量">
       <label class="media-option"><input id="adaptive-audio" type="checkbox"><span>跟随行动变化<small>规划时收敛，警觉升高时加入低音脉冲；快进不改变音乐速度。</small></span></label>
-      <label class="media-option"><input id="scene-detail" type="checkbox"><span>场景材质与人物<small>关闭后使用简洁图形，门禁、视野和碰撞规则相同。</small></span></label>
+      <label class="media-option"><input id="scene-detail" type="checkbox"><span>场景细节与局部灯光<small>关闭后减少窗框、地板纹理和壁灯照明，保留 3D 人物与机关。</small></span></label>
       <p class="media-note">首次需主动开启声音。离开窗口自动静音，重录保持配乐连续；音量和画面偏好保存在本机。</p>
-      <details class="media-credits"><summary>素材与音乐鸣谢 <span>CC0</span></summary><p>场景纹理与人物：<a href="https://kenney.nl/assets/top-down-shooter" target="_blank" rel="noopener noreferrer">Kenney · Top-down Shooter</a></p>${Object.values(SOUNDTRACK).map(track => `<p><a href="${track.source}" target="_blank" rel="noopener noreferrer">${track.title}</a><small>${track.artist}</small></p>`).join('')}<p>以上素材采用 CC0。音乐经过统一响度和格式转换，人物与纹理在游戏中调色合成。规则图形与提示音由本项目绘制、合成。</p></details>
+      <details class="media-credits"><summary>素材与音乐鸣谢 <span>CC0</span></summary><p>家具模型：<a href="https://kenney.nl/assets/furniture-kit" target="_blank" rel="noopener noreferrer">Kenney · Furniture Kit</a></p><p>人物与骨骼动画：<a href="https://kenney.nl/assets/animated-characters-protagonists" target="_blank" rel="noopener noreferrer">Kenney · Animated Characters Protagonists</a></p>${Object.values(SOUNDTRACK).map(track => `<p><a href="${track.source}" target="_blank" rel="noopener noreferrer">${track.title}</a><small>${track.artist}</small></p>`).join('')}<p>以上素材采用 CC0。家具与人物在运行时调整比例、材质与颜色；建筑、地板和机关由本项目建模与绘制。3D 渲染使用 Three.js（MIT 许可），音乐经过统一响度与格式转换。</p></details>
     </dialog>`);
     this.dialog = document.querySelector('#media-dialog')!;
     try { renderer.detail = localStorage.getItem('echo-heist-scene-detail') !== 'false'; } catch { /* Default detailed mode. */ }

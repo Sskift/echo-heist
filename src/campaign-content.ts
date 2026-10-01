@@ -1,4 +1,5 @@
 import type { Level, Power } from './levels.ts';
+import type { Game } from './engine.ts';
 import { g, w, r, e, noise, point, room, level, stage, gate, plate } from './campaign-authoring.ts';
 import { CHAPTER_ONE } from './chapter-one.ts';
 import { CHAPTER_TWO } from './chapter-two.ts';
@@ -9,7 +10,8 @@ import { CHAPTER_SIX } from './chapter-six.ts';
 import { CHAPTER_SEVEN } from './chapter-seven.ts';
 
 export type WitnessAction = { go: [number, number] } | { wait: number } | { press: 'interact' | 'lure' } | { record: true } | { delay: number; echo: number } | { remove: number };
-export type Outcome = { id: string; label: string; consequence: string; power: Power };
+export type Outcome = { id: string; label: string; consequence: string } & ({ power: Power } | { credentialAt: string });
+export const outcomeSelected = (outcome: Outcome, game: Game): boolean => 'power' in outcome ? game.powered(outcome.power) : game.tokenOwner === outcome.credentialAt;
 export type Ending = { id: string; title: string; consequence: string; reunion: string[] };
 export type Stage = { level: Level; story: string; result: string; grants: string[]; witness: WitnessAction[]; requires?: string; alternatives?: WitnessAction[][]; outcomes?: Outcome[]; variants?: { when: string; stage: Stage }[]; ending?: Ending };
 export type Mission = { id: string; chapter: string; title: string; summary: string; evidence: string; stages: Stage[]; endingAnchor?: number };

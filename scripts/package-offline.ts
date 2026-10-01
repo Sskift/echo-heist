@@ -46,13 +46,21 @@ P：预演计划　Shift：按住快进　Esc：暂停
 收起未读完的片段后，可在修表铺续读；刷新也会恢复阅读位置。
 主线中的行动路线与最终公开范围，仍由你在关卡里实际完成的操作决定。
 
-0.15 新增 C3-6《最后一盏灯》：配电室布置、隔窗取核心、回原处恢复城市。
-直接试玩：在此 HTML 文件地址后加 ?demo=last-light，与完整主线分开存档。
-留守者占一个回声名额，各区共用 12 秒节拍；回到首段改计划会撤销后段锚点。
+0.16 使用真实 3D 场景与固定 2.5D 镜头。WASD 和方向键按屏幕方向移动。
+「近景 / 全景」切换镜头；地图北向右上、东向右下。已有录像与存档仍使用原始地图坐标。
+建议使用支持 WebGL 2 的 Chrome 或 Edge；模型、动画和音乐均包含在本文件内。
+
+C4-6《不存在的列车票》：登记厅交出唯一车票，到对侧站台本人接回，再交接至货运档案。
+直接试玩：在此 HTML 文件地址后加 ?demo=station-transfer，与完整主线分开存档。
+FAST 要提前安排同伙与时段，后两区各省一名同伙；SERVICE 随时交票，后段需要额外接应。
+
+C3-6《最后一盏灯》：配电室布置、隔窗取核心、回原处恢复城市。
+独立试玩入口 ?demo=last-light。留守者占一个回声名额，各区每轮十二秒从零同步。
+回到首段重排计划会撤销后段锚点；凭据、授权和本区计划随各自安全锚点恢复。
 
 构建对应：${commit}
 `);
 const sources: { title: string; author: string; sourcePage: string; license: string }[] = JSON.parse(readFileSync('licenses/asset-sources.json', 'utf8'));
-writeFileSync(join(target, '素材鸣谢.txt'), `回声劫案 / 免费素材鸣谢\n\n${sources.map(s => `${s.title}\n${s.author}\n${s.license}\n${s.sourcePage}`).join('\n\n')}\n\n音乐统一响度并转为 MP3；图片在游戏内缩放与调色，原始 PNG 未改。\n所有运行资源已包含在 HTML 中，外部链接仅用于查看作者页面。\n许可全文：CC0-1.0.txt；Kenney 原始随包许可：Kenney-Topdown-CC0.txt。\n`);
-for (const file of ['CC0-1.0.txt', 'Kenney-Topdown-CC0.txt']) copyFileSync(join('licenses', file), join(target, file));
+writeFileSync(join(target, '素材鸣谢.txt'), `回声劫案 / 免费素材鸣谢\n\n${sources.map(s => `${s.title}\n${s.author}\n${s.license}\n${s.sourcePage}`).join('\n\n')}\n\n音乐统一响度并转为 MP3；家具、人物和动画原文件未修改，运行时缩放与调色。\n建筑、地板、门禁和交互提示由本项目绘制与建模。\n3D 渲染：Three.js / MIT，见 Three-MIT.txt。\n所有运行资源已包含在 HTML 中，外部链接仅用于查看作者页面。\n许可全文：CC0-1.0.txt；Kenney-Furniture-CC0.txt；Kenney-Characters-CC0.txt。\n`);
+for (const file of ['CC0-1.0.txt', 'Kenney-Furniture-CC0.txt', 'Kenney-Characters-CC0.txt', 'Three-MIT.txt']) copyFileSync(join('licenses', file), join(target, file));
 console.log(JSON.stringify({ target: join(target, filename), bytes: Buffer.byteLength(html), version, commit, embeddedAssets: assets.length }));
