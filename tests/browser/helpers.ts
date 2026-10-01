@@ -7,10 +7,15 @@ export async function clock(page: Page) {
     window.requestAnimationFrame = callback => { callbacks.push(callback); return callbacks.length; };
     (window as unknown as { advance: (frames: number) => void }).advance = frames => {
       if (!now) now = performance.now();
-      for (let frame = 0; frame < frames; frame++) {
+      for (let frame = 0; frame < frames;) {
+        // Exercise the real accumulator at 12 rendered frames/second. Every
+        // simulation tick still runs at 60 Hz; software WebGL need not draw
+        // five identical intermediate views during a held keyboard input.
+        const ticks = Math.min(5, frames - frame);
         // Stay just above the fixed-step boundary: floating-point cancellation
         // must not drop a simulated frame at a keyboard rendezvous.
-        now += 1000 / 60 + 1e-6;
+        now += ticks * (1000 / 60 + 1e-6);
+        frame += ticks;
         const pending = callbacks; callbacks = [];
         pending.forEach(callback => callback(now));
       }
