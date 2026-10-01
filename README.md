@@ -14,7 +14,7 @@
 
 ## 开始
 
-[下载 v0.17.0 离线版](https://github.com/Sskift/echo-heist/releases/tag/v0.17.0)：解压 ZIP 后，用 Chrome 或 Edge 打开 HTML；模型、动画、音乐和许可均在包内。
+[下载 v0.18.0 离线版](https://github.com/Sskift/echo-heist/releases/tag/v0.18.0)：解压 ZIP 后，用 Chrome 或 Edge 打开 HTML；模型、动画、音乐和许可均在包内。
 
 ```sh
 npm ci
