@@ -30,7 +30,7 @@ test('only archived evidence permits preparation; missing old-save evidence neve
   assert.ok(campaign.choosePreparation('museum-service'));
   assert.equal(campaign.stage.level.id, 'C0-6-a-service');
   assert.ok(campaign.flags.includes('museum-service'));
-  for (const [mission, choice, sources] of [['C1-6', 'gala-handover', ['C1-1', 'C1-4']], ['C3-5', 'grid-bypass', ['C2-6', 'C3-4']], ['C4-5', 'station-legacy', ['C3-6', 'C4-3']], ['C5-5', 'retention-manual', ['C4-6', 'C5-2']]] as const) {
+  for (const [mission, choice, sources] of [['C1-6', 'gala-handover', ['C1-1', 'C1-4']], ['C2-1', 'records-dock', ['C1-6']], ['C3-5', 'grid-bypass', ['C2-6', 'C3-4']], ['C4-5', 'station-legacy', ['C3-6', 'C4-3']], ['C5-5', 'retention-manual', ['C4-6', 'C5-2']], ['C6-5', 'review-independent', ['C5-6', 'C6-3']], ['C7-1', 'vault-addressed', ['C6-6', 'C6-4']]] as const) {
     const ready = preparationMission(mission);
     for (const id of sources) {
       const save = ready.export(); save.completed = save.completed.filter(m => m !== id);

@@ -500,6 +500,25 @@ export class SetDressing {
 
   terminal(parent: THREE.Object3D, terminal: Terminal, station: boolean) {
     const group = new THREE.Group(), at = { x: terminal.x / 32 - 15, z: terminal.y / 32 - 9 - 0.38 }; group.position.set(at.x, 0, at.z); parent.add(group);
+    if (terminal.appearance === 'review') {
+      this.box(group, 0, 0.09, 0, 0.96, 0.18, 0.75, '#aeb29d');
+      this.box(group, 0, 0.45, 0, 0.74, 0.64, 0.56, '#355e59');
+      for (const x of [-0.33, 0.33]) this.box(group, x, 0.46, 0.28, 0.045, 0.59, 0.035, '#bfaa74', 0.5);
+      this.box(group, 0, 0.81, 0, 1.06, 0.13, 0.82, '#d0c6a8');
+      this.box(group, 0, 0.39, 0.3, 0.48, 0.13, 0.045, '#152f35');
+      this.box(group, 0, 0.3, 0.33, 0.58, 0.04, 0.13, '#c1a974', 0.5);
+      this.box(group, -0.19, 0.9, 0.08, 0.32, 0.028, 0.39, '#e5dac0');
+      for (let i = 0; i < 3; i++) this.box(group, -0.19, 0.916, -0.03 + i * 0.07, 0.21, 0.006, 0.011, '#8c9b8b');
+      if (terminal.kind === 'lock') {
+        this.box(group, 0.27, 0.92, -0.1, 0.24, 0.07, 0.25, '#3d4b46', 0.4);
+        this.box(group, 0.27, 1.02, -0.16, 0.045, 0.25, 0.045, '#bc9a61', 0.6);
+        this.box(group, 0.27, 1.13, -0.08, 0.18, 0.045, 0.21, '#bc9a61', 0.6);
+      } else for (let i = 0; i < 2; i++) this.box(group, 0.25, 0.9 + i * 0.045, -0.1, 0.28, 0.035, 0.35, i ? '#94aba0' : '#b9a06e');
+      const ticket = this.box(group, 0, 0.4, 0.33, 0.32, 0.07, 0.045, '#ffe0a0'); ticket.visible = false;
+      const screen = this.box(group, 0, 0.9, -0.32, 0.37, 0.035, 0.13, '#78bfc2');
+      screen.material = new THREE.MeshStandardMaterial({ color: '#78bfc2', emissive: '#78bfc2', emissiveIntensity: 0.35 }); screen.userData.ownedMaterial = true;
+      return { screen, ticket };
+    }
     if (terminal.appearance) {
       const old = terminal.appearance === 'legacy', casing = old ? '#664833' : '#385668', trim = old ? '#bd9956' : '#9aadb5';
       this.box(group, 0, 0.08, 0, 0.93, 0.16, 0.64, '#263b40', 0.25);

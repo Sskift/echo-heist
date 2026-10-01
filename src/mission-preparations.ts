@@ -2,6 +2,8 @@ import type { Mission, Stage } from './campaign-content.ts';
 import { g, w, r, e, room, gate } from './campaign-authoring.ts';
 import { prepareGrid } from './grid-preparation.ts';
 import { prepareHandoffs } from './handoff-preparations.ts';
+import { prepareReviews } from './review-preparations.ts';
+import { prepareDock } from './dock-preparation.ts';
 
 // Preparations are authored layouts, not runtime mutations of a saved room.
 // Canonical checkpoint IDs stay stable; every layout has its own recording ID.
@@ -62,7 +64,9 @@ export function prepareMissions(missions: Mission[]) {
   invitations.witness = [g(176, 464), g(176, 176), r(), g(272, 464), w(40), g(272, 432), g(336, 432), r(), g(112, 304), g(400, 304), w(240), g(528, 304), g(816, 304)];
   add(gala.stages[1], 'gala-handover', invitations);
   prepareGrid(missions.find(m => m.id === 'C3-5')!);
+  prepareDock(missions.find(m => m.id === 'C2-1')!);
   prepareHandoffs(missions);
+  prepareReviews(missions);
 }
 
 function add(base: Stage, when: string, alternate: Stage) {

@@ -2,7 +2,13 @@
 
 一个关于配合、身份和记忆归属的 2.5D 潜入解谜游戏。你的同伙是过去十二秒里的自己：录下行动、安排回声出场，再让现在的你完成交接、取证与撤离。
 
-当前版本 **0.21.0**。八章主线、48 个任务、130 个必经行动区，另有 27 个分支布局、4 个机制演习和 3 个基础演习。所有内容本地运行，支持单 HTML 离线版。
+当前版本 **0.22.0**。八章主线、48 个任务、130 个必经行动区，另有 34 个分支布局、4 个机制演习和 3 个基础演习。所有内容本地运行，支持单 HTML 离线版。
+
+0.22 把证据准备接到市政档案、市政厅与中央总库，新增 7 个布局。C1-6 的交付账本用于 C2-1：先在货运窗口通过收货侧廊，下一段从规程柜背面进入。C5-6 的批准书与 C6-3 的时间戳用于 C6-5：借用独立复核线路取证，再由真人或回声归位，末段在恢复后的线路上签入。C6-6 的传输地址与 C6-4 的联锁日志用于 C7-1：两名回声接应侧门、恢复联锁，并在连续复核台协作签名。三场任务的原方案保留。
+
+独立复核台使用石材柜面、文件托盘与签章装置；门禁供电连线也显示“断电可用”的反向条件。八章现在各有一组出发准备，证据只改变设施与人员安排，不代做交接、签名、复位或最终送达。
+
+查看 [收货侧廊](docs/scene-v022-dock.png) · [独立复核台](docs/scene-v022-review.png) · [总库收件核验](docs/scene-v022-intake.png)。
 
 0.21 继续细化 2.5D 场景：提高后墙并补上柱式和檐口，窗内显示夜间街景；旧馆使用拼花木地板，玻璃展柜陈列怀表、浑仪和发报器。柱式小构件合批渲染，前景切墙与原始碰撞规则保持一致。旧班柜采用木材与黄铜，人工柜采用蓝色钢板与铆钉，接线提示按实际供电状态变化。
 
@@ -77,7 +83,7 @@ npm run check:content    # 所有关卡参考路线与分支提交，仅在这�
 npm run build           # 严格类型检查、未使用代码检查与生产构建
 npx playwright install chromium
 npm run test:browser    # 9 个主要用户流程，含 3D 资源、画面方向输入与出发准备
-npm run package:offline # 生成 .local/releases/echo-heist-v0.21.0.html
+npm run package:offline # 生成 .local/releases/echo-heist-v0.22.0.html
 ```
 
 Windows 可设置 `$env:PLAYWRIGHT_CHANNEL='chrome'` 使用已安装的 Chrome。关卡参考路线使用真实模拟输入，验证可完成性；不代表真人首玩难度或实际时长。
@@ -91,6 +97,7 @@ Windows 可设置 `$env:PLAYWRIGHT_CHANNEL='chrome'` 使用已安装的 Chrome�
 - `src/mission-preparations.ts`：证据来源、准备代价与对应的真实设施布局。
 - `src/grid-preparation.ts`：配电站旁路的三段值守、取件与复位配合。
 - `src/handoff-preparations.ts`：车站旧班复核与转存设施人工交接的证据准备。
+- `src/dock-preparation.ts`、`src/review-preparations.ts`：交付账本指向的收货端、市政独立复核线与中央总库侧面收件口。
 - `src/scene-finish.ts`：轻量灯光后处理与本地生成的材质凹凸。
 - `src/story.ts`：完整幕间剧本、解锁规则与对话存档。
 - `src/story-ui.ts`、`src/story.css`：修表铺插图、阅读器与调查回顾。

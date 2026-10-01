@@ -236,11 +236,13 @@ export class Renderer {
       c.fillStyle = active ? '#c3ed8280' : '#234847b0'; c.fillRect(plate.x - 17, plate.y - 17, 34, 34); c.strokeStyle = active ? colors.lime : '#90ac9a'; c.lineWidth = 2; c.strokeRect(plate.x - 17, plate.y - 17, 34, 34);
       c.font = 'bold 15px sans-serif'; c.textAlign = 'center'; c.fillStyle = active ? '#fff8c5' : '#d2d9c0'; c.fillText(plate.id, plate.x, plate.y + 5); c.textAlign = 'left';
     }
-    for (const circuit of game.level.circuits ?? []) if (circuit.feed) {
-      const source = (circuit.feed.remote ? game.carried?.level : game.level)?.plates.find(p => p.id === circuit.feed!.plate);
-      const active = !!game.circuits.get(circuit.id);
-      if (source) line([source, { x: circuit.x, y: source.y }, circuit], active ? '#b8e6d7c0' : '#82aaa088', [3, 4]);
-      for (const door of game.level.doors.filter(d => d.power?.id === circuit.id)) line([circuit, { x: circuit.x, y: door.y + door.h / 2 }, { x: door.x + door.w / 2, y: door.y + door.h / 2 }], active ? '#b8e6d7b0' : '#54798166', [3, 4]);
+    for (const circuit of game.level.circuits ?? []) {
+      if (circuit.feed) {
+        const source = (circuit.feed.remote ? game.carried?.level : game.level)?.plates.find(p => p.id === circuit.feed!.plate);
+        const active = !!game.circuits.get(circuit.id);
+        if (source) line([source, { x: circuit.x, y: source.y }, circuit], active ? '#b8e6d7c0' : '#82aaa088', [3, 4]);
+      }
+      for (const door of game.level.doors.filter(d => d.power?.id === circuit.id)) line([circuit, { x: circuit.x, y: door.y + door.h / 2 }, { x: door.x + door.w / 2, y: door.y + door.h / 2 }], game.powered(door.power) ? '#b8e6d7b0' : '#54798166', [3, 4]);
     }
     for (const terminal of game.level.terminals ?? []) if (terminal.power) {
       const circuit = game.level.circuits?.find(c => c.id === terminal.power!.id);
