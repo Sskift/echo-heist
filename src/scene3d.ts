@@ -4,17 +4,13 @@ import { Game, type Frame } from './engine.ts';
 import { doorPlates, ECHO_COLORS, HEIGHT, TILE, WIDTH, type Level, type Point } from './levels.ts';
 import { Models3D, type ModelName, type CharacterRole } from './models3d.ts';
 import { VIEW_WIDTH, VIEW_HEIGHT } from './isometric.ts';
-import { SetDressing, setting } from './set-dressing.ts';
+import { SetDressing, setting, sceneLook } from './set-dressing.ts';
 
 type Actor = ReturnType<Models3D['character']>;
 type Label = { at: Point; height: number; text: string; color: string };
 type Wall = { root: THREE.Group; x: number; y: number; w: number; h: number; tall: boolean };
 const world = (at: Point, height = 0) => new THREE.Vector3(at.x / TILE - 15, height, at.y / TILE - 9);
 const colors = { brass: '#bca16d', light: '#f7d897', cyan: '#8ed4ed', lime: '#c3ed82', red: '#ed947c' };
-const themes = {
-  archive: ['#647571', '#394f50', '#817968'], gala: ['#b0a18a', '#555c59', '#a4977c'],
-  industrial: ['#778d93', '#354f5b', '#7a8886'], clockwork: ['#918b79', '#415953', '#8f7c5f'], audit: ['#8e8a9f', '#48465e', '#928779'],
-};
 
 export class Renderer {
   trails = true;
@@ -43,7 +39,9 @@ export class Renderer {
   private doors = new Map<string, THREE.Group>();
   private terminals = new Map<string, THREE.Mesh>();
   private tickets = new Map<string, THREE.Mesh>();
-  private circuits = new Map<string, THREE.Mesh>();
+  private circuits = new Map<string, ReturnType<SetDressing['circuit']>>();
+  private suppressors = new Map<string, THREE.MeshStandardMaterial>();
+  private scanners = new Map<string, THREE.MeshStandardMaterial>();
   private lamps: THREE.Object3D[] = [];
   private civicWindows: THREE.Mesh[] = [];
   private labels: Label[] = [];
@@ -103,9 +101,9 @@ export class Renderer {
       if (o instanceof THREE.SkinnedMesh) o.skeleton.dispose();
     });
     for (const a of this.actors.values()) a.mixer.uncacheRoot(a.body);
-    this.levelRoot.clear(); this.walls = []; this.actors.clear(); this.guardMotion.clear(); this.doors.clear(); this.terminals.clear(); this.tickets.clear(); this.circuits.clear(); this.lamps = []; this.civicWindows = []; this.loot = undefined;
-    const style = setting(level);
-    const [plaster, panel, floorColor] = style === 'station' ? ['#71847c', '#294e59', '#637572'] : style === 'museum' ? ['#586d62', '#284940', '#79624c'] : themes[level.theme ?? 'archive'];
+    this.levelRoot.clear(); this.walls = []; this.actors.clear(); this.guardMotion.clear(); this.doors.clear(); this.terminals.clear(); this.tickets.clear(); this.circuits.clear(); this.suppressors.clear(); this.scanners.clear(); this.lamps = []; this.civicWindows = []; this.loot = undefined;
+    const style = setting(level), look = sceneLook(level), { plaster, panel, floor: floorColor } = look;
+    (this.scene.background as THREE.Color).set(look.background);
     this.box(this.levelRoot, 0, -0.35, 0, 30.35, 0.65, 18.35, '#344951');
     this.box(this.levelRoot, 0, -0.04, 0, 30, 0.12, 18, floorColor);
     this.box(this.levelRoot, 0, -0.7, 0, 30.8, 0.12, 18.8, '#a08f6d', 0.45);
@@ -126,8 +124,8 @@ export class Renderer {
       const border = cx === 0 || cy === 0 || cx + w === 30 || cy + h === 18;
       const near = cx === 29 || cy === 17, furniture = !border && w <= 2 && h <= 2;
       const height = near ? 0.25 : border ? 2.6 : furniture ? 1.5 : 1.45;
-      if (furniture && style === 'museum') {
-        this.dressing.exhibit(root, w, h, cx + cy);
+      if (furniture && this.dressing.cover(level, root, w, h, cx + cy)) {
+        // The entire prop remains inside the existing occupied footprint.
       } else if (furniture && this.ready) {
         this.model((cx + cy) % 2 ? 'bookcase' : 'cabinet', root, 0, 0, w * 0.98, h * 0.98, height);
         if ((cx + cy) % 2) for (let shelf = 0; shelf < 3; shelf++) this.model('books', root, 0, 0.12, w * 0.64, h * 0.42, 0.24, 0.15 + shelf * 0.43);
@@ -135,18 +133,19 @@ export class Renderer {
       } else {
         this.box(root, 0, height / 2, 0, w, height, h, plaster);
         this.box(root, 0, Math.min(height / 2, 0.36), 0, w + 0.02, Math.min(height, 0.72), h + 0.02, panel);
-        this.box(root, 0, height + 0.035, 0, w + 0.04, 0.07, h + 0.04, '#8e9e89');
+        this.box(root, 0, height + 0.035, 0, w + 0.04, 0.07, h + 0.04, look.cap);
+        if (this.detail) this.dressing.wallDetails(level, root, w, h, height);
         if (height > 1) {
-          this.box(root, 0, 0.74, 0, w + 0.06, 0.055, h + 0.06, colors.brass, 0.6);
+          this.box(root, 0, 0.74, 0, w + 0.06, 0.055, h + 0.06, look.trim, 0.6);
           const count = Math.floor(Math.max(w, h) / 3);
           for (let i = 0; i < count; i++) {
             const along = -Math.max(w, h) / 2 + 1.5 + i * 3;
             const px = w > h ? along : 0, pz = h > w ? along : 0;
-            this.box(root, px, height / 2, pz, w > h ? 0.18 : w + 0.05, height + 0.06, h > w ? 0.18 : h + 0.05, '#8d9c90');
+            this.box(root, px, height / 2, pz, w > h ? 0.18 : w + 0.05, height + 0.06, h > w ? 0.18 : h + 0.05, look.cap);
             if (border && !near && this.detail && i % 2 === 0) {
               const lamp = this.model('lamp', root, px, pz + (w > h ? h / 2 + 0.03 : 0), 0.35, 0.35, 0.55, 1.65);
               if (lamp && h > w) { lamp.position.x = w / 2; lamp.rotation.y = Math.PI / 2; }
-              this.bulb(root, px + (h > w ? w / 2 + 0.1 : 0), 1.85, pz + (w > h ? h / 2 + 0.1 : 0), colors.light, this.lamps.length < 6);
+              this.bulb(root, px + (h > w ? w / 2 + 0.1 : 0), 1.85, pz + (w > h ? h / 2 + 0.1 : 0), look.light, this.lamps.length < 6);
             }
             if (border && !near && this.detail && i % 2 === 1) {
               if (this.dressing.wallBay(level, root, px + (h > w ? w / 2 + 0.045 : 0), pz + (w > h ? h / 2 + 0.045 : 0), w > h, i)) continue;
@@ -172,21 +171,25 @@ export class Renderer {
       const pos = world({ x: door.x + door.w / 2, y: door.y + door.h / 2 }), group = new THREE.Group(); group.position.copy(pos); this.levelRoot.add(group);
       const vertical = door.h > door.w, width = (vertical ? door.h : door.w) / TILE;
       if (vertical) group.rotation.y = Math.PI / 2;
-      this.box(group, -width / 2 + 0.08, 0.97, 0, 0.16, 1.94, 0.6, '#65736b'); this.box(group, width / 2 - 0.08, 0.97, 0, 0.16, 1.94, 0.6, '#65736b');
-      this.box(group, 0, 1.91, 0, width, 0.15, 0.6, '#baac87', 0.35);
+      this.box(group, -width / 2 + 0.08, 0.97, 0, 0.16, 1.94, 0.6, look.cap); this.box(group, width / 2 - 0.08, 0.97, 0, 0.16, 1.94, 0.6, look.cap);
+      this.box(group, 0, 1.91, 0, width, 0.15, 0.6, look.trim, 0.35);
       const panelGroup = new THREE.Group(); group.add(panelGroup);
-      this.box(panelGroup, 0, 0.87, 0, width - 0.25, 1.7, 0.12, '#557372', 0.35);
-      for (let i = 0; i < 3; i++) this.box(panelGroup, 0, 0.4 + i * 0.46, 0.07, width - 0.34, 0.06, 0.045, '#cfb783', 0.6);
+      this.box(panelGroup, 0, 0.87, 0, width - 0.25, 1.7, 0.12, look.panel, 0.35);
+      const industrial = style === 'power' || style === 'retention';
+      for (let i = 0; i < (industrial ? 6 : 3); i++) this.box(panelGroup, 0, 0.25 + i * (industrial ? 0.24 : 0.56), 0.07, width - 0.34, 0.06, 0.045, look.trim, 0.6);
+      if (style === 'vault') {
+        const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.035, 6, 20), this.material(look.trim, 0.7)); wheel.position.set(0, 0.9, 0.19); wheel.userData.ownedGeometry = true; panelGroup.add(wheel);
+        for (let i = 0; i < 3; i++) { const spoke = this.box(panelGroup, 0, 0.9, 0.19, 0.57, 0.035, 0.05, look.trim, 0.6); spoke.rotation.z = i * Math.PI / 3; }
+      }
       this.doors.set(door.id, panelGroup);
     }
     for (const terminal of level.terminals ?? []) {
       const { screen, ticket } = this.dressing.terminal(this.levelRoot, terminal, style === 'station');
       this.terminals.set(terminal.id, screen); this.tickets.set(terminal.id, ticket);
     }
-    for (const circuit of level.circuits ?? []) {
-      const at = world(circuit); this.model('radio', this.levelRoot, at.x, at.z, 0.65, 0.55, 0.58);
-      const lamp = this.bulb(this.levelRoot, at.x, 0.68, at.z, colors.lime); this.circuits.set(circuit.id, lamp);
-    }
+    for (const circuit of level.circuits ?? []) this.circuits.set(circuit.id, this.dressing.circuit(this.levelRoot, level, circuit));
+    for (const field of level.suppressors ?? []) this.suppressors.set(field.id, this.dressing.field(this.levelRoot, field, '#b899ed'));
+    for (const field of level.scanners ?? []) this.scanners.set(field.id, this.dressing.field(this.levelRoot, field, '#f59a79'));
     for (const glass of level.glass ?? []) {
       const at = world({ x: glass.x + glass.w / 2, y: glass.y + glass.h / 2 });
       const pane = this.box(this.levelRoot, at.x, 0.85, at.z, glass.w / TILE, 1.7, glass.h / TILE, '#a3d0d2');
@@ -197,9 +200,11 @@ export class Renderer {
     if (level.objective !== 'reach' || level.delivery || level.handoff) {
       const at = world(level.delivery ?? level.loot); this.model('desk', this.levelRoot, at.x, at.z, 1.1, 0.9, 0.75);
       this.loot = new THREE.Group(); this.loot.position.copy(at); this.levelRoot.add(this.loot);
+      const core = !!level.handoff || !!level.lootLabel?.includes('核心');
       if (level.lootLabel?.includes('怀表')) this.dressing.watch(this.loot, 0.82, 0.75);
+      else if (core) this.dressing.core(this.loot);
       else this.model('books', this.loot, 0, 0, 0.4, 0.35, 0.17, 0.8);
-      this.bulb(this.loot, 0, 1.15, 0, level.delivery ? colors.cyan : colors.light, true);
+      this.bulb(this.loot, 0, core ? 1.49 : 1.15, 0, level.delivery ? colors.cyan : colors.light, true);
     }
     if (level.id.startsWith('C4-6')) for (const [id, y] of [['FAST', 176], ['SERVICE', 432]] as const) for (const x of [400, 496]) {
       if (level.terminals?.some(t => t.id === id && t.x === x)) continue;
@@ -256,6 +261,13 @@ export class Renderer {
     const scale = Math.max(1, VIEW_WIDTH / Math.max(320, this.canvas.clientWidth) * 0.9);
     c.font = `500 ${12 * scale}px "Microsoft YaHei", sans-serif`;
     const rects: { x: number; y: number; width: number }[] = [];
+    // Reserve projected character silhouettes before placing any device labels.
+    // A nearby switch must not paint its name over the player's body on phones.
+    const silhouettes = [...this.actors.values()].filter(a => a.group.visible).map(a => {
+      const points: THREE.Vector3[] = [];
+      for (const x of [-0.4, 0.4]) for (const z of [-0.4, 0.4]) for (const y of [0, 2.08]) points.push(new THREE.Vector3(x, y, z).add(a.group.position).project(this.camera));
+      return { left: (Math.min(...points.map(p => p.x)) + 1) * VIEW_WIDTH / 2, right: (Math.max(...points.map(p => p.x)) + 1) * VIEW_WIDTH / 2, top: (1 - Math.max(...points.map(p => p.y))) * VIEW_HEIGHT / 2, bottom: (1 - Math.min(...points.map(p => p.y))) * VIEW_HEIGHT / 2 };
+    });
     for (const label of this.labels) {
       const projected = world(label.at, label.height).project(this.camera), anchorX = (projected.x + 1) * VIEW_WIDTH / 2, anchorY = (1 - projected.y) * VIEW_HEIGHT / 2;
       if (anchorX < 8 || anchorX > VIEW_WIDTH - 8 || anchorY < 8 || anchorY > VIEW_HEIGHT - 15) continue;
@@ -265,7 +277,8 @@ export class Renderer {
         const row = Math.ceil(i / 2) * (i % 2 ? -1 : 1);
         y = Math.max(20 * scale, Math.min(VIEW_HEIGHT - 15 * scale, anchorY + row * 25 * scale));
         x = Math.max(width / 2 + 8, Math.min(VIEW_WIDTH - width / 2 - 8, anchorX));
-        if (!rects.some(r => Math.abs(r.x - x) < (r.width + width) / 2 + 3 * scale && Math.abs(r.y - y) < 24 * scale)) break;
+        if (!rects.some(r => Math.abs(r.x - x) < (r.width + width) / 2 + 3 * scale && Math.abs(r.y - y) < 24 * scale)
+          && !silhouettes.some(r => x + width / 2 > r.left && x - width / 2 < r.right && y + 7 * scale > r.top && y - 15 * scale < r.bottom)) break;
       }
       if (Math.abs(y - anchorY) > 5 * scale || Math.abs(x - anchorX) > 5 * scale) {
         c.strokeStyle = '#b7cab8a0'; c.lineWidth = scale; c.beginPath(); c.moveTo(anchorX, anchorY); c.lineTo(x, y + (y < anchorY ? 8 : -15) * scale); c.stroke();
@@ -335,14 +348,18 @@ export class Renderer {
       this.label(t, 1.22, `${t.id}${holding ? ' ◆' : t.authorization && game.authorized.has(t.authorization) ? ' ✓' : ''}`, color);
       if (Math.hypot(game.player.x - t.x, game.player.y - t.y) < 30 && !game.spectator) this.label(t, 1.95, t.kind === 'lock' ? 'E 签入' : t.transfer === 'give' ? 'E 归还' : holding ? 'E 取件' : game.tokenOwner === 'player' ? 'E 交付' : 'E 接收');
     }
-    for (const t of game.level.circuits ?? []) { const color = game.circuits.get(t.id) ? colors.lime : colors.light; const material = this.circuits.get(t.id)!.material as THREE.MeshStandardMaterial; material.color.set(color); material.emissive.set(color); this.label(t, 1.12, `${t.id} · ${game.circuitState(t.id)}`, color); }
+    for (const t of game.level.circuits ?? []) {
+      const on = game.circuits.get(t.id), color = on ? colors.lime : colors.light, { lamp, lever } = this.circuits.get(t.id)!;
+      const material = lamp.material as THREE.MeshStandardMaterial; material.color.set(color); material.emissive.set(color); lever.rotation.x = on ? -0.5 : 0.65;
+      this.label(t, 1.25, `${t.id} · ${game.circuitState(t.id)}`, color);
+    }
     if (this.loot) { this.loot.visible = game.level.delivery ? !game.evidenceDeposited : !game.hasLoot; this.label(game.level.delivery ?? game.level.loot, 1.42, game.level.handoff ? '核心 · 下一段目标' : game.level.delivery ? `${game.level.delivery.id} · E 植入` : game.hasLoot ? '已取走' : game.level.lootLabel ?? '目标', colors.light); }
     if (game.level.handoff || game.level.continuity) this.label({ x: 160, y: 530 }, 0.1, game.circuits.get('CIV') ? '街区恢复供电' : '街区停电', colors.light);
     for (const p of game.level.plates) if (p.window) this.label(p, 0.25, `${p.id} · ${p.window.join('–')}s`, colors.light);
     for (const p of game.level.soundMarkers ?? []) this.label(p, 0.08, `${p.id} · 响点`, colors.light);
     this.label(game.exitPoint, 0.12, game.level.objective === 'reach' ? '锚点' : '撤离', colors.lime);
-    for (const s of game.level.scanners ?? []) this.label({ x: s.x + s.w / 2, y: s.y }, 0.15, `${s.id} · ${game.scanning(s) ? '扫描' : '空档'}`, colors.red);
-    for (const s of game.level.suppressors ?? []) this.label({ x: s.x + s.w / 2, y: s.y }, 0.15, `${s.id} · ${game.suppressionActive(s) ? '抑制' : '空档'}`, '#d2a0ef');
+    for (const s of game.level.scanners ?? []) { const active = game.scanning(s); this.scanners.get(s.id)!.emissiveIntensity = active ? 1.6 : 0.03; this.label({ x: s.x + s.w / 2, y: s.y }, 0.15, `${s.id} · ${active ? '扫描' : '空档'}`, colors.red); }
+    for (const s of game.level.suppressors ?? []) { const active = game.suppressionActive(s); this.suppressors.get(s.id)!.emissiveIntensity = active ? 1.6 : 0.03; this.label({ x: s.x + s.w / 2, y: s.y }, 0.15, `${s.id} · ${active ? '抑制' : '空档'}`, '#d2a0ef'); }
     for (const r of game.level.delivery?.receivers ?? []) this.label(r.at, 0.1, `${r.guard} 回执${game.evidenceReceipts.has(r.guard) ? ' ✓' : ' …'}`, colors.cyan);
     this.gl.render(this.scene, this.camera); this.hud(game, dt);
   }

@@ -1,17 +1,85 @@
 import * as THREE from 'three';
-import type { Level, Terminal } from './levels.ts';
+import type { Circuit, Level, Terminal } from './levels.ts';
 
 type Box = (parent: THREE.Object3D, x: number, y: number, z: number, w: number, h: number, d: number, color: string, metal?: number) => THREE.Mesh;
-export const setting = (level: Level) => level.id.startsWith('C4-') ? 'station' : level.id.startsWith('C0-') || /^(01|02|03)$/.test(level.id) ? 'museum' : 'archive';
+type Setting = 'museum' | 'gala' | 'records' | 'power' | 'station' | 'retention' | 'civic' | 'vault' | 'archive';
+export function setting(level: Level): Setting {
+  const chapter = /^C([0-7])-/.exec(level.id)?.[1];
+  if (chapter) return (['museum', 'gala', 'records', 'power', 'station', 'retention', 'civic', 'vault'] as const)[Number(chapter)];
+  if (/^(01|02|03)$/.test(level.id)) return 'museum';
+  if (level.id.startsWith('LAB-NULL')) return 'retention';
+  if (level.id.startsWith('LAB-POWER')) return 'power';
+  if (level.id.startsWith('LAB-TIME')) return 'gala';
+  return 'archive';
+}
+const looks = {
+  museum: { plaster: '#586d62', panel: '#284940', floor: '#79624c', trim: '#bca16d', cap: '#8e9e89', light: '#f7d897', background: '#14252d', title: '旧馆 · 失物档案' },
+  gala: { plaster: '#805962', panel: '#422e40', floor: '#bbb095', trim: '#c3a568', cap: '#aa8d76', light: '#ffd6a0', background: '#261f31', title: '夜场 · 拍卖会' },
+  records: { plaster: '#827769', panel: '#435e58', floor: '#8a9181', trim: '#b7a27a', cap: '#9b9e8b', light: '#dfe9bb', background: '#1c302f', title: '市政档案 · 转运区' },
+  power: { plaster: '#5c7075', panel: '#32444b', floor: '#626d6e', trim: '#b59a52', cap: '#89958d', light: '#b5e2e7', background: '#182832', title: '市政配电 · 维护区' },
+  station: { plaster: '#71847c', panel: '#294e59', floor: '#637572', trim: '#bca16d', cap: '#8e9e89', light: '#f7d897', background: '#14252d', title: '北站 · 货运登记' },
+  retention: { plaster: '#5b6277', panel: '#282e44', floor: '#737e8d', trim: '#9498af', cap: '#929bad', light: '#c5c3fa', background: '#1b2234', title: '转存设施 · 投影核验' },
+  civic: { plaster: '#aea891', panel: '#42675f', floor: '#c1b9a0', trim: '#b39b5f', cap: '#c2b793', light: '#f4dfa7', background: '#253434', title: '市政厅 · 公共登记' },
+  vault: { plaster: '#899ca4', panel: '#344d60', floor: '#a0adb0', trim: '#bdab7a', cap: '#b4c0bd', light: '#d9eced', background: '#172a37', title: '中央总库 · 身份档案' },
+  archive: { plaster: '#647571', panel: '#394f50', floor: '#817968', trim: '#bca16d', cap: '#8e9e89', light: '#f7d897', background: '#14252d', title: '档案 · 机制演习' },
+};
+export const sceneLook = (level: Level) => looks[setting(level)];
 
 // Dressing follows the existing floor plan. Solid props replace occupied cells;
 // wall art stays on wall faces, and painted floor markings add no cover.
 export class SetDressing {
   constructor(private box: Box) {}
 
+  private chapterFloor(c: CanvasRenderingContext2D, level: Level, detail: boolean) {
+    const style = setting(level), look = sceneLook(level), formal = style === 'gala' || style === 'civic' || style === 'vault';
+    const tile = style === 'vault' ? 96 : 64;
+    c.fillStyle = look.floor; c.fillRect(0, 0, 960, 576);
+    for (let y = 0; y < 576; y += tile) for (let x = 0; x < 960; x += tile) {
+      c.fillStyle = (x + y) % (tile * 2) ? '#ffffff09' : '#192d3810'; c.fillRect(x + 1, y + 1, tile - 2, tile - 2);
+      c.strokeStyle = formal ? '#3c50482e' : '#25384645'; c.lineWidth = 1; c.strokeRect(x, y, tile, tile);
+      if (detail && formal) {
+        c.strokeStyle = '#e5e3cf30'; c.beginPath(); c.moveTo(x + 4, y + 40); c.lineTo(x + 22, y + 36); c.lineTo(x + 28, y + 20); c.lineTo(x + 57, y + 14); c.stroke();
+      }
+    }
+    if (!detail) return;
+    c.strokeStyle = formal ? look.panel : '#32444e'; c.lineWidth = formal ? 14 : 7; c.strokeRect(54, 54, 852, 468);
+    c.strokeStyle = look.trim; c.lineWidth = 2; c.strokeRect(54, 54, 852, 468);
+    if (style === 'gala') {
+      for (const [x, w] of [[72, 322], [558, 328]]) {
+        c.fillStyle = '#533440aa'; c.fillRect(x, 226, w, 128);
+        c.strokeStyle = '#c6aa7780'; c.lineWidth = 2; c.strokeRect(x + 6, 232, w - 12, 116);
+        for (let y = 246; y < 346; y += 24) { c.beginPath(); c.moveTo(x + 15, y); c.lineTo(x + 30, y + 12); c.lineTo(x + 15, y + 24); c.stroke(); }
+      }
+    } else if (style === 'records') {
+      c.strokeStyle = '#e5d6a966'; c.lineWidth = 3; c.setLineDash([16, 7]); c.strokeRect(80, 80, 800, 416); c.setLineDash([]);
+      c.fillStyle = '#314a4666'; c.font = 'bold 17px monospace';
+      for (let x = 120; x < 900; x += 192) c.fillText(`R-${String((x - 120) / 192 + 1).padStart(2, '0')}`, x, 108);
+    } else if (style === 'power') {
+      for (const t of level.circuits ?? []) {
+        c.strokeStyle = '#a7b6ad70'; c.lineWidth = 2;
+        for (const d of level.doors.filter(d => d.power?.id === t.id)) { c.beginPath(); c.moveTo(t.x, t.y); c.lineTo(t.x, d.y + d.h / 2); c.lineTo(d.x + d.w / 2, d.y + d.h / 2); c.stroke(); }
+        c.strokeStyle = '#cdb86780'; c.lineWidth = 3; c.strokeRect(t.x - 22, t.y - 22, 44, 44);
+      }
+      c.fillStyle = '#c4b37a';
+      for (let x = 72; x < 880; x += 40) { c.save(); c.translate(x, 64); c.transform(1, 0, -0.5, 1, 0, 0); c.fillRect(0, 0, 13, 9); c.restore(); }
+    } else if (style === 'retention') {
+      c.strokeStyle = '#ced7e040'; c.lineWidth = 2;
+      for (let x = 80; x < 920; x += 96) for (const y of [72, 504]) { c.beginPath(); c.moveTo(x - 5, y); c.lineTo(x + 5, y); c.moveTo(x, y - 5); c.lineTo(x, y + 5); c.stroke(); }
+    } else if (style === 'civic' || style === 'vault') {
+      for (const x of [220, 756]) {
+        c.strokeStyle = `${look.panel}50`; c.lineWidth = 4; c.beginPath(); c.arc(x, 288, 52, 0, Math.PI * 2); c.stroke();
+        c.strokeStyle = `${look.trim}90`; c.lineWidth = 2; c.strokeRect(x - 38, 250, 76, 76);
+        c.font = 'bold 24px serif'; c.textAlign = 'center'; c.fillStyle = `${look.panel}80`; c.fillText(style === 'vault' ? '档' : '公', x, 298);
+      }
+    }
+    c.textAlign = 'center'; c.font = '500 15px sans-serif';
+    c.fillStyle = look.panel; c.fillRect(330, 60, 300, 32); c.fillStyle = '#d7d2b3'; c.fillText(look.title, 480, 82);
+  }
+
   floor(level: Level, detail: boolean, fallback: string) {
     const canvas = document.createElement('canvas'); canvas.width = 960; canvas.height = 576;
     const c = canvas.getContext('2d')!, style = setting(level);
+    if (!['museum', 'station', 'archive'].includes(style)) { this.chapterFloor(c, level, detail); return canvas; }
     c.fillStyle = style === 'station' ? '#637572' : style === 'museum' ? '#79624c' : fallback; c.fillRect(0, 0, 960, 576);
     if (style === 'station') {
       c.fillStyle = '#526662'; c.fillRect(480, 32, 224, 512); c.fillStyle = '#7c7769'; c.fillRect(736, 32, 192, 512);
@@ -58,8 +126,87 @@ export class SetDressing {
     mesh.position.z = 0.105; mesh.userData.ownedGeometry = true; mesh.userData.ownedTexture = true; parent.add(mesh); return mesh;
   }
 
+  wallDetails(level: Level, root: THREE.Object3D, width: number, depth: number, height: number) {
+    if (height < 1) return;
+    const style = setting(level), look = sceneLook(level), group = new THREE.Group(), horizontal = width > depth;
+    group.position.set(horizontal ? 0 : width / 2 + 0.015, 0, horizontal ? depth / 2 + 0.015 : 0);
+    if (!horizontal) group.rotation.y = Math.PI / 2; root.add(group);
+    const span = Math.max(width, depth);
+    if (style === 'power') {
+      for (const y of [height - 0.21, height - 0.38]) this.box(group, 0, y, 0.02, span, 0.075, 0.075, '#929c91', 0.6);
+      for (let x = -span / 2 + 0.4; x < span / 2; x += 3) this.box(group, x, height - 0.29, 0.02, 0.13, 0.35, 0.13, '#3d4a4c', 0.5);
+    } else if (style === 'retention') {
+      this.box(group, 0, height - 0.18, 0.02, span, 0.055, 0.07, '#9493b9', 0.4);
+      this.box(group, 0, 0.11, 0.02, span, 0.075, 0.07, '#1b2332', 0.5);
+    } else if (style === 'records') {
+      this.box(group, 0, height - 0.2, 0.02, span, 0.14, 0.1, '#4b554c', 0.3);
+    } else if (style === 'gala' || style === 'civic') {
+      this.box(group, 0, height - 0.15, 0.01, span, 0.06, 0.1, look.trim, 0.5);
+      this.box(group, 0, 0.11, 0.01, span, 0.08, 0.1, look.trim, 0.5);
+    } else if (style === 'vault') {
+      this.box(group, 0, height - 0.18, 0.02, span, 0.13, 0.12, '#344c5d', 0.65);
+      for (let x = -span / 2 + 0.2; x < span / 2; x += 2) this.box(group, x, height - 0.18, 0.1, 0.055, 0.055, 0.04, '#c3bb95', 0.7);
+    }
+  }
+
+  private chapterBay(level: Level, root: THREE.Object3D, x: number, z: number, horizontal: boolean, index: number) {
+    const style = setting(level), look = sceneLook(level), group = new THREE.Group();
+    group.position.set(x, 1.6, z); if (!horizontal) group.rotation.y = Math.PI / 2; root.add(group);
+    if (style === 'gala' && index % 4 === 3) {
+      for (const side of [-1, 1]) for (let i = 0; i < 3; i++) this.box(group, side * (0.69 + i * 0.08), 0.05, 0.12 - i * 0.025, 0.16, 1.72, 0.13, i % 2 ? '#6e3b50' : '#512d43');
+      this.box(group, 0, 0.94, 0.05, 1.95, 0.08, 0.16, look.trim, 0.6); return false;
+    }
+    // CIV windows remain actual light indicators in the three-part power mission.
+    if ((style === 'power' || style === 'civic' || style === 'records') && index % 4 === 3) return false;
+    if (style === 'records') {
+      this.box(group, 0, 0, 0, 1.72, 1.62, 0.15, '#3b504b');
+      for (let row = 0; row < 3; row++) {
+        const y = -0.5 + row * 0.46;
+        this.box(group, 0, y - 0.19, 0.13, 1.64, 0.065, 0.3, '#9b9476', 0.4);
+        for (let col = 0; col < 3; col++) {
+          this.box(group, -0.5 + col * 0.5, y, 0.15, 0.43, 0.31, 0.23, ['#b3a782', '#718c7a', '#987d62'][(col + row) % 3]);
+          this.box(group, -0.5 + col * 0.5, y, 0.275, 0.14, 0.08, 0.015, '#dcd1ad');
+        }
+      }
+      for (const x of [-0.81, 0.81]) this.box(group, x, 0, 0.14, 0.06, 1.64, 0.3, '#a69c7e', 0.5);
+      return true;
+    }
+    if (style === 'retention') {
+      this.box(group, 0, 0, 0, 1.65, 1.55, 0.1, '#22283b', 0.4);
+      for (let i = 0; i < 6; i++) this.box(group, -0.63 + i * 0.25, 0, 0.1, 0.13, 1.33, 0.1, i % 2 ? '#434760' : '#3b4159');
+      this.box(group, 0, -0.66, 0.16, 1.4, 0.07, 0.04, '#9893b9', 0.5);
+      return true;
+    }
+    this.box(group, 0, 0, 0, 1.7, 1.5, 0.08, look.panel, 0.3);
+    this.box(group, 0, 0, 0.035, 1.59, 1.39, 0.07, look.trim, 0.5);
+    this.panel(group, 1.47, 1.27, c => {
+      c.fillStyle = style === 'gala' ? '#3d2b40' : style === 'power' ? '#bbc3b2' : style === 'vault' ? '#253e52' : '#d4c9a8'; c.fillRect(0, 0, 512, 384);
+      c.textAlign = 'center'; c.fillStyle = style === 'gala' || style === 'vault' ? '#d7bd7f' : '#344b49'; c.font = 'bold 28px sans-serif';
+      c.fillText(style === 'gala' ? '夜间拍卖 · 预展' : style === 'power' ? '市政配电 · 检修表' : style === 'civic' ? '公共登记 · 核验' : '中央总库 · 封存', 256, 53);
+      if (style === 'power') {
+        for (const x of [153, 359]) {
+          c.fillStyle = '#e3dbc0'; c.fillRect(x - 83, 103, 166, 130); c.strokeStyle = '#3f5553'; c.lineWidth = 5;
+          c.beginPath(); c.arc(x, 194, 63, Math.PI, Math.PI * 2); c.stroke(); c.beginPath(); c.moveTo(x, 194); c.lineTo(x + 33, 147); c.stroke();
+        }
+        c.fillStyle = '#3f5553'; c.font = '20px monospace'; c.fillText('MUNICIPAL / 03', 256, 307);
+      } else {
+        c.strokeStyle = style === 'gala' || style === 'vault' ? '#c6a873' : '#617b62'; c.lineWidth = 5;
+        c.beginPath(); c.arc(256, 197, 85, 0, Math.PI * 2); c.stroke();
+        c.save(); c.translate(256, 197); c.rotate(Math.PI / 4); c.strokeRect(-50, -50, 100, 100); c.restore();
+        c.font = 'bold 47px serif'; c.fillText(style === 'gala' ? '夜' : style === 'civic' ? '公' : '档', 256, 214);
+        c.font = '17px monospace'; c.fillText(style === 'gala' ? 'NIGHT GALA' : style === 'civic' ? 'CIVIC HALL' : 'CENTRAL VAULT', 256, 340);
+      }
+    });
+    if (style === 'power') {
+      for (const x of [-0.77, 0.77]) this.box(group, x, 0, 0.12, 0.08, 1.5, 0.12, '#8d9e9a', 0.65);
+      this.box(group, 0, -0.69, 0.17, 1.5, 0.14, 0.2, '#485d60', 0.5);
+    }
+    return true;
+  }
+
   wallBay(level: Level, root: THREE.Object3D, x: number, z: number, horizontal: boolean, index: number) {
     const style = setting(level); if (style === 'archive' || (style === 'museum' && index % 4 === 3)) return false;
+    if (style !== 'museum' && style !== 'station') return this.chapterBay(level, root, x, z, horizontal, index);
     if (style === 'station' && index === 3) { const clock = this.clock(root, x, z); if (!horizontal) clock.rotation.y = Math.PI / 2; return true; }
     const group = new THREE.Group(); group.position.set(x, 1.63, z); if (!horizontal) group.rotation.y = Math.PI / 2; root.add(group);
     const width = style === 'station' ? 1.65 : 1.2;
@@ -110,6 +257,80 @@ export class SetDressing {
     const glass = this.box(parent, 0, 1.26, 0, width * 0.81, 0.48, depth * 0.81, '#91b6af');
     glass.material = new THREE.MeshStandardMaterial({ color: '#b1d6ca', transparent: true, opacity: 0.13, depthWrite: false, roughness: 0.2, metalness: 0.1 }); glass.castShadow = false; glass.userData.ownedMaterial = true;
     this.box(parent, 0, 0.87, depth * 0.425, width * 0.25, 0.12, 0.018, '#dfd0a3');
+  }
+
+  cover(level: Level, parent: THREE.Object3D, width: number, depth: number, index: number) {
+    const style = setting(level), look = sceneLook(level);
+    if (style === 'museum') { this.exhibit(parent, width, depth, index); return true; }
+    if (style === 'archive' || style === 'station') return false;
+    const w = width * 0.96, d = depth * 0.96;
+    if (style === 'gala') {
+      this.box(parent, 0, 0.1, 0, w, 0.2, d, '#3e3540');
+      this.box(parent, 0, 0.64, 0, w * 0.92, 0.94, d * 0.92, '#785b63');
+      this.box(parent, 0, 1.16, 0, w, 0.11, d, '#d2c19a');
+      const sculpture = new THREE.Group(); sculpture.position.y = 1.4; parent.add(sculpture);
+      const piece = this.box(sculpture, 0, 0, 0, Math.min(w, d) * 0.37, 0.36, Math.min(w, d) * 0.37, '#b29b64', 0.65); piece.rotation.set(0.2, Math.PI / 4, 0.3);
+    } else if (style === 'records') {
+      for (const x of [-0.3, 0.3]) this.box(parent, x * w, 0.09, 0, w * 0.16, 0.18, d, '#62523f');
+      this.box(parent, 0, 0.24, 0, w, 0.1, d, '#a99069');
+      for (let i = 0; i < 2; i++) {
+        this.box(parent, 0, 0.57 + i * 0.57, 0, w * 0.94, 0.55, d * 0.94, i ? '#a18e66' : '#7d8168');
+        this.box(parent, 0, 0.57 + i * 0.57, d * 0.48, w * 0.17, 0.55, 0.02, '#d4be87');
+        this.box(parent, w * 0.23, 0.6 + i * 0.57, d * 0.49, w * 0.23, 0.17, 0.02, '#e6d8b1');
+      }
+    } else {
+      this.box(parent, 0, 0.08, 0, w, 0.16, d, '#344349', 0.4);
+      this.box(parent, 0, 0.85, 0, w * 0.96, 1.4, d * 0.96, look.panel, 0.35);
+      this.box(parent, 0, 1.59, 0, w, 0.09, d, look.cap, 0.5);
+      if (style === 'power' || style === 'retention') {
+        for (let i = 0; i < 5; i++) this.box(parent, 0, 0.38 + i * 0.19, d * 0.49, w * 0.79, 0.075, 0.04, style === 'power' ? '#8e9b98' : '#5d6681', 0.3);
+        this.box(parent, w * 0.33, 1.42, d * 0.49, w * 0.12, 0.055, 0.045, look.trim, 0.4);
+      } else if (style === 'civic') {
+        for (let i = 0; i < 3; i++) {
+          this.box(parent, 0, 0.42 + i * 0.41, d * 0.49, w * 0.85, 0.35, 0.035, '#648075');
+          this.box(parent, 0, 0.48 + i * 0.41, d * 0.52, w * 0.26, 0.04, 0.04, look.trim, 0.6);
+        }
+      } else {
+        this.box(parent, 0, 0.87, d * 0.49, w * 0.84, 1.24, 0.035, '#7c949c', 0.65);
+        this.box(parent, 0, 0.88, d * 0.54, w * 0.38, 0.07, 0.08, '#d4bf8a', 0.7);
+        this.box(parent, 0, 0.88, d * 0.54, 0.07, 0.4, 0.08, '#d4bf8a', 0.7);
+      }
+    }
+    return true;
+  }
+
+  circuit(parent: THREE.Object3D, level: Level, circuit: Circuit) {
+    const look = sceneLook(level), group = new THREE.Group();
+    group.position.set(circuit.x / 32 - 15, 0, circuit.y / 32 - 9 - 0.25); parent.add(group);
+    this.box(group, 0, 0.08, 0, 0.7, 0.16, 0.65, '#354b4e', 0.4);
+    this.box(group, 0, 0.52, 0, 0.62, 0.76, 0.48, look.panel, 0.4);
+    this.box(group, 0, 0.64, 0.25, 0.49, 0.44, 0.045, '#aaa98c', 0.45);
+    this.box(group, 0, 0.61, 0.28, 0.06, 0.28, 0.03, '#293d41');
+    const lever = new THREE.Group(); lever.position.set(0, 0.59, 0.29); group.add(lever);
+    this.box(lever, 0, 0.11, 0.09, 0.045, 0.23, 0.045, '#ded4ad', 0.6);
+    this.box(lever, 0, 0.23, 0.09, 0.19, 0.09, 0.09, '#825444');
+    const lamp = this.box(group, 0, 0.93, 0, 0.2, 0.05, 0.2, '#b8d78e');
+    lamp.material = new THREE.MeshStandardMaterial({ color: '#b8d78e', emissive: '#b8d78e', emissiveIntensity: 0.8 }); lamp.userData.ownedMaterial = true;
+    return { lamp, lever };
+  }
+
+  field(parent: THREE.Object3D, area: { x: number; y: number; w: number; h: number }, color: string) {
+    // Flush emitters match the exact simulated boundary; they are not obstacles.
+    const group = new THREE.Group(); parent.add(group);
+    const material = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.15, roughness: 0.45 });
+    for (const [i, [x, y]] of [[area.x, area.y], [area.x + area.w, area.y], [area.x, area.y + area.h], [area.x + area.w, area.y + area.h]].entries()) {
+      const mesh = this.box(group, x / 32 - 15, 0.065, y / 32 - 9, 0.14, 0.035, 0.14, color); mesh.material = material;
+      mesh.userData.ownedMaterial = i === 0; mesh.castShadow = false;
+    }
+    return material;
+  }
+
+  core(parent: THREE.Object3D) {
+    this.box(parent, 0, 0.87, 0, 0.54, 0.13, 0.4, '#3b5359', 0.6);
+    this.box(parent, 0, 1.11, 0, 0.35, 0.36, 0.3, '#95c1bb', 0.4);
+    for (const x of [-0.22, 0.22]) this.box(parent, x, 1.09, 0, 0.07, 0.38, 0.35, '#b7ac83', 0.7);
+    this.box(parent, 0, 1.32, 0, 0.53, 0.09, 0.4, '#d4be8b', 0.6);
+    for (const y of [1.02, 1.18]) this.box(parent, 0, y, 0.16, 0.24, 0.04, 0.015, '#d2e4c2');
   }
 
   watch(parent: THREE.Object3D, height: number, scale = 1) {
