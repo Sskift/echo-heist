@@ -6,6 +6,8 @@
 
 3D 显示层在 `src/scene3d.ts`，模型在 `src/models3d.ts`。地图仍以原始平面坐标创作，碰撞、视野和录像不读取模型网格。墙体装饰只能进入已有实体范围；标签和危险范围从真实规则生成。画面方向输入经 `screenMovement` 转回世界坐标，作者参考路线仍按世界坐标执行。浏览器路线通过辅助函数按对应组合键输入，另有一条真实屏幕方向输入验证。
 
+代表场景陈设在 `src/set-dressing.ts`：旧馆展柜替换已有实体块，车站柜面靠近已有交互点，地面标识不增加碰撞。新增每区纹理、材质和几何体应设置对应 `ownedTexture`、`ownedMaterial`、`ownedGeometry` 标记，供切换房间时释放；复用的模型和基础网格不设置独占标记。角色用稳定的颜色编号绑定回声，动作按模拟帧而非墙上时间播放，凭据显示读取真实 `tokenOwner`。
+
 跨区凭据样板在 `src/station-transfer.ts`。`credential.id` 定义同一物件，`from` 引用前区规范 ID；`incomingOwners` 与 `incomingAuthorizations` 限定入站状态，`exitOwners` 与 `exitAuthorizations` 限定可提交事实。需要本人接回时声明 `receiveByPlayer`，回声的领取不满足它。后区不能再配置 `source`；参考路线必须使用前区真正成功提交的状态。`Terminal.transfer: 'give'` 表示只收不取的归还槽，允许空手录下交付请求，实际执行仍须持有原票。重试恢复入站快照，回退删除后段凭据记录和本区计划。
 
 连续房间的样板在 `src/last-light.ts`。首区 `handoff` 要求只有一名回声且终点守住所需开关，成功后把原始录像复制进任务锚点。后段 `continuity.source` 引用首区；离开原房间时，由无真人的原房间模拟按相同帧号播放，`Circuit.feed` 读取实际开关。返回原房间时使用 `home`，留守者参与当前房间的交互与检测。它始终占第一个名额，不能在后段删除、改延迟或重录；本区计划只存另外两格。每区每轮从零同步，不延续上一区的余秒。新增任务若要使用这个机制，仍限一名留守者。

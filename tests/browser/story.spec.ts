@@ -129,6 +129,8 @@ test('3D models load, screen-up input records correct world poses, and camera ch
   await page.setViewportSize({ width: 390, height: 844 }); await advance(page);
   await page.locator('.hint summary').click();
   await expect(page.locator('.map-directions')).toHaveText('地图方向：北 ↗ · 东 ↘ · 南 ↙ · 西 ↖');
+  const drawingWidth = await page.locator('#game-canvas').evaluate(c => (c as HTMLCanvasElement).width);
+  expect(drawingWidth).toBeLessThanOrEqual(585); // Phone rendering must not retain the 1280px desktop buffer.
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await page.locator('.arena').screenshot({ path: '.local/scene3d-phone.png' });
   expect(errors).toEqual([]);

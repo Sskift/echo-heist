@@ -2,11 +2,13 @@
 
 一个关于配合、身份和记忆归属的 2.5D 潜入解谜游戏。你的同伙是过去十二秒里的自己：录下行动、安排回声出场，再让现在的你完成交接、取证与撤离。
 
-当前版本 **0.16.0**。八章主线、48 个任务、130 个必经行动区，另有 14 个分支布局、4 个机制演习和 3 个基础演习。所有内容本地运行，支持单 HTML 离线版。
+当前版本 **0.17.0**。八章主线、48 个任务、130 个必经行动区，另有 14 个分支布局、4 个机制演习和 3 个基础演习。所有内容本地运行，支持单 HTML 离线版。
 
-![真实 3D 场景与固定等距镜头](docs/scene-v016.png)
+![旧馆的展陈、角色与固定等距镜头](docs/scene-v017-museum.png)
 
-场景采用真实 3D 模型、骨骼动画、材质与实时阴影，以固定等距镜头游玩。旧馆的木地板、铜框窗、壁灯、档案柜与回声投影构成第一版新美术。点击地图工具栏的「近景 / 全景」切换观察距离；前景墙切低，靠近且挡住玩家的墙自动降低。
+场景采用真实 3D 模型、骨骼动画、材质与实时阴影，以固定等距镜头游玩。旧馆使用木地板镶边、城市旧影和失物展柜，[车站场景](docs/scene-v017-station.png)使用石材分区、时钟与双面交接柜。玩家、普通守卫、追踪器和回声分别有不同的服饰轮廓，凭据显示在实际持有者手中或柜槽里。
+
+点击地图工具栏的「近景 / 全景」切换观察距离；前景墙切低，靠近且挡住玩家的墙自动降低。密集标签以引线关联原目标，手机按实际画面尺寸渲染。
 
 ## 开始
 
@@ -59,7 +61,7 @@ npm run check:content    # 所有关卡参考路线与分支提交，仅在这�
 npm run build           # 严格类型检查、未使用代码检查与生产构建
 npx playwright install chromium
 npm run test:browser    # 8 个主要用户流程，含 3D 资源与画面方向输入
-npm run package:offline # 生成 .local/releases/echo-heist-v0.16.0.html
+npm run package:offline # 生成 .local/releases/echo-heist-v0.17.0.html
 ```
 
 Windows 可设置 `$env:PLAYWRIGHT_CHANNEL='chrome'` 使用已安装的 Chrome。关卡参考路线使用真实模拟输入，验证可完成性；不代表真人首玩难度或实际时长。
@@ -72,7 +74,7 @@ Windows 可设置 `$env:PLAYWRIGHT_CHANNEL='chrome'` 使用已安装的 Chrome�
 - `src/campaign*.ts`、`src/chapter-*.ts`：关卡、任务锚点、分支与结局。
 - `src/story.ts`：完整幕间剧本、解锁规则与对话存档。
 - `src/story-ui.ts`、`src/story.css`：修表铺插图、阅读器与调查回顾。
-- `src/scene3d.ts`、`src/models3d.ts`：真实 3D 场景、骨骼动画、等距镜头与实际规则提示。
+- `src/scene3d.ts`、`src/models3d.ts`、`src/set-dressing.ts`：3D 场景、骨骼服饰、各章陈设、等距镜头与实际规则提示。
 - `src/isometric.ts`：画面方向输入转换；原始模拟与录像坐标不变。
 - `src/audio.ts`、`src/soundtrack.ts`：离线配乐、音效与场景混音。
 - `src/plans.ts`：回声计划存档；`src/witness.ts`：内容作者的参考路线执行器。
