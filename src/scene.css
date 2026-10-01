@@ -9,7 +9,9 @@
 .timeline { background: #172c32; }
 .overlay-card { background: #13272dea; border-color: #768879; box-shadow: 0 20px 80px #0006; }
 #camera-button { min-width: 42px; color: #ddcfac; border-color: #7d866b; }
-.hint .map-directions { color: #adbea9; font-size: 11px; line-height: 1.8; }
+.hint summary { color: #536952; font-size: 12px; }
+.hint p { color: #4e6358; font-size: 12px; }
+.hint .map-directions { color: #3f6355; font-size: 11px; line-height: 1.8; }
 @media(max-width:550px) {
   .console-controls { gap: 5px; }
   .feed-label .divider, #map-code { display: none; }
