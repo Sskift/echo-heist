@@ -137,6 +137,9 @@ test('3D models load, screen-up input records correct world poses, and camera ch
 });
 
 test('opening pauses input, real keyboard cooperation saves evidence, and the journal has no future revelations', async ({ page }) => {
+  // Two complete missions plus reloads and browser teardown render through
+  // SwiftShader on CI. Keep their real keyboard route and every assertion.
+  if (process.env.CI || process.env.ECHO_SOFTWARE_WEBGL) test.setTimeout(300_000);
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await clock(page); await page.goto('/'); await advance(page);
   await expect(page.locator('#story-title')).toHaveText('还有一个人没有回来');
