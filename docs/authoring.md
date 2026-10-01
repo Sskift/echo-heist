@@ -20,6 +20,10 @@ C3-5 的旁路样板在 `src/grid-preparation.ts`。`Circuit.feed` 也可读取�
 
 跨区凭据样板在 `src/station-transfer.ts`。`credential.id` 定义同一物件，`from` 引用前区规范 ID；`incomingOwners` 与 `incomingAuthorizations` 限定入站状态，`exitOwners` 与 `exitAuthorizations` 限定可提交事实。需要本人接回时声明 `receiveByPlayer`，回声的领取不满足它。后区不能再配置 `source`；参考路线必须使用前区真正成功提交的状态。`Terminal.transfer: 'give'` 表示只收不取的归还槽，允许空手录下交付请求，实际执行仍须持有原票。重试恢复入站快照，回退删除后段凭据记录和本区计划。
 
+`src/museum-return.ts` 复用序章入口、门、开关与遮挡布局，将 C7-6-b 的恢复回执带到 C7-6-f。中间三个行动区不生成或转交该回执；它保留在成功锚点里，最终段以 `from` 接入。`credential.journey` 提供该物件专用的去向说明。`setting: 'museum'` 选择旧馆美术，`lostProperty` 设置共享失物柜地标，`appearance: 'lost-property'` 的只收不取终端必须在柜前一格。铭牌、纸张与交互提示读取实际 HOME 持有状态，不能靠故事阅读状态改变。
+
+`restorationVersion: 1` 标记已处理恢复回执的新存档。仅旧格式中连续成功归档的 C7-6-b 可以补发 ROOT / RESTORED 回执；历史完成列表或结局列表本身不构成取得回执的证据。新格式缺失或损坏的回执必须回到该锚点重做，不能重复迁移。最终归档完成后刷新展示已验证的柜中回执，明确重试仍恢复本区入站快照。
+
 连续房间的样板在 `src/last-light.ts`。首区 `handoff` 要求只有一名回声且终点守住所需开关，成功后把原始录像复制进任务锚点。后段 `continuity.source` 引用首区；离开原房间时，由无真人的原房间模拟按相同帧号播放，`Circuit.feed` 读取实际开关。返回原房间时使用 `home`，留守者参与当前房间的交互与检测。它始终占第一个名额，不能在后段删除、改延迟或重录；本区计划只存另外两格。每区每轮从零同步，不延续上一区的余秒。新增任务若要使用这个机制，仍限一名留守者。
 
 `alternateExit` 让前段准备同时改变实际出口与后续出生点。回退会删掉后续决策、锚点与本区录像；参考验证必须从实际前区胜利取得录像，不能为后段硬造一个永久开启的开关。旧 C3-6 四区存档保留历史通关和后续解锁，只重开改版后的这一场任务。

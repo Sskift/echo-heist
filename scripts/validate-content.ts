@@ -42,6 +42,7 @@ for (const mission of MISSIONS) {
     }
     for (const stage of stageVersions(base)) {
     const level = stage.level;
+    if (level.lostProperty) assert.ok(level.lostProperty.x >= TILE && level.lostProperty.x <= WIDTH - TILE && level.lostProperty.y >= TILE && level.lostProperty.y <= HEIGHT - TILE, `Invalid lost-property landmark in ${level.id}`);
     if (stage.ending) assert.ok(base === mission.stages.at(-1) && mission.endingAnchor !== undefined && stage.ending.title.trim() && stage.ending.consequence.trim() && stage.ending.reunion.length >= 2 && stage.ending.reunion.every(p => p.trim()), `Incomplete ending in ${level.id}`);
     assert.ok(!ids.has(level.id), `Duplicate action zone ${level.id}`); ids.add(level.id);
     if (stage.requires) assert.ok(facts.has(stage.requires), `Unavailable prerequisite ${stage.requires}`);
@@ -71,6 +72,7 @@ for (const mission of MISSIONS) {
     for (const rect of [...level.glass ?? [], ...level.scanners ?? [], ...level.suppressors ?? []]) assert.ok(rect.w > 0 && rect.h > 0 && rect.x >= 0 && rect.y >= 0 && rect.x + rect.w <= WIDTH && rect.y + rect.h <= HEIGHT, `Invalid facility bounds in ${level.id}`);
     assert.ok((level.terminals ?? []).filter(t => t.kind === 'source').length <= 1, `Multiple credentials in ${level.id}`);
     for (const terminal of level.terminals ?? []) {
+      if (terminal.appearance === 'lost-property') assert.ok(level.lostProperty && terminal.x === level.lostProperty.x && terminal.y === level.lostProperty.y + TILE && terminal.kind === 'relay' && terminal.transfer === 'give', `Invalid lost-property receiving slot in ${level.id}`);
       if (terminal.window) assert.ok(terminal.window[0] >= 0 && terminal.window[1] > terminal.window[0] && terminal.window[1] <= 12, `Invalid terminal window in ${level.id}`);
       if (terminal.plate) assert.ok(level.plates.some(p => p.id === terminal.plate), `Unknown terminal plate in ${level.id}`);
       if (terminal.requiresAuthorization) assert.ok(level.credential?.incomingAuthorizations?.includes(terminal.requiresAuthorization) || level.terminals?.some(t => t.authorization === terminal.requiresAuthorization && t.id !== terminal.id), `Unknown prerequisite authorization in ${level.id}`);

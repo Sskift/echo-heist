@@ -18,7 +18,7 @@ export class EndingUI {
         <path d="m250 174 20 8 17-7" fill="none" stroke="#273f37" stroke-width="6"/><path d="M268 177h9v11h-9z" fill="#f4e5b2"/>
       </svg><span>旧渡口 · 天亮以后</span></div>
       <div class="ending-copy"><p class="ending-eyebrow">ECHO HEIST / 后来</p><h2 id="ending-title" tabindex="-1"></h2><p id="ending-consequence" class="ending-consequence"></p><div id="ending-reunion"></div>
-      <p class="ending-note">主线交付已完成。两种选择都保留已公开的责任证据；可以回到范围选择锚点，体验另一种交付与收束。</p>
+      <p class="ending-note">主线交付与旧馆归档已完成。两种选择都保留已公开的责任证据；可以回到范围选择锚点，体验另一种交付与收束。</p>
       <div class="ending-actions"><button id="ending-return" class="primary-button">回到最终选择</button><button id="ending-close">返回行动档案</button></div></div></dialog>`);
     this.dialog = document.querySelector<HTMLDialogElement>('#ending-dialog')!;
     this.dialog.querySelector('#ending-return')!.addEventListener('click', () => { this.dialog.close(); revisit(); });

@@ -62,7 +62,7 @@ try {
 $('#app').innerHTML = `
   <header class="site-header">
     <a class="brand" href="./" aria-label="ECHO HEIST 首页"><span class="brand-symbol">${icons.echo}</span><span>ECHO HEIST<span class="brand-cn">回声劫案</span></span></a>
-    <div class="header-note"><span class="status-dot"></span> A SOLO CO-OP HEIST <span class="version">VOL. 22.0</span></div>
+    <div class="header-note"><span class="status-dot"></span> A SOLO CO-OP HEIST <span class="version">VOL. 23.0</span></div>
     <button class="text-button" id="help-button">行动手册 <span class="key">?</span></button>
   </header>
   <main>
@@ -277,6 +277,15 @@ function loadLevel(level: Level) {
   game = new Game(level, campaignMode ? campaign.carryFor(level.id) : undefined, campaignMode ? campaign.credentialFor(level.id) : undefined);
   const restored = decodePlan(plans[game.level.id], game.level.id);
   if (restored) game.restorePlan(restored);
+  if (campaignMode && campaign.ending && level.lostProperty) {
+    const archived = campaign.data.credentials?.[campaign.mission.stages[campaign.stageIndex].level.id];
+    const cabinet = level.terminals?.find(t => t.appearance === 'lost-property');
+    if (archived && cabinet && archived.owner === `terminal:${cabinet.id}`) {
+      // Show the validated final archive after reload. The primary action
+      // opens the ending; an explicit retry still restores the incoming paper.
+      game.tokenOwner = archived.owner; game.echoes = [];
+    }
+  }
   if (campaignMode && campaign.depart(game)) saveCampaign();
   $('#plan-status').textContent = restored?.length ? `已恢复 ${restored.length} 条回声` : '录制后自动保存';
   initialized = true;

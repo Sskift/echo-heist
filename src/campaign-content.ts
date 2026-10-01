@@ -9,6 +9,7 @@ import { CHAPTER_FIVE } from './chapter-five.ts';
 import { CHAPTER_SIX } from './chapter-six.ts';
 import { CHAPTER_SEVEN } from './chapter-seven.ts';
 import { prepareMissions } from './mission-preparations.ts';
+import { museumEntrance } from './museum-return.ts';
 
 export type WitnessAction = { go: [number, number] } | { wait: number } | { press: 'interact' | 'lure' } | { record: true } | { delay: number; echo: number } | { remove: number };
 export type Outcome = { id: string; label: string; consequence: string } & ({ power: Power } | { credentialAt: string });
@@ -24,9 +25,7 @@ const INITIAL_MISSIONS: Mission[] = [
   {
     id: 'C0-1', chapter: '序章', title: '缺席的搭档', summary: '有人从这座城市的记录中消失了。先替他打开一扇门。', evidence: '失物柜上的空白姓名',
     stages: [stage(level('C0-1-a', '一道需要两个人的门', {
-      spawn: point(112, 272), exit: point(784, 272), objective: 'reach', objectiveLabel: '穿过通道，到达东侧锚点',
-      walls: room([[14, [8, 9]]], [], [[7, 4], [7, 5], [22, 12], [23, 12]]),
-      plates: [plate('A', 272, 368)], doors: [gate('A', 448, 256)],
+      ...museumEntrance(), exit: point(784, 272), objective: 'reach', objectiveLabel: '穿过通道，到达东侧失物柜',
       hint: '走到南侧 A 开关，按 R 保存回声。下一轮，直接穿过中间的门，到东侧锚点。',
     }), '联络员：旧馆有一只属于你搭档的失物柜。登记册却说，这个人从未存在。', '门开了。柜台上有一道被刮掉的名字，只有编号还留着。', ['entry-open'], [g(272, 272), g(272, 368), r(), g(400, 272), g(528, 272), g(784, 272)])],
   },

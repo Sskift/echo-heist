@@ -7,6 +7,58 @@ import { Campaign } from '../src/campaign.ts';
 import { MISSIONS } from '../src/campaign-content.ts';
 import { playWitness } from '../src/witness.ts';
 import { evidence, sceneUnlocked, STORY, StoryState } from '../src/story.ts';
+import { RESTORATION_ID, RESTORATION_STAGE } from '../src/museum-return.ts';
+
+function oldFinale(ending: 'open' | 'return' = 'return') {
+  const before = MISSIONS.slice(0, MISSIONS.findIndex(m => m.id === 'C7-6')).map(m => m.id);
+  return { version: 1 as const, selected: 'C7-6', runs: {...Object.fromEntries(before.map(id => [id, []])), 'C7-6': ['C7-6-a', 'C7-6-b', 'C7-6-c', 'C7-6-d', 'C7-6-e']}, completed: [...before, 'C7-6'], outcomes: {'C7-6-d': `C7-ending-${ending}`}, endings: [ending === 'open' ? 'open-archive' : 'return-memories'] };
+}
+
+test('old finale archives issue a restoration receipt once and preserve both historical endings', () => {
+  for (const choice of ['open', 'return'] as const) {
+    const campaign = new Campaign(oldFinale(choice));
+    assert.equal(campaign.cleared(), 5); assert.equal(campaign.ending, undefined);
+    assert.equal(campaign.stage.level.id, choice === 'open' ? 'C7-6-f' : 'C7-6-f-return');
+    assert.deepEqual(campaign.data.endings, oldFinale(choice).endings);
+    assert.ok(campaign.data.completed.includes('C7-6'));
+    const receipt = campaign.credentialFor(campaign.stage.level.id)!;
+    assert.deepEqual(receipt, {id: RESTORATION_ID, owner: 'player', authorizations: ['ROOT', 'RESTORED']});
+    const restored = new Campaign(campaign.export());
+    assert.deepEqual(restored.credentialFor(restored.stage.level.id), receipt);
+    // Already seeing an ending or reading the story cannot create a receipt.
+    const historyOnly = oldFinale(choice); historyOnly.runs['C7-6'] = [];
+    assert.equal(new Campaign(historyOnly).data.credentials?.[RESTORATION_STAGE], undefined);
+    const damaged = restored.export(); delete damaged.credentials![RESTORATION_STAGE];
+    assert.equal(new Campaign(damaged).cleared(), 1, 'a new-format missing receipt must be earned again');
+    const wrong = restored.export(); wrong.credentials![RESTORATION_STAGE].authorizations = ['ROOT'];
+    assert.equal(new Campaign(wrong).cleared(), 1);
+  }
+});
+
+test('museum receipt needs real personal deposit; retries, preview and rollback cannot duplicate it', () => {
+  const campaign = new Campaign(oldFinale()), level = campaign.stage.level;
+  const game = new Game(level, undefined, campaign.credentialFor(level.id)); game.start();
+  game.step({x: 0, y: 0, lure: false});
+  assert.equal(game.status, 'running', 'being at the entrance is not enough to finish');
+  assert.equal(game.exitReady, false);
+  const before = campaign.export();
+  assert.equal(campaign.commit(game.previewAt(30)), false); assert.deepEqual(campaign.export(), before);
+  const home = level.terminals![0];
+  Object.assign(game.player, {x: home.x, y: home.y}); game.step({x: 0, y: 0, lure: false, interact: true});
+  assert.equal(game.tokenOwner, 'terminal:HOME'); assert.ok(game.exitReady);
+  assert.equal(game.operationLog.at(-1)?.actor, 'player');
+  assert.equal(campaign.commit(game), false, 'the receipt is not archived until returning to the entrance');
+  game.restart(); assert.equal(game.tokenOwner, 'player'); assert.equal(game.exitReady, false);
+  Object.assign(game.player, {x: home.x, y: home.y}); game.step({x: 0, y: 0, lure: false, interact: true});
+  Object.assign(game.player, level.spawn); game.step({x: 0, y: 0, lure: false});
+  assert.equal(game.status, 'won'); assert.ok(campaign.commit(game));
+  assert.equal(new Campaign(campaign.export()).ending?.id, 'return-memories');
+  assert.equal(campaign.data.credentials?.['C7-6-f'].owner, 'terminal:HOME');
+  campaign.returnTo(3);
+  assert.equal(campaign.data.credentials?.['C7-6-f'], undefined);
+  assert.equal(campaign.data.credentials?.[RESTORATION_STAGE]?.owner, 'player');
+  campaign.returnTo(1); assert.equal(campaign.data.credentials?.[RESTORATION_STAGE], undefined);
+});
 
 function lastLight() {
   const before = MISSIONS.slice(0, MISSIONS.findIndex(m => m.id === 'C3-6'));

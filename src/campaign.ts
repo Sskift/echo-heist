@@ -3,13 +3,14 @@ import { MISSIONS, outcomeSelected, resolveStage, stageVersions, type Mission, t
 import { decodePlan, encodePlan, type SavedPlan } from './plans.ts';
 import type { CredentialSnapshot } from './levels.ts';
 import { incomingCredential, outgoingCredential } from './credentials.ts';
+import { RESTORATION_ID, RESTORATION_STAGE } from './museum-return.ts';
 
 export const CAMPAIGN_KEY = 'echo-heist-campaign-v1';
 type Prepared = { id: string; locked: boolean };
-type CampaignSave = { version: 1; selected: string; runs: Record<string, string[]>; completed: string[]; outcomes?: Record<string, string>; endings?: string[]; carries?: Record<string, SavedPlan>; credentials?: Record<string, CredentialSnapshot>; preparations?: Record<string, Prepared> };
+type CampaignSave = { version: 1; restorationVersion?: 1; selected: string; runs: Record<string, string[]>; completed: string[]; outcomes?: Record<string, string>; endings?: string[]; carries?: Record<string, SavedPlan>; credentials?: Record<string, CredentialSnapshot>; preparations?: Record<string, Prepared> };
 
 export class Campaign {
-  data: CampaignSave = { version: 1, selected: MISSIONS[0].id, runs: {}, completed: [], outcomes: {}, endings: [], carries: {}, credentials: {}, preparations: {} };
+  data: CampaignSave = { version: 1, restorationVersion: 1, selected: MISSIONS[0].id, runs: {}, completed: [], outcomes: {}, endings: [], carries: {}, credentials: {}, preparations: {} };
   constructor(raw?: unknown) {
     if (!raw || typeof raw !== 'object') return;
     const save = raw as CampaignSave;
@@ -48,7 +49,13 @@ export class Campaign {
           if (current.level.credential) {
             const rule = current.level.credential;
             if (rule.from && !incomingCredential(current.level, this.data.credentials![rule.from])) break;
-            const checkpoint = outgoingCredential(current.level, save.credentials?.[id]);
+            // Before the museum return existed, a successfully archived
+            // restoration already proved ROOT, RESTORED and index delivery.
+            // Issue its receipt once during migration; never use story flags,
+            // historical ending IDs, or a damaged new-format checkpoint.
+            const legacyReceipt = id === RESTORATION_STAGE && save.restorationVersion === undefined && save.credentials?.[id] === undefined
+              ? { id: RESTORATION_ID, owner: 'player', authorizations: ['ROOT', 'RESTORED'] } : undefined;
+            const checkpoint = outgoingCredential(current.level, save.credentials?.[id] ?? legacyReceipt);
             if (!checkpoint || (outcome && 'credentialAt' in outcome && checkpoint.owner !== outcome.credentialAt)) break;
             this.data.credentials![id] = checkpoint;
           }

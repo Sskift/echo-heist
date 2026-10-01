@@ -72,11 +72,11 @@ export class CampaignUI {
       if ($('#credential-journey').dataset.route !== `${this.campaign.mission.id}:${c.id}`) {
         $('#credential-journey').dataset.route = `${this.campaign.mission.id}:${c.id}`;
         const acrossRooms = this.campaign.mission.stages.some(base => stageVersions(base).some(stage => stage.level.credential?.from));
-        $('#credential-route-title').textContent = acrossRooms ? '登记厅交出 → 对侧站台接回 → 货运档案接班' : '真人取件 → 回声签入 → 本人接回原票';
-        $('#credential-route-summary').textContent = acrossRooms ? '这张票如何跨过房间' : '为什么签入后还要接回';
-        $('#credential-route-help').textContent = acrossRooms
+        $('#credential-route-title').textContent = c.journey?.title ?? (acrossRooms ? '登记厅交出 → 对侧站台接回 → 货运档案接班' : '真人取件 → 回声签入 → 本人接回原票');
+        $('#credential-route-summary').textContent = c.journey?.summary ?? (acrossRooms ? '这张票如何跨过房间' : '为什么签入后还要接回');
+        $('#credential-route-help').textContent = c.journey?.help ?? (acrossRooms
           ? '整场只有一张 B-17 货运凭据。成功到锚点才保存实际交接位置；失败从当前锚点恢复。回退会撤销后段物件状态与计划。每区重新开始十二秒，录像只能请求交接，不能复制凭据。RETURN 是只收不取的归还槽，空手也可录下交付请求，执行时仍须真正持有凭据。'
-          : `这份${c.label}只在当前行动区流转。授权不会收走凭据，签入者还需把它交到 ${c.receiveByPlayer}，再由本人按 E 接回；只完成签名、让回声拿着或由回声代收都不满足撤离。失败后从本区来源重新开始，物件不会复制。`;
+          : `这份${c.label}只在当前行动区流转。授权不会收走凭据，签入者还需把它交到 ${c.receiveByPlayer}，再由本人按 E 接回；只完成签名、让回声拿着或由回声代收都不满足撤离。失败后从本区来源重新开始，物件不会复制。`);
       }
       const location = `${preview ? '只读预演 · ' : ''}${c.label} · 现在：${world.credentialOwner()}${world.incoming ? ` · 入站位置：${world.incoming.owner === 'player' ? '本人持有' : world.incoming.owner.slice(9)}` : ' · 首次领取'}${c.incomingAuthorizations?.length ? ` · 前段签名：${c.incomingAuthorizations.join('、')}` : ''}`;
       const requirements = world.credentialBlockers().join('；') || '交接条件已完成，带齐目标后前往锚点。';

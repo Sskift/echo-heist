@@ -241,13 +241,39 @@ test('a dialogue answer changes the following chapter and the real ending; repla
   await expect(page.locator('[data-answer="testify"]')).toBeDisabled();
   await page.locator('#story-next').click(); await page.locator('#story-close').click();
   const finale = new Campaign(checkpoint('C7-6'));
-  while (finale.cleared() < finale.mission.stages.length) expect(finale.commit(playWitness(finale.stage))).toBe(true);
+  while (finale.cleared() < finale.mission.stages.length - 1) expect(finale.commit(playWitness(finale.stage, finale.carryFor(finale.stage.level.id), finale.credentialFor(finale.stage.level.id)))).toBe(true);
   await page.evaluate(save => localStorage.setItem('echo-heist-campaign-v1', JSON.stringify(save)), finale.export());
-  await page.reload(); await advance(page); await page.locator('#overlay-action').click(); await advance(page);
+  await page.reload(); await advance(page);
+  await expect(page.locator('#mission-title')).toHaveText('把名字带回第一扇门');
+  await expect(page.locator('#credential-location')).toContainText('公共身份恢复回执');
+  await expect(page.locator('#credential-owner')).toContainText('当前的你');
+  await expect(page.locator('#ending-dialog')).not.toBeVisible();
+  if (await page.locator('#story-dialog').isVisible()) { await page.locator('#story-skip').click(); await advance(page); }
+  await page.locator('#overlay-action').click(); await advance(page);
+  await move(page, 'd', 43); await move(page, 's', 26); await page.keyboard.press('r'); await advance(page);
+  const returning = await page.evaluate(() => localStorage.getItem('echo-heist-campaign-v1'));
+  await page.locator('#preview-button').click(); await page.locator('#preview-frame').fill('180'); await page.locator('#preview-frame').dispatchEvent('input'); await advance(page);
+  await expect(page.locator('#credential-location')).toContainText('只读预演');
+  expect(await page.evaluate(() => localStorage.getItem('echo-heist-campaign-v1'))).toBe(returning);
+  await page.locator('#preview-button').click(); await advance(page);
+  await move(page, 'd', 180); await move(page, 'e', 1); await advance(page);
+  await expect(page.locator('#credential-owner')).toContainText('HOME');
+  await expect(page.locator('#ending-dialog')).not.toBeVisible();
+  await page.screenshot({path: '.local/museum-return-deposited.png', fullPage: true});
+  await page.reload(); await advance(page);
+  await expect(page.locator('#credential-owner')).toContainText('当前的你');
+  await expect(page.locator('#echo-count')).toHaveText('1 / 3');
+  await page.locator('#overlay-action').click(); await advance(page);
+  await move(page, 'd', 180); await move(page, 'e', 1); await move(page, 'a', 180);
+  await page.locator('#overlay-action').click(); await advance(page);
   await expect(page.locator('#ending-dialog')).toBeVisible();
   await expect(page.locator('#ending-reunion')).toContainText('逐项核对');
   await expect(page.locator('#ending-reunion')).toContainText('沈舟');
+  await expect(page.locator('#ending-reunion')).toContainText('旧馆的签收联');
   await page.screenshot({ path: '.local/story-ending.png' });
+  await page.locator('#ending-close').click(); await page.reload(); await advance(page);
+  await expect(page.locator('#credential-owner')).toContainText('HOME');
+  await expect(page.locator('#overlay-card h2')).toHaveText('回声劫案 · 已完成');
 });
 
 test('phone journal fits, pauses an active run, restores focus, and media preferences survive reload', async ({ page }) => {

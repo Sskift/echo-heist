@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import type { Circuit, Level, Terminal } from './levels.ts';
+import type { Circuit, Level, Point, Terminal } from './levels.ts';
 
 type Box = (parent: THREE.Object3D, x: number, y: number, z: number, w: number, h: number, d: number, color: string, metal?: number) => THREE.Mesh;
 type Setting = 'museum' | 'gala' | 'records' | 'power' | 'station' | 'retention' | 'civic' | 'vault' | 'archive';
 export function setting(level: Level): Setting {
+  if (level.setting) return level.setting;
   const chapter = /^C([0-7])-/.exec(level.id)?.[1];
   if (chapter) return (['museum', 'gala', 'records', 'power', 'station', 'retention', 'civic', 'vault'] as const)[Number(chapter)];
   if (/^(01|02|03)$/.test(level.id)) return 'museum';
@@ -29,6 +30,39 @@ export const sceneLook = (level: Level) => looks[setting(level)];
 // wall art stays on wall faces, and painted floor markings add no cover.
 export class SetDressing {
   constructor(private box: Box) {}
+
+  lostProperty(parent: THREE.Object3D, at: Point) {
+    const group = new THREE.Group(); group.position.set(at.x / 32 - 15, 0, at.y / 32 - 9); parent.add(group);
+    // The player approaches the front at one tile south of this cabinet.
+    this.box(group, 0, .1, 0, 1.72, .2, 1.06, '#283e3c');
+    this.box(group, 0, .98, 0, 1.54, 1.66, .86, '#624a37');
+    this.box(group, 0, 1.88, 0, 1.77, .16, 1.04, '#9a7c4c');
+    this.box(group, 0, 2.0, -.08, 1.15, .11, .66, '#3b514d');
+    for (const x of [-.7, .7]) {
+      this.box(group, x, .98, .45, .07, 1.63, .07, '#b29a67', .5);
+      this.box(group, x, 1.78, .45, .14, .14, .13, '#c6b57b', .5);
+    }
+    for (const x of [-.34, .34]) for (const y of [.4, .69]) {
+      this.box(group, x, y, .46, .59, .23, .045, '#405751');
+      this.box(group, x, y + .015, .505, .15, .032, .058, '#cfb57a', .55);
+    }
+    this.box(group, 0, 1.04, .46, 1.09, .22, .04, '#1b3235');
+    this.box(group, 0, .94, .57, 1.13, .04, .24, '#bca470', .5);
+    this.box(group, 0, 1.49, .46, 1.19, .51, .055, '#c6ad76', .4);
+    const names = ['姓名空白', '沈 舟'].map(name => {
+      const holder = new THREE.Group(); holder.position.set(0, 1.49, .4); group.add(holder);
+      return this.panel(holder, 1.08, .42, c => {
+        c.fillStyle = '#263f40'; c.fillRect(0, 0, 512, 384);
+        c.textAlign = 'center'; c.fillStyle = '#beac7b'; c.font = 'bold 70px serif'; c.fillText('B–17', 256, 112);
+        c.fillStyle = '#eee3c0'; c.font = 'bold 108px "Microsoft YaHei", sans-serif'; c.fillText(name, 256, 285);
+      });
+    });
+    names[1].visible = false;
+    const ticket = this.box(group, 0, 1.01, .56, .43, .032, .19, '#eee0b8'); ticket.visible = false;
+    const screen = this.box(group, .55, 1.06, .5, .075, .075, .027, '#7caaa7');
+    screen.material = new THREE.MeshStandardMaterial({color: '#7caaa7', emissive: '#7caaa7', emissiveIntensity: .3}); screen.userData.ownedMaterial = true;
+    return {screen, ticket, names};
+  }
 
   doorCrown(level: Level, root: THREE.Object3D, width: number) {
     if (width > 2.5 || !['museum', 'gala', 'civic', 'archive'].includes(setting(level))) return;

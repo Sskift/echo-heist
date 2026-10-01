@@ -13,13 +13,14 @@ export type CredentialSnapshot = { id: string; owner: string; authorizations: st
 export type CredentialRoute = {
   id: string; label: string; from?: string; incomingOwners?: string[]; incomingAuthorizations?: string[];
   exitOwners: string[]; exitAuthorizations?: string[]; receiveByPlayer?: string;
+  journey?: { title: string; summary: string; help: string };
 };
 export type Door = { id: string; x: number; y: number; w: number; h: number; plate?: string; plates?: string[]; plateMode?: 'all' | 'any' | 'one' | 'none'; power?: Power; window?: [number, number]; windows?: [number, number][]; authorization?: string };
 type Plate = Point & { id: string; window?: [number, number] };
 export type GuardDefinition = { id?: string; route: Point[]; speed: number; range: number; kind?: 'sentry' | 'patrol' | 'camera' | 'tracker'; power?: Power; lighting?: Power & { darkRange: number }; hearing?: number; searchSeconds?: number; facing?: number; traceSeconds?: number };
 type Glass = { id: string; x: number; y: number; w: number; h: number };
 export type Circuit = Point & { id: string; initial: boolean; label?: string; states?: [string, string]; mechanical?: boolean; feed?: { plate: string; remote?: boolean } };
-export type Terminal = Point & { id: string; kind: 'source' | 'relay' | 'lock'; authorization?: string; requiresAuthorization?: string; window?: [number, number]; power?: Power; plate?: string; waitForDelivery?: boolean; transfer?: 'give' | 'take'; appearance?: 'legacy' | 'manual' | 'review' };
+export type Terminal = Point & { id: string; kind: 'source' | 'relay' | 'lock'; authorization?: string; requiresAuthorization?: string; window?: [number, number]; power?: Power; plate?: string; waitForDelivery?: boolean; transfer?: 'give' | 'take'; appearance?: 'legacy' | 'manual' | 'review' | 'lost-property' };
 export type Cycle = { period: number; active: [number, number]; phase?: number };
 export type Suppressor = { id: string; x: number; y: number; w: number; h: number; power?: Power; cycle?: Cycle };
 export type Scanner = { id: string; x: number; y: number; w: number; h: number; period: number; active: [number, number]; phase?: number; power?: Power };
@@ -46,6 +47,8 @@ export type Level = {
   lootLabel?: string;
   district?: string;
   theme?: 'archive' | 'gala' | 'industrial' | 'clockwork' | 'audit';
+  setting?: 'museum';
+  lostProperty?: Point;
   circuits?: Circuit[];
   terminals?: Terminal[];
   suppressors?: Suppressor[];

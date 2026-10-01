@@ -48,6 +48,7 @@ export class Renderer {
   private scanners = new Map<string, THREE.MeshStandardMaterial>();
   private lamps: THREE.Object3D[] = [];
   private civicWindows: THREE.Mesh[] = [];
+  private propertyCabinet?: ReturnType<SetDressing['lostProperty']>;
   private labels: Label[] = [];
   private loot?: THREE.Group;
   private previousTime = 0;
@@ -107,7 +108,7 @@ export class Renderer {
       if (o instanceof THREE.SkinnedMesh) o.skeleton.dispose();
     });
     for (const a of this.actors.values()) a.mixer.uncacheRoot(a.body);
-    this.levelRoot.clear(); this.walls = []; this.actors.clear(); this.guardMotion.clear(); this.doors.clear(); this.terminals.clear(); this.tickets.clear(); this.circuits.clear(); this.suppressors.clear(); this.scanners.clear(); this.lamps = []; this.civicWindows = []; this.loot = undefined;
+    this.levelRoot.clear(); this.walls = []; this.actors.clear(); this.guardMotion.clear(); this.doors.clear(); this.terminals.clear(); this.tickets.clear(); this.circuits.clear(); this.suppressors.clear(); this.scanners.clear(); this.lamps = []; this.civicWindows = []; this.loot = undefined; this.propertyCabinet = undefined;
     const style = setting(level), look = sceneLook(level), { plaster, panel, floor: floorColor } = look;
     (this.scene.background as THREE.Color).set(look.background);
     this.box(this.levelRoot, 0, -0.48, 0, 30.35, 0.92, 18.35, '#25333c');
@@ -200,8 +201,9 @@ export class Renderer {
       }
       this.doors.set(door.id, panelGroup);
     }
+    if (level.lostProperty) this.propertyCabinet = this.dressing.lostProperty(this.levelRoot, level.lostProperty);
     for (const terminal of level.terminals ?? []) {
-      const { screen, ticket } = this.dressing.terminal(this.levelRoot, terminal, style === 'station');
+      const { screen, ticket } = terminal.appearance === 'lost-property' && this.propertyCabinet ? this.propertyCabinet : this.dressing.terminal(this.levelRoot, terminal, style === 'station');
       this.terminals.set(terminal.id, screen); this.tickets.set(terminal.id, ticket);
     }
     for (const circuit of level.circuits ?? []) this.circuits.set(circuit.id, this.dressing.circuit(this.levelRoot, level, circuit));
@@ -341,6 +343,12 @@ export class Renderer {
     const target = this.closeup ? world(focus, 0.45) : new THREE.Vector3(0, 0.3, 0);
     this.camera.position.copy(target).add(new THREE.Vector3(30, 27, 30)); this.camera.lookAt(target); this.camera.zoom = this.closeup ? this.canvas.clientWidth < 600 ? 2.65 : 1.65 : 1; this.camera.updateProjectionMatrix(); this.camera.updateMatrixWorld();
     this.groundEffects(game); this.labels = [];
+    if (this.propertyCabinet && game.level.lostProperty) {
+      const received = game.tokenOwner === 'terminal:HOME';
+      this.propertyCabinet.names[0].visible = !received; this.propertyCabinet.names[1].visible = received;
+      const interactive = game.level.terminals?.some(t => t.appearance === 'lost-property');
+      this.label(game.level.lostProperty, 2.1, received ? 'HOME · 沈舟 · 已归档' : `${interactive ? 'HOME · ' : ''}B-17 · 姓名空白`, received ? colors.lime : colors.light);
+    }
     for (const pane of this.civicWindows) {
       const mat = pane.material as THREE.MeshStandardMaterial, on = game.circuits.get('CIV');
       mat.color.set(on ? '#d2b76c' : '#284b64'); mat.emissive.set(on ? '#efbd72' : '#193042'); mat.emissiveIntensity = on ? 0.9 : 0.1;
@@ -381,8 +389,8 @@ export class Renderer {
       const holding = game.tokenOwner === `terminal:${t.id}`, color = holding ? colors.light : game.terminalBlockers(t).length ? '#a599b0' : colors.cyan;
       const material = this.terminals.get(t.id)!.material as THREE.MeshStandardMaterial; material.color.set(color); material.emissive.set(color);
       this.tickets.get(t.id)!.visible = holding;
-      this.label(t, 1.22, `${t.id}${holding ? ' ◆' : t.authorization && game.authorized.has(t.authorization) ? ' ✓' : ''}`, color);
-      if (Math.hypot(game.player.x - t.x, game.player.y - t.y) < 30 && !game.spectator) this.label(t, 1.95, t.kind === 'lock' ? 'E 签入' : t.transfer === 'give' ? 'E 归还' : holding ? 'E 取件' : game.tokenOwner === 'player' ? 'E 交付' : 'E 接收');
+      if (t.appearance !== 'lost-property') this.label(t, 1.22, `${t.id}${holding ? ' ◆' : t.authorization && game.authorized.has(t.authorization) ? ' ✓' : ''}`, color);
+      if (Math.hypot(game.player.x - t.x, game.player.y - t.y) < 30 && !game.spectator && !(t.appearance === 'lost-property' && holding)) this.label(t, 1.95, t.appearance === 'lost-property' ? 'E 归档回执' : t.kind === 'lock' ? 'E 签入' : t.transfer === 'give' ? 'E 归还' : holding ? 'E 取件' : game.tokenOwner === 'player' ? 'E 交付' : 'E 接收');
     }
     for (const t of game.level.circuits ?? []) {
       const on = game.circuits.get(t.id), color = on ? colors.lime : colors.light, { lamp, lever } = this.circuits.get(t.id)!;
