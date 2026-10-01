@@ -119,6 +119,9 @@ export class CampaignUI {
     if (powerKey !== this.powerKey) {
       this.powerKey = powerKey;
       $('#power-panel').hidden = !world.level.circuits?.length;
+      const mechanical = world.level.circuits?.some(c => c.mechanical);
+      $('#power-panel summary').firstChild!.textContent = mechanical ? '门闩与行动条件 ' : '电路与行动条件 ';
+      $('#power-panel > p').textContent = mechanical ? '到 H 旁按 E 松开门闩；承重开关也要有人留守，通道才可通过。每轮门闩复位。录下的是指定状态，多人重复松闩不会将它扣紧。' : '在面板旁按 E，录下的是指定状态；重复相同请求不会反复切换。同帧相反请求会取消。连线显示门禁、监控与照明的供电关系。';
       $('#power-status').replaceChildren(...(world.level.circuits ?? []).map(circuit => {
         const feeds = world.level.doors.filter(d => d.power?.id === circuit.id).map(d => `${d.id} ${world.openDoors.has(d.id) ? '开' : '关'}（需${world.circuitState(circuit.id, d.power!.on)}）`);
         world.level.suppressors?.filter(s => s.power?.id === circuit.id).forEach(s => feeds.push(`${s.id} 抑制供电${world.powered(s.power) ? '接通' : '断开'}`));

@@ -8,13 +8,15 @@ import { CHAPTER_FOUR } from './chapter-four.ts';
 import { CHAPTER_FIVE } from './chapter-five.ts';
 import { CHAPTER_SIX } from './chapter-six.ts';
 import { CHAPTER_SEVEN } from './chapter-seven.ts';
+import { prepareMissions } from './mission-preparations.ts';
 
 export type WitnessAction = { go: [number, number] } | { wait: number } | { press: 'interact' | 'lure' } | { record: true } | { delay: number; echo: number } | { remove: number };
 export type Outcome = { id: string; label: string; consequence: string } & ({ power: Power } | { credentialAt: string });
 export const outcomeSelected = (outcome: Outcome, game: Game): boolean => 'power' in outcome ? game.powered(outcome.power) : game.tokenOwner === outcome.credentialAt;
 export type Ending = { id: string; title: string; consequence: string; reunion: string[] };
 export type Stage = { level: Level; story: string; result: string; grants: string[]; witness: WitnessAction[]; requires?: string; alternatives?: WitnessAction[][]; outcomes?: Outcome[]; variants?: { when: string; stage: Stage }[]; ending?: Ending };
-export type Mission = { id: string; chapter: string; title: string; summary: string; evidence: string; stages: Stage[]; endingAnchor?: number };
+export type Preparation = { id: string; label: string; sources: string[]; effect: string; cost: string };
+export type Mission = { id: string; chapter: string; title: string; summary: string; evidence: string; stages: Stage[]; endingAnchor?: number; preparations?: Preparation[] };
 export const stageVersions = (stage: Stage): Stage[] => [stage, ...(stage.variants ?? []).map(v => v.stage)];
 export const resolveStage = (stage: Stage, flags: string[]): Stage => stage.variants?.find(v => flags.includes(v.when))?.stage ?? stage;
 
@@ -152,5 +154,6 @@ INITIAL_MISSIONS.find(m => m.id === 'C0-6')!.stages[1].alternatives = [[
 ]];
 
 export const MISSIONS: Mission[] = [...INITIAL_MISSIONS.filter(m => m.id.startsWith('C0-')), ...CHAPTER_ONE, ...CHAPTER_TWO, ...CHAPTER_THREE, ...CHAPTER_FOUR, ...CHAPTER_FIVE, ...CHAPTER_SIX, ...CHAPTER_SEVEN, ...INITIAL_MISSIONS.filter(m => m.id.startsWith('LAB-'))];
+prepareMissions(MISSIONS);
 
 export const CAMPAIGN_LEVELS = MISSIONS.flatMap(m => m.stages.flatMap(s => stageVersions(s).map(v => v.level)));

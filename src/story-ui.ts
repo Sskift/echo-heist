@@ -4,6 +4,8 @@ import { MISSIONS, stageVersions } from './campaign-content.ts';
 import { chapterFor, evidence, sceneUnlocked, STORY, STORY_KEY, StoryState, type StoryScene } from './story.ts';
 import './story.css';
 
+type PreparationActions = { active: () => boolean; readOnly: () => boolean; choose: (id: string) => boolean; reset: () => boolean };
+
 const room = `<svg viewBox="0 0 560 440" role="img" aria-label="修表铺的工作台：两只杯子，一枚怀表，台灯下摊着调查材料。窗外是夜间的城市。">
   <defs><linearGradient id="room-sky" x2="0" y2="1"><stop stop-color="#192b31"/><stop offset="1" stop-color="#637668"/></linearGradient><radialGradient id="room-glow"><stop stop-color="#eee2a2" stop-opacity=".35"/><stop offset="1" stop-color="#eee2a2" stop-opacity="0"/></radialGradient></defs>
   <path fill="#283a37" d="M0 0h560v440H0z"/><path fill="url(#room-sky)" d="M34 28h300v236H34z"/>
@@ -37,7 +39,7 @@ export class StoryUI {
   private journalChapter = 0;
   private previousFocus: HTMLElement | null = null;
   private saved = true;
-  constructor(private campaign: Campaign, private onOpen: () => void, private onClose: () => void, private sound: Sound) {
+  constructor(private campaign: Campaign, private onOpen: () => void, private onClose: () => void, private sound: Sound, private preparation: PreparationActions) {
     let raw: unknown;
     try { raw = JSON.parse(localStorage.getItem(STORY_KEY) ?? 'null'); } catch { /* New journal. */ }
     this.state = new StoryState(raw);
@@ -75,6 +77,8 @@ export class StoryUI {
         const scene = STORY.find(s => s.id === button.dataset.scene)!;
         if (sceneUnlocked(scene, this.campaign)) this.read(scene, true);
       } else if (button?.dataset.chapter) { this.journalChapter = Number(button.dataset.chapter); this.renderJournal(); }
+      else if (button?.dataset.prepare && !button.disabled && this.preparation.choose(button.dataset.prepare)) { this.renderJournal(); this.focusPreparation(); }
+      else if (button?.id === 'prepare-reset' && !button.disabled && this.preparation.reset()) { this.renderJournal(); this.focusPreparation(); }
     });
   }
   private el<T extends HTMLElement = HTMLElement>(selector: string) { return this.dialog.querySelector<T>(selector)!; }
@@ -152,6 +156,23 @@ export class StoryUI {
     this.journalChapter = Number(chapterFor(this.campaign.mission.id) ?? 0);
     this.renderJournal(); this.show();
   }
+  prepare() { this.journal(); this.focusPreparation(); }
+  private focusPreparation() { this.dialog.querySelector<HTMLElement>('#preparation-heading')?.focus(); }
+  private preparationMarkup(): string {
+    if (!this.preparation.active() || Number(chapterFor(this.campaign.mission.id)) !== this.journalChapter || !this.campaign.preparation) return '';
+    const current = this.campaign.preparation, locked = this.campaign.preparationLocked, readOnly = this.preparation.readOnly();
+    return `<section class="journal-preparation" aria-labelledby="preparation-heading">
+      <h3 id="preparation-heading" tabindex="-1">出发准备 · ${this.campaign.mission.title}</h3>
+      <p id="preparation-state" role="status">${readOnly ? '只读预演：先结束预演，才能重新准备。' : locked ? '已出发，准备已锁定。重试、刷新和回退阶段均沿用这次安排。' : '尚未出发，可以选择安排。开始行动后锁定本次准备。'}</p>
+      <div class="preparation-options">${this.campaign.preparationOptions.map(p => `<article class="preparation-option" data-selected="${current.id === p.id}">
+        <strong>${p.label}${current.id === p.id ? ' · 已选' : ''}</strong>
+        <small>${p.sources.length ? p.sources.map(id => { const source = MISSIONS.find(m => m.id === id)!; return `依据：${source.evidence}（${source.title}）`; }).join('<br>') : '原有安排 · 无需额外证据'}</small>
+        <p>${p.effect}</p><p class="preparation-cost">配合代价：${p.cost}</p>
+        <button data-prepare="${p.id}" aria-pressed="${current.id === p.id}" ${locked || readOnly || current.id === p.id ? 'disabled' : ''}>${current.id === p.id ? '本次采用' : '采用这项安排'}</button>
+      </article>`).join('')}</div>
+      ${locked ? `<p class="preparation-reset-note">重新准备会回到本任务第一段，清除本次所有阶段的录像、锚点和后续结果；已经带回的证据与章节解锁保留。</p><button id="prepare-reset" ${readOnly ? 'disabled' : ''}>回到起点，清空本次计划并重新准备</button>` : ''}
+    </section>`;
+  }
   private renderJournal() {
     const collected = evidence(this.campaign), chapters = [...new Set(STORY.filter(s => sceneUnlocked(s, this.campaign)).map(s => s.chapter))];
     if (!chapters.includes(this.journalChapter)) this.journalChapter = chapters.at(-1) ?? 0;
@@ -167,6 +188,7 @@ export class StoryUI {
     this.el('#story-title').textContent = '桌上的事，还没有完';
     this.el('#story-body').innerHTML = `<p class="journal-intro">${endings.length ? '身份与罪证都已登记。你把最后的回执夹进文件，关好店门，去见旧渡口的人。两只杯子留在工作台上，等下次一起回来。' : contact ? '旧渡口的地址压在怀表下面。你已经听到了搭档的声音，接下来要让他的身份重新被承认。' : confession ? '批准书上多了一个熟悉的签名。电话仍然接通，但墙上的证据得由彼此独立的记录来证实。' : '空椅子还在对面。把带回来的线索摆在一起，再想一想下一扇门通向哪里。'}</p>
       <nav class="journal-tabs" aria-label="回顾章节">${chapters.map(c => `<button data-chapter="${c}" aria-current="${c === this.journalChapter ? 'page' : 'false'}">C${c} ${MISSIONS.find(m => m.id === `C${c}-1`)!.chapter}</button>`).join('')}</nav>
+      ${this.preparationMarkup()}
       <h3>那时说过的话</h3><div class="journal-scenes">${scenes.map(s => `<button data-scene="${s.id}"><span>${s.title}</span><small>${this.state.data.cursor?.id === s.id ? '继续阅读' : this.state.data.seen.includes(s.id) ? '回看' : '未读'}</small></button>`).join('')}</div>
       <h3>带回来的证据</h3><ol class="journal-evidence">${items.map(m => `<li><strong>${m.evidence}</strong><span>${m.title}</span></li>`).join('') || '<li>这章还没有带回线索。</li>'}</ol>
       ${endings.length ? `<h3>已经抵达的后来</h3><ul class="journal-evidence">${endings.map(e => `<li><strong>${e.title}</strong>${e.consequence}</li>`).join('')}</ul>` : ''}

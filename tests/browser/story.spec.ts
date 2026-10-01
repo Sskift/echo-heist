@@ -15,6 +15,49 @@ async function seed(page: Page, save: unknown, story?: unknown) {
   }, { save, story });
 }
 
+test('evidence prepares a real layout and stays frozen until the player explicitly clears this operation', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await clock(page); await seed(page, checkpoint('C0-6'), { version: 1, seen: ['c0-arrival', 'c0-watch'], choices: {} });
+  await page.goto('/'); await advance(page);
+  await expect(page.locator('#preparation-label')).toContainText('末班货梯');
+  await page.locator('#preview-button').click(); await page.locator('#open-preparation').click();
+  await expect(page.locator('#preparation-state')).toContainText('只读预演');
+  await expect(page.locator('[data-prepare="museum-service"]')).toBeDisabled();
+  await page.locator('#story-close').click(); await page.locator('#preview-button').click();
+  await page.locator('#open-preparation').click();
+  await expect(page.locator('.journal-preparation')).toContainText('通往封存区的检修图');
+  await page.locator('[data-prepare="museum-service"]').click();
+  await expect(page.locator('[data-prepare="museum-service"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.screenshot({ path: '.local/preparation-desktop.png' });
+  await page.locator('#story-close').click();
+  await expect(page.locator('#mission-title')).toHaveText('图上的北侧检修口');
+  await move(page, 'd', 10); await page.keyboard.press('r'); await advance(page);
+  await expect(page.locator('#echo-count')).toHaveText('1 / 3');
+  await page.reload(); await advance(page);
+  await expect(page.locator('#echo-count')).toHaveText('1 / 3');
+  await expect(page.locator('#preparation-label')).toContainText('已锁定');
+  await move(page, 'd', 2);
+  await page.locator('#retry-button').click(); await advance(page);
+  await page.locator('#open-preparation').click();
+  await expect(page.locator('[data-prepare="museum-freight"]')).toBeDisabled();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: '.local/preparation-mobile.png', fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.locator('#prepare-reset').click();
+  await page.locator('[data-prepare="museum-freight"]').click();
+  await page.locator('#story-close').click(); await advance(page);
+  await expect(page.locator('#mission-title')).toHaveText('潜入装卸间');
+  await expect(page.locator('#echo-count')).toHaveText('0 / 3');
+  const saved = await page.evaluate(() => ({ campaign: JSON.parse(localStorage.getItem('echo-heist-campaign-v1')!), plans: JSON.parse(localStorage.getItem('echo-heist-plans-v1')!) }));
+  expect(saved.campaign.preparations['C0-6']).toEqual({ id: 'museum-freight', locked: false });
+  expect(saved.campaign.completed).toContain('C0-4');
+  expect(saved.campaign.runs['C0-6']).toEqual([]);
+  expect(saved.plans['C0-6-a-service']).toBeUndefined();
+  await page.reload(); await advance(page);
+  await expect(page.locator('#preparation-label')).toContainText('尚未出发');
+  expect(errors).toEqual([]);
+});
+
 test('a retained teammate is visible across rooms, survives local-plan reload and rolls back with its source', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   const campaign = new Campaign(checkpoint('C3-6'));

@@ -13,6 +13,78 @@ function lastLight() {
   return new Campaign({ version: 1, selected: 'C3-6', runs: Object.fromEntries(before.map(m => [m.id, []])), completed: before.map(m => m.id) });
 }
 
+function preparationMission(id = 'C0-6') {
+  const before = MISSIONS.slice(0, MISSIONS.findIndex(m => m.id === id));
+  return new Campaign({ version: 1, selected: id, runs: Object.fromEntries(before.map(m => [m.id, []])), completed: before.map(m => m.id) });
+}
+
+test('only archived evidence permits preparation; missing old-save evidence never blocks the original route', () => {
+  const campaign = preparationMission(), missing = campaign.export();
+  missing.completed = missing.completed.filter(id => id !== 'C0-4');
+  const old = new Campaign(missing);
+  assert.equal(old.data.selected, 'C0-6');
+  assert.equal(old.choosePreparation('museum-service'), false);
+  assert.equal(old.choosePreparation('invented'), false);
+  assert.equal(old.stage.level.id, 'C0-6-a');
+  assert.equal(old.preparationOptions.length, 1);
+  assert.ok(campaign.choosePreparation('museum-service'));
+  assert.equal(campaign.stage.level.id, 'C0-6-a-service');
+  assert.ok(campaign.flags.includes('museum-service'));
+  const gala = preparationMission('C1-6');
+  for (const id of ['C1-1', 'C1-4']) {
+    const save = gala.export(); save.completed = save.completed.filter(m => m !== id);
+    assert.equal(new Campaign(save).choosePreparation('gala-handover'), false);
+  }
+  assert.ok(gala.choosePreparation('gala-handover'));
+});
+
+test('departure freezes a preparation through retry, reload and rollback; rehearsal cannot freeze it', () => {
+  const campaign = preparationMission(); campaign.choosePreparation('museum-service');
+  const game = new Game(campaign.stage.level);
+  const preview = game.previewAt(100);
+  assert.equal(campaign.depart(preview), false);
+  assert.equal(campaign.commit(preview), false);
+  assert.equal(campaign.preparationLocked, false);
+  game.start(); assert.ok(campaign.depart(game));
+  assert.equal(campaign.choosePreparation('museum-freight'), false);
+  game.restart(); game.clear(); // Neither discarding a take nor its recordings changes the mission arrangement.
+  const restored = new Campaign(campaign.export());
+  assert.equal(restored.preparationLocked, true);
+  assert.equal(restored.stage.level.id, 'C0-6-a-service');
+  restored.returnTo(0); assert.equal(restored.choosePreparation('museum-freight'), false);
+  restored.data.completed.push('C0-6');
+  assert.ok(restored.resetPreparation());
+  assert.ok(restored.data.completed.includes('C0-6'));
+  assert.ok(restored.available('C1-1'));
+  assert.ok(restored.choosePreparation('museum-freight'));
+  assert.equal(restored.stage.level.id, 'C0-6-a');
+  const stale = new Game(game.level); stale.status = 'won';
+  assert.equal(restored.commit(stale), false, 'a completed stale layout cannot submit');
+});
+
+test('preparation migration preserves old checkpoints and safely rejects corrupt or unsupported arrangements', () => {
+  const old = preparationMission().export();
+  old.runs['C0-6'] = ['C0-6-a']; delete old.preparations;
+  const migrated = new Campaign(old);
+  assert.equal(migrated.cleared(), 1); assert.equal(migrated.stage.level.id, 'C0-6-b');
+  assert.equal(migrated.preparationLocked, true);
+  const save = migrated.export();
+  save.completed.push('C0-6');
+  save.preparations!['C0-6'] = { id: 'unknown-route', locked: true };
+  const repaired = new Campaign(save);
+  assert.equal(repaired.cleared(), 0); assert.equal(repaired.stage.level.id, 'C0-6-a');
+  assert.ok(repaired.data.completed.includes('C0-6')); assert.ok(repaired.available('C1-1'));
+  save.preparations!['C0-6'] = { id: 'museum-service', locked: false };
+  const resumed = new Campaign(save);
+  assert.equal(resumed.stage.level.id, 'C0-6-b-service'); assert.equal(resumed.preparationLocked, true);
+  const ready = preparationMission(), recorded = new Game(ready.stage.level);
+  recorded.start();
+  for (let tick = 0; tick < 3; tick++) recorded.step({ x: 1, y: 0, lure: false });
+  assert.ok(recorded.rewind());
+  const restoredPlan = new Game(ready.stage.level); restoredPlan.restorePlan(recorded.localPlan);
+  assert.ok(ready.depart(restoredPlan), 'a restored recording also proves an old save has departed');
+});
+
 const incomingTicket: CredentialSnapshot = { id: 'ticket', owner: 'terminal:IN', authorizations: ['STAMP'] };
 const transferRoom: Level = {
   ...LEVELS[0], id: 'transfer-fixture', walls: [], doors: [], plates: [], guards: [],

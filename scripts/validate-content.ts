@@ -20,7 +20,14 @@ const ids = new Set<string>();
 const wins = new Map<string, Game>();
 let zones = 0, layouts = 0;
 for (const mission of MISSIONS) {
-  const facts = new Set<string>();
+  const preparations = mission.preparations ?? [];
+  const facts = new Set(preparations.map(p => p.id));
+  assert.equal(facts.size, preparations.length, `Duplicate preparation in ${mission.id}`);
+  if (preparations.length) assert.equal(preparations[0].sources.length, 0, 'Original route must remain available to old saves');
+  for (const p of preparations) {
+    assert.ok(/^[a-z0-9-]+$/.test(p.id) && p.label.trim() && p.effect.trim() && p.cost.trim(), `Invalid preparation ${p.id}`);
+    for (const source of p.sources) assert.ok(MISSIONS.slice(0, MISSIONS.indexOf(mission)).some(m => m.id === source), `Unobtainable preparation evidence ${source}`);
+  }
   if (mission.endingAnchor !== undefined) {
     assert.ok(Number.isInteger(mission.endingAnchor) && mission.endingAnchor >= 0 && mission.endingAnchor < mission.stages.length - 1 && mission.stages[mission.endingAnchor].outcomes?.length, `Invalid ending rollback anchor in ${mission.id}`);
     const endings = stageVersions(mission.stages.at(-1)!).map(s => s.ending);
@@ -138,9 +145,14 @@ for (const mission of MISSIONS) {
 }
 // Validate reachable combinations, not just each layout in isolation. Every
 // outcome must have a real input witness from every prefix that reaches it.
-for (const mission of MISSIONS.filter(m => m.stages.some(s => stageVersions(s).some(v => v.outcomes?.length || v.level.credential?.from)))) {
+for (const mission of MISSIONS.filter(m => m.preparations?.length || m.stages.some(s => stageVersions(s).some(v => v.outcomes?.length || v.level.credential?.from)))) {
   const before = MISSIONS.slice(0, MISSIONS.indexOf(mission));
   let prefixes = [new Campaign({ version: 1, selected: mission.id, runs: Object.fromEntries(before.map(m => [m.id, []])), completed: before.map(m => m.id) })];
+  if (mission.preparations) prefixes = mission.preparations.map(p => {
+    const campaign = new Campaign(prefixes[0].export());
+    assert.ok(campaign.choosePreparation(p.id), `Cannot prepare ${p.id}`);
+    return campaign;
+  });
   for (let index = 0; index < mission.stages.length; index++) {
     const next = new Map<string, Campaign>();
     for (const prefix of prefixes) {
@@ -153,7 +165,7 @@ for (const mission of MISSIONS.filter(m => m.stages.some(s => stageVersions(s).s
         if (selected) reached.add(selected);
         const restored = new Campaign(campaign.export());
         assert.equal(restored.cleared(), index + 1, `Cannot restore ${stage.level.id}`);
-        next.set(JSON.stringify(restored.data.outcomes), restored);
+        next.set(JSON.stringify([restored.data.outcomes, restored.data.preparations]), restored);
       }
       for (const outcome of stage.outcomes ?? []) assert.ok(reached.has(outcome.id), `No executable choice ${outcome.id} after ${JSON.stringify(prefix.data.outcomes)}`);
     }

@@ -62,7 +62,7 @@ try {
 $('#app').innerHTML = `
   <header class="site-header">
     <a class="brand" href="./" aria-label="ECHO HEIST 首页"><span class="brand-symbol">${icons.echo}</span><span>ECHO HEIST<span class="brand-cn">回声劫案</span></span></a>
-    <div class="header-note"><span class="status-dot"></span> A SOLO CO-OP HEIST <span class="version">VOL. 18.0</span></div>
+    <div class="header-note"><span class="status-dot"></span> A SOLO CO-OP HEIST <span class="version">VOL. 19.0</span></div>
     <button class="text-button" id="help-button">行动手册 <span class="key">?</span></button>
   </header>
   <main>
@@ -154,7 +154,14 @@ const campaignUI = new CampaignUI(campaign, {
 const storyUI = new StoryUI(campaign, () => {
   clearInput(); accumulator = 0;
   if (game.status === 'running') game.togglePause();
-}, () => { clearInput(); accumulator = 0; refreshUI(); }, sound);
+}, () => { clearInput(); accumulator = 0; refreshUI(); }, sound, {
+  active: () => campaignMode && !demo,
+  readOnly: () => !!previewGame,
+  choose: id => changePreparation(id),
+  reset: () => changePreparation(),
+});
+$('#stage-bar').insertAdjacentHTML('beforebegin', '<section id="preparation-strip" class="preparation-strip" hidden aria-label="本次出发准备"><div><strong id="preparation-label"></strong><p id="preparation-description"></p></div><button id="open-preparation">修表铺 · 出发准备</button></section>');
+$('#open-preparation').addEventListener('click', () => storyUI.prepare());
 if (demo) $('#story-button').hidden = true;
 const operationUI = new OperationUI(() => { clearInput(); if (game.status === 'running') { game.togglePause(); refreshUI(); } });
 for (const selector of ['#mission-board', '#security-panel', '#power-panel', '#relay-panel', '#suppression-panel', '#delivery-panel', '#credential-journey details']) {
@@ -178,6 +185,25 @@ $('.manual-steps').insertAdjacentHTML('beforeend', '<li><strong>安排一场完�
 function saveCampaign() {
   try { localStorage.setItem(campaignKey, JSON.stringify(campaign.export())); campaignUI.checkpointSaved(true); }
   catch { campaignUI.checkpointSaved(false); }
+}
+
+function changePreparation(id?: string): boolean {
+  if (!campaignMode || demo || previewGame || campaign.indexOf(game.level.id) < 0) return false;
+  if (!(id ? campaign.choosePreparation(id) : campaign.resetPreparation())) return false;
+  // No old first-room recording may survive a layout change, including the
+  // shared later rooms. loadLevel must not persist the discarded live plan.
+  initialized = false;
+  for (const stage of campaign.mission.stages) {
+    delete plans[stage.level.id];
+    for (const variant of stage.variants ?? []) delete plans[variant.stage.level.id];
+  }
+  loadLevel(campaign.stage.level); persistPlan(); saveCampaign();
+  return true;
+}
+
+function startAction() {
+  game.start();
+  if (campaignMode && campaign.depart(game)) saveCampaign();
 }
 
 function rewindCampaign(index: number): boolean {
@@ -246,6 +272,7 @@ function loadLevel(level: Level) {
   game = new Game(level, campaignMode ? campaign.carryFor(level.id) : undefined, campaignMode ? campaign.credentialFor(level.id) : undefined);
   const restored = decodePlan(plans[game.level.id], game.level.id);
   if (restored) game.restorePlan(restored);
+  if (campaignMode && campaign.depart(game)) saveCampaign();
   $('#plan-status').textContent = restored?.length ? `已恢复 ${restored.length} 条回声` : '录制后自动保存';
   initialized = true;
   clearInput(); accumulator = 0;
@@ -272,7 +299,7 @@ function primaryAction() {
   if (demo && campaign.cleared() === campaign.mission.stages.length && ['ready', 'won'].includes(game.status)) { openMission(demoMission); return; }
   if (campaignMode && campaign.ending && ['ready', 'won'].includes(game.status)) { clearInput(); endingUI.show(campaign.ending, storyUI.state.endingNote()); return; }
   if (campaignMode && game.status === 'ready' && campaign.cleared() === campaign.mission.stages.length && campaign.nextMission) { openMission(campaign.nextMission.id); return; }
-  if (game.status === 'ready') game.start();
+  if (game.status === 'ready') startAction();
   else if (game.status === 'paused') game.togglePause();
   else if (game.status === 'caught') game.restart();
   else if (game.status === 'won') {
@@ -303,6 +330,13 @@ function record() {
 }
 
 function refreshUI() {
+  const preparation = campaignMode && !demo ? campaign.preparation : undefined;
+  $('#preparation-strip').hidden = !preparation;
+  if (preparation) {
+    const label = `${previewGame ? '只读预演 · ' : ''}${preparation.label} · ${campaign.preparationLocked ? '已锁定' : '尚未出发'}`;
+    if ($('#preparation-label').textContent !== label) $('#preparation-label').textContent = label;
+    if ($('#preparation-description').textContent !== preparation.effect) $('#preparation-description').textContent = preparation.effect;
+  }
   campaignUI.render(game, campaignMode, previewGame, demo);
   $('.game-layout').classList.toggle('previewing', !!previewGame);
   const key = `${game.tokenOwner}:${[...game.authorized].join(',')}:${game.status}:${game.editingIndex}:${game.canUndo}:${game.echoes.length}:${game.echoes.map(e => `${e.colorIndex}-${e.frames.length}-${e.delay ?? 0}`).join(',')}:${game.attempts}:${game.hasLoot}:${[...game.openDoors].join('')}:${[...game.circuits].join(',')}`;
@@ -542,7 +576,7 @@ window.addEventListener('keydown', event => {
   } else {
     if (game.status === 'ready' && campaignMode && campaign.cleared() === campaign.mission.stages.length) return;
     keys.add(event.code);
-    if (game.status === 'ready' && gameKeys.includes(event.code) && !event.code.startsWith('Shift')) game.start();
+    if (game.status === 'ready' && gameKeys.includes(event.code) && !event.code.startsWith('Shift')) startAction();
   }
 });
 window.addEventListener('keyup', event => keys.delete(event.code));
@@ -561,7 +595,7 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-directi
     if (previewGame) return;
     if (game.status === 'ready' && campaignMode && campaign.cleared() === campaign.mission.stages.length) return;
     event.preventDefault(); button.setPointerCapture(event.pointerId); keys.add(code); sound.unlock();
-    if (game.status === 'ready') game.start();
+    if (game.status === 'ready') startAction();
   });
   for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(event, () => keys.delete(code));
 }

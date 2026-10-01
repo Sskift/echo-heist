@@ -337,7 +337,7 @@ export class Game {
         this.signal(`${circuit.id} 操作冲突：保持原供电状态`);
         group.forEach(r => this.traceOperation(r, 'blocked', `同帧出现相反请求，${circuit.id} 保持原状态`));
       } else {
-        this.circuits.set(circuit.id, [...values][0]); this.signal(`${circuit.id} 电源${circuit.states ? '：' : ''}${this.circuitState(circuit.id)}`);
+        this.circuits.set(circuit.id, [...values][0]); this.signal(`${circuit.id} ${circuit.mechanical ? '门闩' : '电源'}${circuit.states ? '：' : ''}${this.circuitState(circuit.id)}`);
         group.forEach(r => this.traceOperation(r, 'success', `${circuit.id} 已${this.circuitState(circuit.id)}`));
       }
     }

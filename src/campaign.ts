@@ -5,16 +5,32 @@ import type { CredentialSnapshot } from './levels.ts';
 import { incomingCredential, outgoingCredential } from './credentials.ts';
 
 export const CAMPAIGN_KEY = 'echo-heist-campaign-v1';
-type CampaignSave = { version: 1; selected: string; runs: Record<string, string[]>; completed: string[]; outcomes?: Record<string, string>; endings?: string[]; carries?: Record<string, SavedPlan>; credentials?: Record<string, CredentialSnapshot> };
+type Prepared = { id: string; locked: boolean };
+type CampaignSave = { version: 1; selected: string; runs: Record<string, string[]>; completed: string[]; outcomes?: Record<string, string>; endings?: string[]; carries?: Record<string, SavedPlan>; credentials?: Record<string, CredentialSnapshot>; preparations?: Record<string, Prepared> };
 
 export class Campaign {
-  data: CampaignSave = { version: 1, selected: MISSIONS[0].id, runs: {}, completed: [], outcomes: {}, endings: [], carries: {}, credentials: {} };
+  data: CampaignSave = { version: 1, selected: MISSIONS[0].id, runs: {}, completed: [], outcomes: {}, endings: [], carries: {}, credentials: {}, preparations: {} };
   constructor(raw?: unknown) {
     if (!raw || typeof raw !== 'object') return;
     const save = raw as CampaignSave;
     if (save.version !== 1 || !save.runs || typeof save.runs !== 'object' || !Array.isArray(save.completed)) return;
     for (const mission of MISSIONS) {
       const cleared = save.runs[mission.id];
+      const preparation = save.preparations?.[mission.id];
+      if (mission.preparations && preparation !== undefined) {
+        const choice = mission.preparations.find(p => p.id === preparation?.id && p.sources.every(id => this.data.completed.includes(id)));
+        // A corrupt/newer preparation cannot reuse another layout's checkpoints.
+        // Historical evidence and chapter unlocks remain permanent.
+        if (!choice || typeof preparation.locked !== 'boolean') {
+          this.data.runs[mission.id] = [];
+          if (save.completed.includes(mission.id)) this.data.completed.push(mission.id);
+          continue;
+        }
+        this.data.preparations![mission.id] = { id: choice.id, locked: preparation.locked || (Array.isArray(cleared) && cleared.length > 0) };
+      } else if (mission.preparations && Array.isArray(cleared) && cleared.length) {
+        // Saves made before preparation existed continue the original route.
+        this.data.preparations![mission.id] = { id: mission.preparations[0].id, locked: true };
+      }
       // The old four-room finale has no retained recording. Preserve its
       // historical unlock but restart this newly authored operation safely.
       if (['C3-6', 'C4-6'].includes(mission.id) && Array.isArray(cleared) && cleared.some(id => new RegExp(`^${mission.id}-[a-d]$`).test(id))) {
@@ -23,7 +39,7 @@ export class Campaign {
         continue;
       }
       if (Array.isArray(cleared) && cleared.length <= mission.stages.length && cleared.every((id, i) => id === mission.stages[i].level.id)) {
-        const prefix: string[] = [], flags: string[] = [];
+        const prefix: string[] = [], flags = this.preparationFlags(mission);
         for (const id of cleared) {
           const current = resolveStage(mission.stages[prefix.length], flags);
           const outcome = current.outcomes?.find(o => o.id === save.outcomes?.[id]);
@@ -61,7 +77,7 @@ export class Campaign {
   cleared(id = this.mission.id): number { return this.data.runs[id]?.length ?? 0; }
   get stageIndex(): number { return Math.min(this.cleared(), this.mission.stages.length - 1); }
   stageAt(index: number): Stage {
-    const flags: string[] = [];
+    const flags = this.preparationFlags(this.mission);
     for (let i = 0; i < index && i < this.cleared(); i++) {
       const base = this.mission.stages[i], resolved = resolveStage(base, flags);
       flags.push(...resolved.grants);
@@ -91,10 +107,32 @@ export class Campaign {
     return !!this.ending && this.mission.endingAnchor !== undefined && this.returnTo(this.mission.endingAnchor);
   }
   get flags(): string[] {
-    return this.mission.stages.slice(0, this.cleared()).flatMap((base, i) => {
+    return [...this.preparationFlags(this.mission), ...this.mission.stages.slice(0, this.cleared()).flatMap((base, i) => {
       const s = this.stageAt(i), outcome = s.outcomes?.find(o => o.id === this.data.outcomes?.[base.level.id]);
       return [...s.grants, ...(outcome ? [outcome.id] : [])];
-    });
+    })];
+  }
+  private preparationFlags(mission: Mission): string[] {
+    const id = this.data.preparations?.[mission.id]?.id ?? mission.preparations?.[0]?.id;
+    return id ? [id] : [];
+  }
+  get preparation() { return this.mission.preparations?.find(p => p.id === this.preparationFlags(this.mission)[0]); }
+  get preparationOptions() { return this.mission.preparations?.filter(p => p.sources.every(id => this.data.completed.includes(id))) ?? []; }
+  get preparationLocked() { return !!this.data.preparations?.[this.mission.id]?.locked || this.cleared() > 0; }
+  choosePreparation(id: string): boolean {
+    if (!this.available(this.mission.id) || this.preparationLocked || !this.preparationOptions.some(p => p.id === id)) return false;
+    (this.data.preparations ??= {})[this.mission.id] = { id, locked: false };
+    return true;
+  }
+  depart(game: Game): boolean {
+    if (!this.preparation || this.preparationLocked || game.spectator || game.level.id !== this.stage.level.id || (game.status === 'ready' && !game.localPlan.length)) return false;
+    (this.data.preparations ??= {})[this.mission.id] = { id: this.preparation.id, locked: true };
+    return true;
+  }
+  resetPreparation(): boolean {
+    if (!this.preparation || !this.returnTo(0)) return false;
+    (this.data.preparations ??= {})[this.mission.id] = { id: this.preparation.id, locked: false };
+    return true;
   }
   available(id: string): boolean {
     const index = MISSIONS.findIndex(m => m.id === id);
@@ -118,6 +156,7 @@ export class Campaign {
     if (current.level.credential && !credential) return false;
     const outcomes = current.outcomes?.filter(o => outcomeSelected(o, game)) ?? [];
     if (current.outcomes?.length && outcomes.length !== 1) return false;
+    this.depart(game);
     if (outcomes[0]) (this.data.outcomes ??= {})[base.level.id] = outcomes[0].id;
     if (current.level.handoff) (this.data.carries ??= {})[base.level.id] = encodePlan(base.level.id, game.echoes);
     if (credential) (this.data.credentials ??= {})[base.level.id] = credential;

@@ -351,7 +351,8 @@ export class Renderer {
     for (const t of game.level.circuits ?? []) {
       const on = game.circuits.get(t.id), color = on ? colors.lime : colors.light, { lamp, lever } = this.circuits.get(t.id)!;
       const material = lamp.material as THREE.MeshStandardMaterial; material.color.set(color); material.emissive.set(color); lever.rotation.x = on ? -0.5 : 0.65;
-      this.label(t, 1.25, `${t.id} · ${game.circuitState(t.id)}`, color);
+      this.label(t, 1.25, `${t.id}${t.mechanical ? ' 门闩' : ''} · ${game.circuitState(t.id)}`, color);
+      if (t.mechanical && !game.spectator && Math.hypot(game.player.x - t.x, game.player.y - t.y) < 30) this.label(t, 1.95, on ? 'E 扣紧' : 'E 松闩');
     }
     if (this.loot) { this.loot.visible = game.level.delivery ? !game.evidenceDeposited : !game.hasLoot; this.label(game.level.delivery ?? game.level.loot, 1.42, game.level.handoff ? '核心 · 下一段目标' : game.level.delivery ? `${game.level.delivery.id} · E 植入` : game.hasLoot ? '已取走' : game.level.lootLabel ?? '目标', colors.light); }
     if (game.level.handoff || game.level.continuity) this.label({ x: 160, y: 530 }, 0.1, game.circuits.get('CIV') ? '街区恢复供电' : '街区停电', colors.light);
