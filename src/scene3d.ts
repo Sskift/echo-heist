@@ -5,6 +5,7 @@ import { doorPlates, ECHO_COLORS, HEIGHT, TILE, WIDTH, type Level, type Point } 
 import { Models3D, type ModelName, type CharacterRole } from './models3d.ts';
 import { VIEW_WIDTH, VIEW_HEIGHT } from './isometric.ts';
 import { SetDressing, setting, sceneLook } from './set-dressing.ts';
+import { SceneFinish, SurfaceRelief } from './scene-finish.ts';
 
 type Actor = ReturnType<Models3D['character']>;
 type Label = { at: Point; height: number; text: string; color: string };
@@ -20,6 +21,8 @@ export class Renderer {
   reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   readonly ctx: CanvasRenderingContext2D;
   private readonly gl: THREE.WebGLRenderer;
+  private readonly finish: SceneFinish;
+  private readonly relief = new SurfaceRelief();
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.OrthographicCamera(-20, 20, 12.5, -12.5, 0.1, 150);
   private readonly models = new Models3D();
@@ -27,7 +30,7 @@ export class Renderer {
   private readonly overlay = document.createElement('canvas');
   private readonly ground = document.createElement('canvas');
   private readonly groundTexture: THREE.CanvasTexture;
-  private readonly keyLight = new THREE.DirectionalLight('#ffedce', 2.6);
+  private readonly keyLight = new THREE.DirectionalLight('#b9d6ed', 2.8);
   private readonly mat = new Map<string, THREE.MeshStandardMaterial>();
   private readonly cube = new RoundedBoxGeometry(1, 1, 1, 2, 0.035);
   private readonly dressing = new SetDressing((...args) => this.box(...args));
@@ -54,15 +57,17 @@ export class Renderer {
     this.gl.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
     this.gl.setSize(VIEW_WIDTH, VIEW_HEIGHT, false);
     this.gl.shadowMap.enabled = true; this.gl.shadowMap.type = THREE.PCFShadowMap;
-    this.gl.toneMapping = THREE.ACESFilmicToneMapping; this.gl.toneMappingExposure = 1.02;
+    this.gl.toneMapping = THREE.ACESFilmicToneMapping; this.gl.toneMappingExposure = 1.12;
     this.scene.background = new THREE.Color('#14252d');
-    this.scene.add(new THREE.HemisphereLight('#d1e9ef', '#524a3a', 1.2));
-    this.keyLight.position.set(-9, 21, 1); this.keyLight.castShadow = true;
+    this.scene.add(new THREE.HemisphereLight('#adc7e0', '#42372d', 0.7));
+    this.keyLight.position.set(-12, 18, -8); this.keyLight.castShadow = true;
     this.keyLight.shadow.mapSize.set(2048, 2048); this.keyLight.shadow.camera.left = -23; this.keyLight.shadow.camera.right = 23; this.keyLight.shadow.camera.top = 18; this.keyLight.shadow.camera.bottom = -18;
     this.keyLight.shadow.camera.near = 1; this.keyLight.shadow.camera.far = 65; this.keyLight.shadow.bias = -0.0002; this.keyLight.shadow.normalBias = 0.035;
+    this.keyLight.shadow.radius = 2.2;
     this.scene.add(this.keyLight);
-    const rim = new THREE.DirectionalLight('#9dd5ed', 0.85); rim.position.set(18, 9, -12); this.scene.add(rim);
+    const rim = new THREE.DirectionalLight('#f4c88a', 0.65); rim.position.set(18, 9, 10); this.scene.add(rim);
     this.scene.add(this.levelRoot);
+    this.finish = new SceneFinish(this.gl, this.scene, this.camera);
     this.overlay.className = 'scene-labels'; this.overlay.width = VIEW_WIDTH; this.overlay.height = VIEW_HEIGHT;
     this.overlay.setAttribute('aria-hidden', 'true'); canvas.after(this.overlay); this.ctx = this.overlay.getContext('2d')!;
     this.ground.width = WIDTH; this.ground.height = HEIGHT;
@@ -74,7 +79,7 @@ export class Renderer {
   }
   private material(color: string, metalness = 0, roughness = 0.8) {
     const key = `${color}:${metalness}:${roughness}`;
-    if (!this.mat.has(key)) this.mat.set(key, new THREE.MeshStandardMaterial({ color, metalness, roughness }));
+    if (!this.mat.has(key)) this.mat.set(key, new THREE.MeshStandardMaterial({ color, metalness, roughness: metalness ? 0.48 : roughness, bumpMap: metalness ? null : this.relief.plaster, bumpScale: 0.025 }));
     return this.mat.get(key)!;
   }
   private box(parent: THREE.Object3D, x: number, y: number, z: number, w: number, h: number, d: number, color: string, metal = 0) {
@@ -88,7 +93,7 @@ export class Renderer {
     const material = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 2, roughness: 0.3 });
     const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.065, 10, 8), material); mesh.position.set(x, y, z); parent.add(mesh);
     mesh.userData.ownedMaterial = true; mesh.userData.ownedGeometry = true;
-    if (light && this.detail) { const lamp = new THREE.PointLight(color, 8, 4.5, 2); lamp.position.set(x, y - 0.12, z); parent.add(lamp); this.lamps.push(lamp); }
+    if (light && this.detail) { const lamp = new THREE.PointLight(color, 12, 5.5, 2); lamp.position.set(x, y - 0.12, z); parent.add(lamp); this.lamps.push(lamp); }
     return mesh;
   }
   private build(level: Level) {
@@ -104,12 +109,13 @@ export class Renderer {
     this.levelRoot.clear(); this.walls = []; this.actors.clear(); this.guardMotion.clear(); this.doors.clear(); this.terminals.clear(); this.tickets.clear(); this.circuits.clear(); this.suppressors.clear(); this.scanners.clear(); this.lamps = []; this.civicWindows = []; this.loot = undefined;
     const style = setting(level), look = sceneLook(level), { plaster, panel, floor: floorColor } = look;
     (this.scene.background as THREE.Color).set(look.background);
-    this.box(this.levelRoot, 0, -0.35, 0, 30.35, 0.65, 18.35, '#344951');
+    this.box(this.levelRoot, 0, -0.48, 0, 30.35, 0.92, 18.35, '#25333c');
     this.box(this.levelRoot, 0, -0.04, 0, 30, 0.12, 18, floorColor);
-    this.box(this.levelRoot, 0, -0.7, 0, 30.8, 0.12, 18.8, '#a08f6d', 0.45);
+    this.box(this.levelRoot, 0, -0.94, 0, 30.5, 0.12, 18.5, '#465357');
+    if (this.detail) this.dressing.foundation(level, this.levelRoot);
     const floorCanvas = this.dressing.floor(level, this.detail, floorColor);
     const texture = new THREE.CanvasTexture(floorCanvas); texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = 8;
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 18), new THREE.MeshStandardMaterial({ map: texture, roughness: 0.91 }));
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 18), new THREE.MeshStandardMaterial({ map: texture, roughness: style === 'museum' ? 0.7 : 0.87, bumpMap: style === 'museum' || style === 'archive' ? this.relief.wood : this.relief.stone, bumpScale: 0.055 }));
     floor.rotation.x = -Math.PI / 2; floor.position.y = 0.03; floor.receiveShadow = true; floor.userData.ownedGeometry = true; floor.userData.ownedTexture = true; this.levelRoot.add(floor);
     const fx = new THREE.Mesh(new THREE.PlaneGeometry(30, 18), new THREE.MeshBasicMaterial({ map: this.groundTexture, transparent: true, depthWrite: false, toneMapped: false }));
     fx.rotation.x = -Math.PI / 2; fx.position.y = 0.047; fx.userData.ownedGeometry = true; fx.userData.ownedMaterial = true; this.levelRoot.add(fx);
@@ -153,6 +159,11 @@ export class Renderer {
               window.position.set(px + (h > w ? w / 2 + 0.045 : 0), 1.68, pz + (w > h ? h / 2 + 0.045 : 0));
               if (h > w) window.rotation.y = Math.PI / 2;
               root.add(window);
+              if (['museum', 'gala', 'station', 'civic'].includes(style)) {
+                const pane = this.dressing.archWindow(window, level);
+                if (level.handoff || level.continuity) this.civicWindows.push(pane);
+                continue;
+              }
               this.box(window, 0, 0, 0, 1.16, 1.44, 0.09, '#b8a77c', 0.5);
               const pane = this.box(window, 0, 0, 0.06, 1.03, 1.3, 0.05, '#274b65', 0.45);
               pane.material = new THREE.MeshStandardMaterial({ color: '#284b64', emissive: '#345973', emissiveIntensity: 0.38, roughness: 0.25, metalness: 0.35 });
@@ -222,6 +233,12 @@ export class Renderer {
       for (const d of game.level.doors.filter(d => doorPlates(d).includes(plate.id))) line([plate, { x: plate.x, y: d.y + d.h / 2 }, { x: d.x + d.w / 2, y: d.y + d.h / 2 }], active ? '#c3ed82a0' : '#4d6f6965', [4, 6]);
       c.fillStyle = active ? '#c3ed8280' : '#234847b0'; c.fillRect(plate.x - 17, plate.y - 17, 34, 34); c.strokeStyle = active ? colors.lime : '#90ac9a'; c.lineWidth = 2; c.strokeRect(plate.x - 17, plate.y - 17, 34, 34);
       c.font = 'bold 15px sans-serif'; c.textAlign = 'center'; c.fillStyle = active ? '#fff8c5' : '#d2d9c0'; c.fillText(plate.id, plate.x, plate.y + 5); c.textAlign = 'left';
+    }
+    for (const circuit of game.level.circuits ?? []) if (circuit.feed) {
+      const source = (circuit.feed.remote ? game.carried?.level : game.level)?.plates.find(p => p.id === circuit.feed!.plate);
+      const active = !!game.circuits.get(circuit.id);
+      if (source) line([source, { x: circuit.x, y: source.y }, circuit], active ? '#b8e6d7c0' : '#82aaa088', [3, 4]);
+      for (const door of game.level.doors.filter(d => d.power?.id === circuit.id)) line([circuit, { x: circuit.x, y: door.y + door.h / 2 }, { x: door.x + door.w / 2, y: door.y + door.h / 2 }], active ? '#b8e6d7b0' : '#54798166', [3, 4]);
     }
     const exit = game.exitPoint; c.fillStyle = '#214c4380'; c.fillRect(exit.x - 24, exit.y - 24, 48, 48); c.strokeStyle = game.exitReady ? colors.lime : '#bdb092'; c.lineWidth = 2; c.setLineDash([7, 5]); c.strokeRect(exit.x - 26, exit.y - 26, 52, 52); c.setLineDash([]);
     game.guards.forEach((g, i) => {
@@ -302,6 +319,7 @@ export class Renderer {
     const width = Math.round(this.canvas.clientWidth || VIEW_WIDTH);
     if (this.renderWidth !== width) {
       this.renderWidth = width; this.gl.setSize(width, Math.round(width * VIEW_HEIGHT / VIEW_WIDTH), false);
+      this.finish.resize(width, Math.round(width * VIEW_HEIGHT / VIEW_WIDTH));
       const size = width < 600 ? 1024 : 2048;
       if (this.keyLight.shadow.mapSize.x !== size) { this.keyLight.shadow.map?.dispose(); this.keyLight.shadow.map = null; this.keyLight.shadow.mapSize.set(size, size); }
     }
@@ -350,8 +368,8 @@ export class Renderer {
     }
     for (const t of game.level.circuits ?? []) {
       const on = game.circuits.get(t.id), color = on ? colors.lime : colors.light, { lamp, lever } = this.circuits.get(t.id)!;
-      const material = lamp.material as THREE.MeshStandardMaterial; material.color.set(color); material.emissive.set(color); lever.rotation.x = on ? -0.5 : 0.65;
-      this.label(t, 1.25, `${t.id}${t.mechanical ? ' 门闩' : ''} · ${game.circuitState(t.id)}`, color);
+      const material = lamp.material as THREE.MeshStandardMaterial; material.color.set(color); material.emissive.set(color); if (lever) lever.rotation.x = on ? -0.5 : 0.65;
+      this.label(t, 1.25, `${t.id}${t.mechanical ? ' 门闩' : t.feed ? ` ← ${t.feed.plate}` : ''} · ${game.circuitState(t.id)}`, color);
       if (t.mechanical && !game.spectator && Math.hypot(game.player.x - t.x, game.player.y - t.y) < 30) this.label(t, 1.95, on ? 'E 扣紧' : 'E 松闩');
     }
     if (this.loot) { this.loot.visible = game.level.delivery ? !game.evidenceDeposited : !game.hasLoot; this.label(game.level.delivery ?? game.level.loot, 1.42, game.level.handoff ? '核心 · 下一段目标' : game.level.delivery ? `${game.level.delivery.id} · E 植入` : game.hasLoot ? '已取走' : game.level.lootLabel ?? '目标', colors.light); }
@@ -362,6 +380,6 @@ export class Renderer {
     for (const s of game.level.scanners ?? []) { const active = game.scanning(s); this.scanners.get(s.id)!.emissiveIntensity = active ? 1.6 : 0.03; this.label({ x: s.x + s.w / 2, y: s.y }, 0.15, `${s.id} · ${active ? '扫描' : '空档'}`, colors.red); }
     for (const s of game.level.suppressors ?? []) { const active = game.suppressionActive(s); this.suppressors.get(s.id)!.emissiveIntensity = active ? 1.6 : 0.03; this.label({ x: s.x + s.w / 2, y: s.y }, 0.15, `${s.id} · ${active ? '抑制' : '空档'}`, '#d2a0ef'); }
     for (const r of game.level.delivery?.receivers ?? []) this.label(r.at, 0.1, `${r.guard} 回执${game.evidenceReceipts.has(r.guard) ? ' ✓' : ' …'}`, colors.cyan);
-    this.gl.render(this.scene, this.camera); this.hud(game, dt);
+    this.finish.draw(this.scene, this.camera, this.detail, width); this.hud(game, dt);
   }
 }

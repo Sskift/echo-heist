@@ -1,7 +1,7 @@
 # ECHO HEIST contributor notes
 
 - Work directly on `main` as authorized by the project owner. Normal commits and pushes are authorized; do not force-push or delete unrelated work.
-- Use `docs/next-steps.md` as the current development plan and `docs/production-status.md` for completed work. The eight chapters have a real 3D / 2.5D art baseline, and C0 / C1 evidence-based preparations shipped in v0.19. Next connect C2 grid evidence to the C3-5 bypass arrangement, then continue the remaining continuity work. Preserve the completed C3-6 retained teammate and C4-6 credential handoff. Do not revive retired scope or playtime budgets.
+- Use `docs/next-steps.md` as the current development plan and `docs/production-status.md` for completed work. The latest user feedback prioritizes art: finish v0.20 night lighting, architectural detail and character clothing, checking real scenes and rendering cost. C0 / C1 evidence preparations shipped in v0.19; C2 evidence now connects to the C3-5 bypass. Preserve the C3-6 retained teammate and C4-6 credential handoff. Do not revive retired scope or playtime budgets.
 - Keep gameplay deterministic at a fixed 60 Hz. The engine must remain usable without a browser.
 - Preserve exact-position replay, end-pose holding, maximum three echoes, and explicit handling of full slots.
 - Keep one playable route per training level and validate main-story routes with `npm run check:content`. Do not duplicate chapter walkthroughs across unit and browser tests.

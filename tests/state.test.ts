@@ -30,12 +30,14 @@ test('only archived evidence permits preparation; missing old-save evidence neve
   assert.ok(campaign.choosePreparation('museum-service'));
   assert.equal(campaign.stage.level.id, 'C0-6-a-service');
   assert.ok(campaign.flags.includes('museum-service'));
-  const gala = preparationMission('C1-6');
-  for (const id of ['C1-1', 'C1-4']) {
-    const save = gala.export(); save.completed = save.completed.filter(m => m !== id);
-    assert.equal(new Campaign(save).choosePreparation('gala-handover'), false);
+  for (const [mission, choice, sources] of [['C1-6', 'gala-handover', ['C1-1', 'C1-4']], ['C3-5', 'grid-bypass', ['C2-6', 'C3-4']]] as const) {
+    const ready = preparationMission(mission);
+    for (const id of sources) {
+      const save = ready.export(); save.completed = save.completed.filter(m => m !== id);
+      assert.equal(new Campaign(save).choosePreparation(choice), false);
+    }
+    assert.ok(ready.choosePreparation(choice));
   }
-  assert.ok(gala.choosePreparation('gala-handover'));
 });
 
 test('departure freezes a preparation through retry, reload and rollback; rehearsal cannot freeze it', () => {

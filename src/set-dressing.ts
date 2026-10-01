@@ -13,7 +13,7 @@ export function setting(level: Level): Setting {
   return 'archive';
 }
 const looks = {
-  museum: { plaster: '#586d62', panel: '#284940', floor: '#79624c', trim: '#bca16d', cap: '#8e9e89', light: '#f7d897', background: '#14252d', title: '旧馆 · 失物档案' },
+  museum: { plaster: '#50696b', panel: '#213c40', floor: '#79624c', trim: '#bca16d', cap: '#748984', light: '#ffd196', background: '#101d2a', title: '旧馆 · 失物档案' },
   gala: { plaster: '#805962', panel: '#422e40', floor: '#bbb095', trim: '#c3a568', cap: '#aa8d76', light: '#ffd6a0', background: '#261f31', title: '夜场 · 拍卖会' },
   records: { plaster: '#827769', panel: '#435e58', floor: '#8a9181', trim: '#b7a27a', cap: '#9b9e8b', light: '#dfe9bb', background: '#1c302f', title: '市政档案 · 转运区' },
   power: { plaster: '#5c7075', panel: '#32444b', floor: '#626d6e', trim: '#b59a52', cap: '#89958d', light: '#b5e2e7', background: '#182832', title: '市政配电 · 维护区' },
@@ -29,6 +29,43 @@ export const sceneLook = (level: Level) => looks[setting(level)];
 // wall art stays on wall faces, and painted floor markings add no cover.
 export class SetDressing {
   constructor(private box: Box) {}
+
+  foundation(level: Level, root: THREE.Object3D) {
+    const industrial = ['power', 'retention', 'vault'].includes(setting(level));
+    const stones: { x: number; y: number; z: number; w: number; h: number; d: number }[] = [];
+    for (let row = 0; row < 3; row++) {
+      const y = -0.22 - row * 0.25;
+      for (let x = -15; x < 15; x += 1.5) stones.push({ x: x + 0.72, y, z: 9.185, w: 1.46, h: 0.22, d: 0.09 });
+      for (let z = -9; z < 9; z += 1.5) stones.push({ x: 15.185, y, z: z + 0.72, w: 0.09, h: 0.22, d: 1.46 });
+    }
+    const masonry = new THREE.InstancedMesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.95 }), stones.length);
+    const transform = new THREE.Object3D(), shade = new THREE.Color();
+    stones.forEach((stone, index) => {
+      transform.position.set(stone.x, stone.y, stone.z); transform.scale.set(stone.w, stone.h, stone.d); transform.updateMatrix(); masonry.setMatrixAt(index, transform.matrix);
+      shade.set(industrial ? '#42505a' : '#686257').multiplyScalar(0.8 + (index * 7 % 11) / 35); masonry.setColorAt(index, shade);
+    });
+    masonry.castShadow = masonry.receiveShadow = true; masonry.userData.ownedGeometry = masonry.userData.ownedMaterial = true; root.add(masonry);
+    if (industrial) for (let x = -13; x < 15; x += 4) {
+      this.box(root, x, -0.45, 9.26, 0.2, 0.88, 0.13, '#273640', 0.5);
+      for (const y of [-0.16, -0.7]) this.box(root, x, y, 9.34, 0.07, 0.07, 0.025, '#9c9b88', 0.6);
+    }
+  }
+
+  archWindow(root: THREE.Object3D, level: Level) {
+    const outline = (radius: number, bottom: number) => {
+      const shape = new THREE.Shape(); shape.moveTo(-radius, bottom); shape.lineTo(radius, bottom); shape.lineTo(radius, 0.15);
+      shape.absarc(0, 0.15, radius, 0, Math.PI, false); shape.closePath(); return shape;
+    };
+    const frameShape = outline(0.66, -0.76); frameShape.holes.push(new THREE.Path(outline(0.53, -0.64).getPoints()));
+    const frame = new THREE.Mesh(new THREE.ExtrudeGeometry(frameShape, { depth: 0.09, bevelEnabled: true, bevelSegments: 1, steps: 1, bevelSize: 0.025, bevelThickness: 0.02 }), new THREE.MeshStandardMaterial({ color: sceneLook(level).trim, metalness: 0.35, roughness: 0.5 }));
+    frame.castShadow = frame.receiveShadow = true; frame.userData.ownedGeometry = frame.userData.ownedMaterial = true; root.add(frame);
+    const pane = new THREE.Mesh(new THREE.ShapeGeometry(outline(0.53, -0.64)), new THREE.MeshStandardMaterial({ color: '#203b55', emissive: '#3e7596', emissiveIntensity: 0.3, metalness: 0.2, roughness: 0.26 }));
+    pane.position.z = 0.025; pane.userData.ownedGeometry = pane.userData.ownedMaterial = true; root.add(pane);
+    this.box(root, 0, -0.02, 0.13, 0.045, 1.41, 0.055, '#acb6a6', 0.5);
+    this.box(root, 0, -0.19, 0.13, 1.06, 0.045, 0.055, '#acb6a6', 0.5);
+    this.box(root, 0, -0.78, 0.13, 1.47, 0.12, 0.35, sceneLook(level).cap);
+    return pane;
+  }
 
   private chapterFloor(c: CanvasRenderingContext2D, level: Level, detail: boolean) {
     const style = setting(level), look = sceneLook(level), formal = style === 'gala' || style === 'civic' || style === 'vault';
@@ -79,7 +116,7 @@ export class SetDressing {
   floor(level: Level, detail: boolean, fallback: string) {
     const canvas = document.createElement('canvas'); canvas.width = 960; canvas.height = 576;
     const c = canvas.getContext('2d')!, style = setting(level);
-    if (!['museum', 'station', 'archive'].includes(style)) { this.chapterFloor(c, level, detail); return canvas; }
+    if (!['museum', 'station', 'archive'].includes(style)) { this.chapterFloor(c, level, detail); this.floorContact(c, level); return canvas; }
     c.fillStyle = style === 'station' ? '#637572' : style === 'museum' ? '#79624c' : fallback; c.fillRect(0, 0, 960, 576);
     if (style === 'station') {
       c.fillStyle = '#526662'; c.fillRect(480, 32, 224, 512); c.fillStyle = '#7c7769'; c.fillRect(736, 32, 192, 512);
@@ -116,7 +153,17 @@ export class SetDressing {
         c.font = '500 15px serif'; c.textAlign = 'center'; c.fillStyle = '#ccb78c90'; c.fillText('旧 馆 · 失 物 档 案', 234, 288);
       }
     }
+    this.floorContact(c, level);
     return canvas;
+  }
+
+  private floorContact(context: CanvasRenderingContext2D, level: Level) {
+    // Static masonry contacts are baked once per room. Doors and characters
+    // retain real-time shadows, so opening a gate never leaves a fake shadow.
+    const mask = document.createElement('canvas'); mask.width = 960; mask.height = 576;
+    const c = mask.getContext('2d')!; c.fillStyle = '#142025'; c.beginPath();
+    for (const wall of level.walls) c.rect(wall.x, wall.y, 32, 32);
+    c.fill(); context.save(); context.globalAlpha = 0.42; context.filter = 'blur(7px)'; context.drawImage(mask, 0, 0); context.restore();
   }
 
   private panel(parent: THREE.Object3D, width: number, height: number, paint: (c: CanvasRenderingContext2D) => void) {
@@ -132,6 +179,23 @@ export class SetDressing {
     group.position.set(horizontal ? 0 : width / 2 + 0.015, 0, horizontal ? depth / 2 + 0.015 : 0);
     if (!horizontal) group.rotation.y = Math.PI / 2; root.add(group);
     const span = Math.max(width, depth);
+    const paneled = ['museum', 'gala', 'station', 'civic', 'archive'].includes(style);
+    if (paneled) {
+      // Recessed lower panels and a stepped cornice give walls a scale between
+      // the architecture and the characters. They sit on occupied wall faces.
+      const bays = Math.max(1, Math.floor(span / 2.4)), step = span / bays;
+      for (let i = 0; i < bays; i++) {
+        const x = -span / 2 + step * (i + 0.5);
+        this.box(group, x, 0.38, 0.025, step - 0.26, 0.43, 0.045, '#142e33');
+        this.box(group, x, 0.62, 0.065, step - 0.2, 0.038, 0.055, look.trim, 0.3);
+        for (const side of [-1, 1]) this.box(group, x + side * (step / 2 - 0.12), 0.39, 0.06, 0.04, 0.49, 0.065, look.cap);
+      }
+      this.box(group, 0, 0.1, 0.07, span, 0.12, 0.16, look.panel);
+      if (height > 2) {
+        this.box(group, 0, height - 0.16, 0.07, span, 0.14, 0.16, look.panel);
+        this.box(group, 0, height - 0.06, 0.1, span, 0.055, 0.23, look.trim, 0.3);
+      }
+    }
     if (style === 'power') {
       for (const y of [height - 0.21, height - 0.38]) this.box(group, 0, y, 0.02, span, 0.075, 0.075, '#929c91', 0.6);
       for (let x = -span / 2 + 0.4; x < span / 2; x += 3) this.box(group, x, height - 0.29, 0.02, 0.13, 0.35, 0.13, '#3d4a4c', 0.5);
@@ -313,6 +377,18 @@ export class SetDressing {
       const lamp = this.box(group, 0, 0.35, 0.12, 0.24, 0.12, 0.035, '#c7b386');
       lamp.material = new THREE.MeshStandardMaterial({ color: '#c7b386', roughness: 0.7 }); lamp.userData.ownedMaterial = true;
       return { lamp, lever };
+    }
+    if (circuit.feed) {
+      this.box(group, 0, 0.08, 0, 0.74, 0.16, 0.62, '#354b4e', 0.5);
+      this.box(group, 0, 0.56, 0, 0.64, 0.8, 0.48, '#476572', 0.4);
+      this.box(group, 0, 0.58, 0.25, 0.5, 0.59, 0.045, '#243c44', 0.5);
+      for (const x of [-0.15, 0.15]) {
+        this.box(group, x, 0.58, 0.285, 0.075, 0.39, 0.06, '#c7a66d', 0.7);
+        for (const y of [0.42, 0.57, 0.72]) this.box(group, x, y, 0.32, 0.16, 0.06, 0.06, '#778e8a', 0.4);
+      }
+      const lamp = this.box(group, 0, 0.89, 0.285, 0.42, 0.07, 0.05, '#b8d78e');
+      lamp.material = new THREE.MeshStandardMaterial({ color: '#b8d78e', emissive: '#b8d78e', emissiveIntensity: 0.8 }); lamp.userData.ownedMaterial = true;
+      return { lamp, lever: undefined };
     }
     this.box(group, 0, 0.08, 0, 0.7, 0.16, 0.65, '#354b4e', 0.4);
     this.box(group, 0, 0.52, 0, 0.62, 0.76, 0.48, look.panel, 0.4);

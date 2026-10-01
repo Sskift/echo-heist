@@ -99,10 +99,17 @@ export class Models3D {
       add(clothing, [0, 0.15, -0.32], [0.49, 0.57, 0.25], '#625e77');
       add(clothing, [0.19, 0.68, -0.32], [0.05, 0.52, 0.05], '#b6a0de');
     } else {
-      add(scarf, [0, -0.025, 0.025], [0.41, 0.13, 0.39], '#57a8ac');
-      add(scarf, [-0.14, -0.24, 0.22], [0.16, 0.46, 0.075], '#71bcb7');
-      add(clothing, [0.1, 0.07, -0.28], [0.4, 0.45, 0.22], '#385a60');
-      add(clothing, [0.1, 0.09, -0.405], [0.28, 0.06, 0.035], '#c5ad70');
+      add(clothing, [0, 0.17, 0], [0.59, 0.61, 0.4], '#25474f');
+      for (const side of [-1, 1]) {
+        const lapel = add(clothing, [side * 0.17, 0.35, 0.22], [0.11, 0.34, 0.055], '#678b8b'); lapel.rotation.z = side * 0.32;
+        const tail = add(clothing, [side * 0.17, -0.22, -0.025], [0.29, 0.46, 0.4], '#2e5059'); tail.rotation.z = side * 0.12;
+      }
+      add(clothing, [0, -0.035, 0.015], [0.63, 0.065, 0.44], '#6c4b34');
+      add(clothing, [0, -0.035, 0.255], [0.1, 0.07, 0.035], '#c9ab68');
+      add(scarf, [0, -0.025, 0.025], [0.43, 0.14, 0.42], '#c27a51');
+      add(scarf, [-0.15, -0.25, 0.245], [0.15, 0.47, 0.065], '#de9864');
+      add(clothing, [0.1, 0.07, -0.31], [0.4, 0.45, 0.24], '#634d39');
+      add(clothing, [0.1, 0.09, -0.445], [0.28, 0.065, 0.035], '#c5ad70');
     }
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.28, 0.33, 32, 1, 0, ghost ? Math.PI * 1.6 : Math.PI * 2), new THREE.MeshBasicMaterial({ color: tint ?? (role === 'guard' ? '#d6ad78' : role === 'tracker' ? '#b797e7' : '#c8e7d3'), transparent: true, opacity: 0.7, depthWrite: false }));
     ring.rotation.x = -Math.PI / 2; ring.position.y = 0.055; ring.userData.ownedGeometry = true; ring.userData.ownedMaterial = true; group.add(ring);

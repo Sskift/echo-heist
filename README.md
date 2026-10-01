@@ -2,13 +2,19 @@
 
 一个关于配合、身份和记忆归属的 2.5D 潜入解谜游戏。你的同伙是过去十二秒里的自己：录下行动、安排回声出场，再让现在的你完成交接、取证与撤离。
 
-当前版本 **0.19.0**。八章主线、48 个任务、130 个必经行动区，另有 18 个分支布局、4 个机制演习和 3 个基础演习。所有内容本地运行，支持单 HTML 离线版。
+当前开发版本 **0.20.0**。八章主线、48 个任务、130 个必经行动区，另有 21 个分支布局、4 个机制演习和 3 个基础演习。所有内容本地运行，支持单 HTML 离线版。
+
+0.20 重新调整夜间美术：冷色主光与暖色壁灯、墙脚接触阴影、木材与石材表面凹凸、拱窗、墙裙、檐口和可见的建筑底座。玩家采用长外套、铜色围巾与皮革背包。桌面加入轻微灯光晕染和抗锯齿；手机与简洁画面保留轻量渲染。全部显示从同一个 3D 场景生成。
+
+0.20 把 C2-6 的转运总表与 C3-4 的专线接口接入 C3-5《只留一条供电线》。原方案依靠同伙按时切电；旁路方案安排两人分别值守，真人处理取件、归位和监控复位。自动接线柜具有独立模型、确认位标签与随供电变化的地面连线。
 
 0.19 让证据进入出发准备：C0-4 的检修图可在 C0-6 打开旧馆北侧机械通道；C1-1 的时刻表与 C1-4 的岗位记录可在 C1-6 改变迎宾扫描和双人核验窗口。在这两场任务的「修表铺 · 出发准备」查看证据来源、改变的设施与配合代价。首次出发后锁定安排；重新准备会清空本次所有阶段的录像和锚点，已取得的证据与章节解锁保留。
 
 查看 [检修门闩与回声配合](docs/preparation-v019-museum.png) · [修表铺的宴会准备](docs/preparation-v019-watchmaker.png)。
 
-![旧馆的展陈、角色与固定等距镜头](docs/scene-v017-museum.png)
+![0.20 旧馆实际游戏画面](docs/scene-v020-museum.png)
+
+查看 [人物近景](docs/scene-v020-player.png) · [车站与交接柜](docs/scene-v020-station.png)。
 
 场景采用真实 3D 模型、骨骼动画、材质与实时阴影，以固定等距镜头游玩。旧馆使用木地板镶边、城市旧影和失物展柜，[车站场景](docs/scene-v017-station.png)使用石材分区、时钟与双面交接柜。玩家、普通守卫、追踪器和回声分别有不同的服饰轮廓，凭据显示在实际持有者手中或柜槽里。
 
@@ -67,7 +73,7 @@ npm run check:content    # 所有关卡参考路线与分支提交，仅在这�
 npm run build           # 严格类型检查、未使用代码检查与生产构建
 npx playwright install chromium
 npm run test:browser    # 9 个主要用户流程，含 3D 资源、画面方向输入与出发准备
-npm run package:offline # 生成 .local/releases/echo-heist-v0.19.0.html
+npm run package:offline # 生成 .local/releases/echo-heist-v0.20.0.html
 ```
 
 Windows 可设置 `$env:PLAYWRIGHT_CHANNEL='chrome'` 使用已安装的 Chrome。关卡参考路线使用真实模拟输入，验证可完成性；不代表真人首玩难度或实际时长。
@@ -79,6 +85,8 @@ Windows 可设置 `$env:PLAYWRIGHT_CHANNEL='chrome'` 使用已安装的 Chrome�
 - `src/engine.ts`：独立于浏览器的固定 60 Hz 模拟；精确回放、终点值守、最多三个回声。
 - `src/campaign*.ts`、`src/chapter-*.ts`：关卡、任务锚点、分支与结局。
 - `src/mission-preparations.ts`：证据来源、准备代价与对应的真实设施布局。
+- `src/grid-preparation.ts`：配电站旁路的三段值守、取件与复位配合。
+- `src/scene-finish.ts`：轻量灯光后处理与本地生成的材质凹凸。
 - `src/story.ts`：完整幕间剧本、解锁规则与对话存档。
 - `src/story-ui.ts`、`src/story.css`：修表铺插图、阅读器与调查回顾。
 - `src/scene3d.ts`、`src/models3d.ts`、`src/set-dressing.ts`：3D 场景、骨骼服饰、各章陈设、等距镜头与实际规则提示。
