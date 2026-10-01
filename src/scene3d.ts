@@ -6,6 +6,7 @@ import { Models3D, type ModelName, type CharacterRole } from './models3d.ts';
 import { VIEW_WIDTH, VIEW_HEIGHT } from './isometric.ts';
 import { SetDressing, setting, sceneLook } from './set-dressing.ts';
 import { SceneFinish, SurfaceRelief } from './scene-finish.ts';
+import { WindowLight } from './window-light.ts';
 
 type Actor = ReturnType<Models3D['character']>;
 type Label = { at: Point; height: number; text: string; color: string };
@@ -30,7 +31,7 @@ export class Renderer {
   private readonly overlay = document.createElement('canvas');
   private readonly ground = document.createElement('canvas');
   private readonly groundTexture: THREE.CanvasTexture;
-  private readonly keyLight = new THREE.DirectionalLight('#b9d6ed', 2.8);
+  private readonly keyLight = new THREE.DirectionalLight('#a8c5df', 2.25);
   private readonly mat = new Map<string, THREE.MeshStandardMaterial>();
   private readonly cube = new RoundedBoxGeometry(1, 1, 1, 2, 0.035);
   private readonly dressing = new SetDressing((...args) => this.box(...args));
@@ -59,7 +60,7 @@ export class Renderer {
     this.gl.shadowMap.enabled = true; this.gl.shadowMap.type = THREE.PCFShadowMap;
     this.gl.toneMapping = THREE.ACESFilmicToneMapping; this.gl.toneMappingExposure = 1.12;
     this.scene.background = new THREE.Color('#14252d');
-    this.scene.add(new THREE.HemisphereLight('#adc7e0', '#42372d', 0.7));
+    this.scene.add(new THREE.HemisphereLight('#adc7e0', '#42372d', 0.86));
     this.keyLight.position.set(-12, 18, -8); this.keyLight.castShadow = true;
     this.keyLight.shadow.mapSize.set(2048, 2048); this.keyLight.shadow.camera.left = -23; this.keyLight.shadow.camera.right = 23; this.keyLight.shadow.camera.top = 18; this.keyLight.shadow.camera.bottom = -18;
     this.keyLight.shadow.camera.near = 1; this.keyLight.shadow.camera.far = 65; this.keyLight.shadow.bias = -0.0002; this.keyLight.shadow.normalBias = 0.035;
@@ -90,10 +91,10 @@ export class Renderer {
     const model = this.models.furniture(name, width, depth, height); model.position.set(x, y, z); parent.add(model); return model;
   }
   private bulb(parent: THREE.Object3D, x: number, y: number, z: number, color = colors.light, light = false) {
-    const material = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 2, roughness: 0.3 });
+    const material = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.1, roughness: 0.3 });
     const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.065, 10, 8), material); mesh.position.set(x, y, z); parent.add(mesh);
     mesh.userData.ownedMaterial = true; mesh.userData.ownedGeometry = true;
-    if (light && this.detail) { const lamp = new THREE.PointLight(color, 12, 5.5, 2); lamp.position.set(x, y - 0.12, z); parent.add(lamp); this.lamps.push(lamp); }
+    if (light && this.detail) { const lamp = new THREE.PointLight(color, 5.5, 5.5, 2); lamp.position.set(x, y - 0.12, z); parent.add(lamp); this.lamps.push(lamp); }
     return mesh;
   }
   private build(level: Level) {
@@ -119,6 +120,7 @@ export class Renderer {
     floor.rotation.x = -Math.PI / 2; floor.position.y = 0.03; floor.receiveShadow = true; floor.userData.ownedGeometry = true; floor.userData.ownedTexture = true; this.levelRoot.add(floor);
     const fx = new THREE.Mesh(new THREE.PlaneGeometry(30, 18), new THREE.MeshBasicMaterial({ map: this.groundTexture, transparent: true, depthWrite: false, toneMapped: false }));
     fx.rotation.x = -Math.PI / 2; fx.position.y = 0.047; fx.userData.ownedGeometry = true; fx.userData.ownedMaterial = true; this.levelRoot.add(fx);
+    const windowLight = new WindowLight(level);
     const remaining = new Set(level.walls.map(p => `${p.x / TILE},${p.y / TILE}`));
     for (const cell of level.walls) {
       const cx = cell.x / TILE, cy = cell.y / TILE; if (!remaining.has(`${cx},${cy}`)) continue;
@@ -162,6 +164,7 @@ export class Renderer {
               if (['museum', 'gala', 'station', 'civic'].includes(style)) {
                 window.scale.set(1.1, 1.3, 1);
                 const pane = this.dressing.archWindow(window, level);
+                windowLight.add(x + window.position.x, z + window.position.z, w > h);
                 if (level.handoff || level.continuity) this.civicWindows.push(pane);
                 continue;
               }
@@ -179,12 +182,14 @@ export class Renderer {
       }
       this.walls.push({ root, x: cell.x, y: cell.y, w: w * TILE, h: h * TILE, tall: height > 1 });
     }
+    if (this.detail) windowLight.attach(this.levelRoot);
     for (const door of level.doors) {
       const pos = world({ x: door.x + door.w / 2, y: door.y + door.h / 2 }), group = new THREE.Group(); group.position.copy(pos); this.levelRoot.add(group);
       const vertical = door.h > door.w, width = (vertical ? door.h : door.w) / TILE;
       if (vertical) group.rotation.y = Math.PI / 2;
       this.box(group, -width / 2 + 0.08, 0.97, 0, 0.16, 1.94, 0.6, look.cap); this.box(group, width / 2 - 0.08, 0.97, 0, 0.16, 1.94, 0.6, look.cap);
       this.box(group, 0, 1.91, 0, width, 0.15, 0.6, look.trim, 0.35);
+      if (this.detail) this.dressing.doorCrown(level, group, width);
       const panelGroup = new THREE.Group(); group.add(panelGroup);
       this.box(panelGroup, 0, 0.87, 0, width - 0.25, 1.7, 0.12, look.panel, 0.35);
       const industrial = style === 'power' || style === 'retention';
@@ -366,7 +371,12 @@ export class Renderer {
       const role = def.kind === 'camera' ? '镜头' : def.kind === 'tracker' ? '追踪' : def.speed > 0 ? '巡逻' : '哨兵';
       this.label(g, def.kind === 'camera' ? 1.8 : 2.35, `${role} ${game.guardName(i)}${!enabled ? ' · 停机' : g.suspicion > 0.2 ? ' !' : g.investigate ? ' · 调查' : g.trace ? ' · 追踪' : ''}`, colors.light);
     });
-    for (const d of game.level.doors) { const open = game.openDoors.has(d.id); this.doors.get(d.id)!.visible = !open; this.label({ x: d.x + d.w / 2, y: d.y + d.h / 2 }, 2.18, `${d.id} · ${open ? '开' : '关'}${d.window ? ` ${d.window.join('–')}s` : ''}`, open ? colors.lime : '#e2bd91'); }
+    for (const d of game.level.doors) {
+      const open = game.openDoors.has(d.id), span = Math.max(d.w, d.h) / TILE;
+      const crown = this.detail && span <= 2.5 && ['museum', 'gala', 'civic', 'archive'].includes(setting(game.level));
+      this.doors.get(d.id)!.visible = !open;
+      this.label({ x: d.x + d.w / 2, y: d.y + d.h / 2 }, crown ? 2.14 + span / 2 : 2.18, `${d.id} · ${open ? '开' : '关'}${d.window ? ` ${d.window.join('–')}s` : ''}`, open ? colors.lime : '#e2bd91');
+    }
     for (const t of game.level.terminals ?? []) {
       const holding = game.tokenOwner === `terminal:${t.id}`, color = holding ? colors.light : game.terminalBlockers(t).length ? '#a599b0' : colors.cyan;
       const material = this.terminals.get(t.id)!.material as THREE.MeshStandardMaterial; material.color.set(color); material.emissive.set(color);

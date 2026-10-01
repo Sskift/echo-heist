@@ -30,6 +30,27 @@ export const sceneLook = (level: Level) => looks[setting(level)];
 export class SetDressing {
   constructor(private box: Box) {}
 
+  doorCrown(level: Level, root: THREE.Object3D, width: number) {
+    if (width > 2.5 || !['museum', 'gala', 'civic', 'archive'].includes(setting(level))) return;
+    const look = sceneLook(level), outer = width / 2 + .08, inner = outer - .14;
+    const shape = new THREE.Shape();
+    shape.moveTo(-outer, 1.85); shape.absarc(0, 1.85, outer, Math.PI, 0, true);
+    shape.lineTo(inner, 1.85); shape.absarc(0, 1.85, inner, 0, Math.PI, false); shape.closePath();
+    const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, {depth: .3, bevelEnabled: true, bevelSegments: 1, steps: 1, bevelSize: .035, bevelThickness: .025, curveSegments: 18}), new THREE.MeshStandardMaterial({color: look.cap, roughness: .73}));
+    mesh.position.z = -.15; mesh.castShadow = mesh.receiveShadow = true; mesh.userData.ownedGeometry = mesh.userData.ownedMaterial = true; root.add(mesh);
+    const fan = new THREE.Shape(); fan.moveTo(-inner, 1.85); fan.absarc(0, 1.85, inner, Math.PI, 0, true); fan.closePath();
+    const pane = new THREE.Mesh(new THREE.ShapeGeometry(fan), new THREE.MeshStandardMaterial({color: '#365b63', metalness: .2, roughness: .35, side: THREE.DoubleSide}));
+    pane.userData.ownedGeometry = pane.userData.ownedMaterial = true; root.add(pane);
+    for (const angle of [Math.PI / 4, Math.PI / 2, Math.PI * .75]) {
+      const spoke = this.box(root, Math.cos(angle) * inner / 2, 1.85 + Math.sin(angle) * inner / 2, .06, inner, .035, .04, look.trim, .5); spoke.rotation.z = angle;
+    }
+    this.box(root, 0, 1.85 + outer, .03, .19, .26, .4, look.trim, .25);
+    for (const side of [-1, 1]) {
+      this.box(root, side * (width / 2 - .04), 1.72, 0, .27, .17, .7, look.cap);
+      this.box(root, side * (width / 2 - .04), .14, 0, .27, .28, .7, look.panel);
+    }
+  }
+
   architecture(level: Level, root: THREE.Object3D, width: number, depth: number, height: number) {
     if (height < 2.8) return;
     const look = sceneLook(level), formal = ['museum', 'gala', 'station', 'civic', 'archive'].includes(setting(level));

@@ -118,6 +118,7 @@ test('cross-room ticket UI survives retry, preview, reload and mission changes; 
   await move(page, 'w', 43); await move(page, 'e', 1); await advance(page);
   await expect(page.locator('#credential-owner')).toContainText('当前的你');
   await page.locator('#credential-journey summary').click(); await advance(page);
+  await expect(page.locator('#record-label')).toHaveText('PAUSED');
   const seconds = await page.locator('#seconds').textContent();
   await move(page, 'd', 30); await expect(page.locator('#seconds')).toHaveText(seconds!);
   await page.locator('#credential-journey summary').click();

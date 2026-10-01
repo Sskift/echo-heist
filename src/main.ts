@@ -165,9 +165,14 @@ $('#open-preparation').addEventListener('click', () => storyUI.prepare());
 if (demo) $('#story-button').hidden = true;
 const operationUI = new OperationUI(() => { clearInput(); if (game.status === 'running') { game.togglePause(); refreshUI(); } });
 for (const selector of ['#mission-board', '#security-panel', '#power-panel', '#relay-panel', '#suppression-panel', '#delivery-panel', '#credential-journey details']) {
-  $(selector).addEventListener('toggle', () => {
-    if ($<HTMLDetailsElement>(selector).open && game.status === 'running') { game.togglePause(); clearInput(); refreshUI(); }
-  });
+  const details = $<HTMLDetailsElement>(selector);
+  const pauseForReading = () => {
+    if (game.status === 'running') { game.togglePause(); clearInput(); accumulator = 0; refreshUI(); }
+  };
+  // Native toggle events are queued. Pause in the opening click itself so a
+  // slow render cannot advance the clock while the player starts reading.
+  details.querySelector(':scope > summary')!.addEventListener('click', () => { if (!details.open) pauseForReading(); });
+  details.addEventListener('toggle', () => { if (details.open) pauseForReading(); });
 }
 $('#touch-lure').insertAdjacentHTML('afterend', '<button class="touch-lure" id="touch-interact">E 操作设备</button>');
 $('.clock-panel').insertAdjacentElement('afterend', $('.mission-actions'));
