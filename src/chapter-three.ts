@@ -1,6 +1,7 @@
+import { LAST_LIGHT } from './last-light.ts';
 import type { Mission, Stage, WitnessAction } from './campaign-content.ts';
 import type { Circuit, Door, GuardDefinition, Level, Power } from './levels.ts';
-import { g, w, r, e, noise, point as p, room, level, stage, gate, plate } from './campaign-authoring.ts';
+import { g, w, r, e, noise, point as p, room, level, stage, plate } from './campaign-authoring.ts';
 
 const power = (id: string, on: boolean): Power => ({ id, on });
 const panel = (id: string, x: number, y: number, initial: boolean, label = '分流器', states?: [string, string]): Circuit => ({ id, x, y, initial, label, states });
@@ -78,25 +79,5 @@ export const CHAPTER_THREE: Mission[] = [
       ['A 与 P 同时成立才能开门；取物要求 P 断开。', '一条回声守 A，另一条控制 P。真人要在停机前越过门槛。', '第一回声守 A。第二回声到 P 接通，约第 2.5 秒断开。真人沿西墙到中央门穿过，等镜头熄灭后取件并东撤。'],
       [g(272, 432), g(272, 176), r(), g(208, 432), e(), w(124), e(), r(), g(112, 304), g(528, 304), g(816, 304), g(848, 432)], 'C3-5-b'),
   ] },
-  { id: 'C3-6', chapter: '停电之夜', title: '全城停电之前', summary: '取走封存证据核心，但把民用系统恢复到可工作的状态。', evidence: '封存核心与已恢复的民用供电；下一站是转运车站', stages: [
-    action('C3-6-a', '先分开两种负载', { ...reach, par: 0, walls: room([[14, [12, 13]]]), circuits: [panel('SEC', 272, 176, true, '监控与封存'), panel('CIV', 272, 432, false, '民用支路')], doors: [door('ENTRY', 448, 384, 'SEC', false)], guards: [camera('CAM', 784, 432, Math.PI, 400, 'SEC')], exitPower: [power('SEC', false), power('CIV', true)], objectiveLabel: '关闭 SEC、接通 CIV，再进入配电站主区' },
-      '联络员：先接民用支路，再停监控。泵站和居民楼都挂在这张图上，不能让它们替我们付账。', '民用支路已经建立。继续取核心之前，先确认封存专线能独立停机。',
-      ['SEC 控制摄像头，CIV 是民用支路。', '两个面板都在左侧，先接 CIV，再关 SEC；出口会核对最终状态。', '先到左下 CIV 接通，再去左上 SEC 断开，回南侧穿门到右区。'],
-      [g(272, 432), e(), g(272, 176), e(), g(272, 432), g(816, 432)]),
-    action('C3-6-b', '隔离封存专线', { loot: p(816, 176), exit: p(848, 432), lootLabel: '核心拆离许可', walls: room([[10, [12, 13]]]), circuits: [panel('CIV', 208, 176, false, '入口与民用馈线'), panel('ARCH', 528, 432, true, '封存专线')], doors: [door('ENTRY', 320, 384, 'CIV', true, { window: [1.5, 2.5] })], guards: [camera('CAM', 784, 176, Math.PI, 350, 'ARCH')], lootPower: [power('ARCH', false)], exitPower: [power('CIV', true), power('ARCH', false)], objectiveLabel: '保持 CIV 接通，只关闭 ARCH，取出拆离许可' },
-      '你：入口要有电，封存却要停。把它们分开之后，取证才不会变成破坏。', '许可允许拆离证据核心。警告也写得很清楚：拆下核心会断开旧民用连接，必须现场恢复。',
-      ['入口与民用馈线接 CIV，档案锁与镜头接 ARCH。', '回声接 CIV，真人赶上入口窗口后断 ARCH，保持这两个状态到撤离。', '同伙录下左上 CIV 的接通动作。真人经下门到 ARCH 断开，再从右区北上取许可，沿东侧撤离。'],
-      [g(208, 432), g(208, 176), e(), r(), g(528, 432), e(), g(592, 432), g(592, 176), g(816, 176), g(848, 432)], 'C3-6-a'),
-    action('C3-6-c', '核心离开之后', { loot: p(656, 176), exit: p(848, 432), par: 0, lootLabel: '封存证据核心', walls: room([[14, [8, 9]], [24, [12, 13]]]), circuits: [panel('SEC', 272, 432, true, '封存与监控'), panel('CIV', 752, 304, true, '民用主线')], doors: [door('ENTRY', 448, 256, 'SEC', false), door('EXIT', 768, 384, 'CIV', true)], guards: [camera('CAM', 752, 176, Math.PI, 300, 'SEC')], lootPower: [power('SEC', false)], exitPower: [power('CIV', true)], onLoot: { power: [power('CIV', false)], message: '核心已拆离：CIV 民用主线断开。到 CIV 恢复供电后才能撤离。' }, objectiveLabel: '警告：取走核心会断开 CIV；必须到右侧面板恢复民用主线' },
-      '联络员：拆离后不是结束。核心原来还承担民用连接，右侧 CIV 可以把它们重新接回独立电源。', '核心已经带走，民用主线重新接通。楼里的灯没有替证据一起消失。',
-      ['核心旁的告示预告 CIV 会在取走后断开；出口也依赖它。', '先断 SEC，取走核心后去右侧 CIV 接通，再向南绕到出口。提前接通不能抵消拆离。', '关闭左下 SEC，从中央进入，北上取核心。沿上侧到右侧 CIV 按 E 恢复，再南下穿 EXIT 撤离。'],
-      [g(272, 432), e(), g(400, 432), g(400, 304), g(656, 304), g(656, 176), g(752, 176), g(752, 304), e(), g(752, 432), g(848, 432)], 'C3-6-b'),
-    {
-      ...action('C3-6-d', '给城市留一条备用线', { ...reach, exit: p(848, 432), walls: room([[14, [5, 6, 12, 13]]]), circuits: [panel('SEC', 112, 432, true, '出口监控'), panel('CIV', 656, 176, false, '泵站备用馈线')], plates: [plate('A', 272, 176)], doors: [gate('LOWER', 448, 384, 'A'), { id: 'UPPER', x: 448, y: 160, w: 32, h: 64, window: [4, 6] }], guards: [camera('CAM', 752, 304, Math.PI / 2, 300, 'SEC')], exitPower: [power('CIV', true), power('SEC', false)], objectiveLabel: '接好 CIV 备用馈线再离开；可安排同伙开下门，或等待上方检修窗口' },
-        '你：主线已经恢复，泵站还差一条备用线。我有自己的入口，也可以等他们的检修班。', '泵站备用供电确认接通。核心中的转运记录指向车站，一段署名 B-17 的授权链正等在那里。',
-        ['CIV 在右区北侧，SEC 在出生处。两条入口分别依赖 A 与 4–6 秒窗口。', '留一名同伙守 A 可以走下门；不录回声也能等待上门。两种方案都要接 CIV、关 SEC。', '同伙守 A，真人出生处断 SEC，穿下门后从右区中部北上接 CIV，再沿东侧撤离。安静方案：断 SEC，沿西侧到上门等第 4 秒，穿过后接 CIV，再沿东侧撤离。'],
-        [g(272, 432), g(272, 176), r(), e(), g(528, 432), g(528, 176), g(656, 176), e(), g(848, 176), g(848, 432)], 'C3-6-c'),
-      alternatives: [[e(), g(112, 176), g(400, 176), w(110), g(528, 176), g(656, 176), e(), g(848, 176), g(848, 432)]],
-    },
-  ] },
+  LAST_LIGHT,
 ];

@@ -1,17 +1,25 @@
-import type { Game } from './engine.ts';
+import type { Carry, Game } from './engine.ts';
 import { MISSIONS, resolveStage, stageVersions, type Mission, type Stage } from './campaign-content.ts';
+import { decodePlan, encodePlan, type SavedPlan } from './plans.ts';
 
 export const CAMPAIGN_KEY = 'echo-heist-campaign-v1';
-type CampaignSave = { version: 1; selected: string; runs: Record<string, string[]>; completed: string[]; outcomes?: Record<string, string>; endings?: string[] };
+type CampaignSave = { version: 1; selected: string; runs: Record<string, string[]>; completed: string[]; outcomes?: Record<string, string>; endings?: string[]; carries?: Record<string, SavedPlan> };
 
 export class Campaign {
-  data: CampaignSave = { version: 1, selected: MISSIONS[0].id, runs: {}, completed: [], outcomes: {}, endings: [] };
+  data: CampaignSave = { version: 1, selected: MISSIONS[0].id, runs: {}, completed: [], outcomes: {}, endings: [], carries: {} };
   constructor(raw?: unknown) {
     if (!raw || typeof raw !== 'object') return;
     const save = raw as CampaignSave;
     if (save.version !== 1 || !save.runs || typeof save.runs !== 'object' || !Array.isArray(save.completed)) return;
     for (const mission of MISSIONS) {
       const cleared = save.runs[mission.id];
+      // The old four-room finale has no retained recording. Preserve its
+      // historical unlock but restart this newly authored operation safely.
+      if (mission.id === 'C3-6' && Array.isArray(cleared) && cleared.some(id => /^C3-6-[a-d]$/.test(id))) {
+        this.data.runs[mission.id] = [];
+        if (save.completed.includes(mission.id)) this.data.completed.push(mission.id);
+        continue;
+      }
       if (Array.isArray(cleared) && cleared.length <= mission.stages.length && cleared.every((id, i) => id === mission.stages[i].level.id)) {
         const prefix: string[] = [], flags: string[] = [];
         for (const id of cleared) {
@@ -19,6 +27,11 @@ export class Campaign {
           const outcome = current.outcomes?.find(o => o.id === save.outcomes?.[id]);
           // A missing or invalid decision cannot silently turn into the default route.
           if (current.outcomes?.length && !outcome) break;
+          if (current.level.handoff) {
+            const plan = decodePlan(save.carries?.[id], id), plate = current.level.plates.find(p => p.id === current.level.handoff!.plate);
+            if (!plan || plan.length !== 1 || !plate || Math.hypot(plan[0].frames.at(-1)!.x - plate.x, plan[0].frames.at(-1)!.y - plate.y) >= 23) break;
+            this.data.carries![id] = encodePlan(id, plan);
+          }
           prefix.push(id); flags.push(...current.grants);
           if (outcome) { this.data.outcomes![id] = outcome.id; flags.push(outcome.id); }
         }
@@ -50,6 +63,14 @@ export class Campaign {
   }
   indexOf(levelId: string): number { return this.mission.stages.findIndex(s => stageVersions(s).some(v => v.level.id === levelId)); }
   get stage() { return this.stageAt(this.stageIndex); }
+  carryFor(levelId: string): Carry | undefined {
+    const index = this.indexOf(levelId);
+    const link = index >= 0 ? this.stageAt(index).level.continuity : undefined;
+    if (!link) return;
+    const source = this.mission.stages.find(s => s.level.id === link.source)?.level;
+    const echo = decodePlan(this.data.carries?.[link.source], link.source)?.[0];
+    if (source && echo) return { level: source, echo };
+  }
   get ending() { return this.cleared() === this.mission.stages.length ? this.stage.ending : undefined; }
   revisitEnding(): boolean {
     return !!this.ending && this.mission.endingAnchor !== undefined && this.returnTo(this.mission.endingAnchor);
@@ -75,9 +96,12 @@ export class Campaign {
     if (current.level.id !== game.level.id) return false;
     const required = current.requires;
     if (required && !this.flags.includes(required)) return false;
+    if (!game.exitReady) return false;
+    if (current.level.continuity && JSON.stringify(game.carried?.echo) !== JSON.stringify(this.carryFor(game.level.id)?.echo)) return false;
     const outcomes = current.outcomes?.filter(o => game.powered(o.power)) ?? [];
     if (current.outcomes?.length && outcomes.length !== 1) return false;
     if (outcomes[0]) (this.data.outcomes ??= {})[base.level.id] = outcomes[0].id;
+    if (current.level.handoff) (this.data.carries ??= {})[base.level.id] = encodePlan(base.level.id, game.echoes);
     (this.data.runs[this.mission.id] ??= []).push(base.level.id);
     if (this.cleared() === this.mission.stages.length && !this.data.completed.includes(this.mission.id)) this.data.completed.push(this.mission.id);
     if (current.ending && !this.data.endings?.includes(current.ending.id)) (this.data.endings ??= []).push(current.ending.id);
@@ -85,7 +109,10 @@ export class Campaign {
   }
   returnTo(index: number): boolean {
     if (!Number.isInteger(index) || index < 0 || index > this.stageIndex) return false;
-    for (const stage of this.mission.stages.slice(index)) delete this.data.outcomes?.[stage.level.id];
+    for (const stage of this.mission.stages.slice(index)) {
+      delete this.data.outcomes?.[stage.level.id];
+      delete this.data.carries?.[stage.level.id];
+    }
     this.data.runs[this.mission.id] = (this.data.runs[this.mission.id] ?? []).slice(0, index);
     // Historical mission completion remains a permanent unlock; the current
     // run's facts come only from its surviving prefix of committed stages.

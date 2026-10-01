@@ -13,7 +13,7 @@ export type Door = { id: string; x: number; y: number; w: number; h: number; pla
 type Plate = Point & { id: string; window?: [number, number] };
 export type GuardDefinition = { id?: string; route: Point[]; speed: number; range: number; kind?: 'sentry' | 'patrol' | 'camera' | 'tracker'; power?: Power; lighting?: Power & { darkRange: number }; hearing?: number; searchSeconds?: number; facing?: number; traceSeconds?: number };
 type Glass = { id: string; x: number; y: number; w: number; h: number };
-export type Circuit = Point & { id: string; initial: boolean; label?: string; states?: [string, string] };
+export type Circuit = Point & { id: string; initial: boolean; label?: string; states?: [string, string]; feed?: { plate: string; remote?: boolean } };
 export type Terminal = Point & { id: string; kind: 'source' | 'relay' | 'lock'; authorization?: string; requiresAuthorization?: string; window?: [number, number]; power?: Power; plate?: string; waitForDelivery?: boolean };
 export type Cycle = { period: number; active: [number, number]; phase?: number };
 export type Suppressor = { id: string; x: number; y: number; w: number; h: number; power?: Power; cycle?: Cycle };
@@ -51,6 +51,9 @@ export type Level = {
   lootPower?: Power[];
   exitPower?: Power[];
   onLoot?: { power: Power[]; message: string };
+  alternateExit?: { power: Power; at: Point; label: string };
+  handoff?: { plate: string; room: string };
+  continuity?: { source: string; room: string; home?: boolean };
 };
 
 export const doorPlates = (door: Door): string[] => door.plates ?? (door.plate ? [door.plate] : []);

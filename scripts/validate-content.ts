@@ -17,6 +17,7 @@ for (const scene of STORY) {
 }
 
 const ids = new Set<string>();
+const wins = new Map<string, Game>();
 let zones = 0, layouts = 0;
 for (const mission of MISSIONS) {
   const facts = new Set<string>();
@@ -100,8 +101,13 @@ for (const mission of MISSIONS) {
     for (const point of [level.spawn, level.exit ?? level.spawn, ...level.plates, ...level.circuits ?? [], ...level.terminals ?? [], ...(level.delivery ? [level.delivery, ...level.delivery.receivers?.map(r => r.at) ?? []] : level.objective === 'reach' ? [] : [level.loot])]) {
       assert.ok(!game.blocked(point.x, point.y), `Entity inside obstacle: ${level.id} at ${point.x},${point.y}`);
     }
-    const win = playWitness(stage);
-    for (const witness of stage.alternatives ?? []) playWitness({ ...stage, witness });
+    const source = level.continuity ? wins.get(level.continuity.source) : undefined;
+    const carry = source ? { level: source.level, echo: source.echoes[0] } : undefined;
+    if (level.continuity) assert.ok(carry && source?.level.handoff, `Missing retained recording for ${level.id}`);
+    for (const c of level.circuits ?? []) if (c.feed) assert.ok((c.feed.remote ? carry?.level : level)?.plates.some(p => p.id === c.feed!.plate), `Unknown feeder plate in ${level.id}`);
+    const win = playWitness(stage, carry);
+    wins.set(level.id, win);
+    for (const witness of stage.alternatives ?? []) playWitness({ ...stage, witness }, carry);
     console.log(`${level.id.padEnd(14)} ${win.seconds.toFixed(2)}s / ${win.echoes.length} echoes / validated`);
     layouts++;
     }
@@ -120,7 +126,7 @@ for (const mission of MISSIONS.filter(m => m.stages.some(s => stageVersions(s).s
       assert.ok((mission.stages[index].variants ?? []).filter(v => prefix.flags.includes(v.when)).length <= 1, `Ambiguous branch in ${mission.id} stage ${index}`);
       const stage = prefix.stage, reached = new Set<string>();
       for (const witness of [stage.witness, ...stage.alternatives ?? []]) {
-        const win = playWitness({ ...stage, witness }), campaign = new Campaign(prefix.export());
+        const win = playWitness({ ...stage, witness }, prefix.carryFor(stage.level.id)), campaign = new Campaign(prefix.export());
         assert.ok(campaign.commit(win), `Cannot commit ${stage.level.id}`);
         const selected = campaign.data.outcomes?.[mission.stages[index].level.id];
         if (selected) reached.add(selected);

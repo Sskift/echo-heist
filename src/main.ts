@@ -6,7 +6,7 @@ import { Renderer } from './render.ts';
 import { Sound } from './audio.ts';
 import { MediaUI } from './media-ui.ts';
 import { decodePlan, encodePlan, PLAN_KEY, type SavedPlan } from './plans.ts';
-import { CAMPAIGN_LEVELS } from './campaign-content.ts';
+import { CAMPAIGN_LEVELS, MISSIONS } from './campaign-content.ts';
 import { Campaign, CAMPAIGN_KEY } from './campaign.ts';
 import { CampaignUI } from './campaign-ui.ts';
 import { StoryUI } from './story-ui.ts';
@@ -14,9 +14,15 @@ import { EndingUI } from './ending-ui.ts';
 import { OperationUI, operationText } from './operation-ui.ts';
 
 const ALL_LEVELS = [...LEVELS, ...CAMPAIGN_LEVELS];
+const demo = new URLSearchParams(location.search).get('demo') === 'last-light';
+const campaignKey = CAMPAIGN_KEY + (demo ? '-last-light-demo' : '');
+const planKey = PLAN_KEY + (demo ? '-last-light-demo' : '');
+const predecessors = demo ? MISSIONS.slice(0, MISSIONS.findIndex(m => m.id === 'C3-6')) : [];
+const demoStart = demo ? { version: 1, selected: 'C3-6', runs: Object.fromEntries(predecessors.map(m => [m.id, []])), completed: predecessors.map(m => m.id) } : undefined;
 let campaign: Campaign;
-try { campaign = new Campaign(JSON.parse(localStorage.getItem(CAMPAIGN_KEY) ?? 'null')); }
-catch { campaign = new Campaign(); }
+try { campaign = new Campaign(JSON.parse(localStorage.getItem(campaignKey) ?? 'null') ?? demoStart); }
+catch { campaign = new Campaign(demoStart); }
+if (demo) campaign.select('C3-6');
 
 const icons = {
   echo: '<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M6 6h20v6H12v4h12v5H12v5h14" stroke="currentColor" stroke-width="3"/><path d="M2 11v19h19" stroke="currentColor" opacity=".4" stroke-width="2"/></svg>',
@@ -40,7 +46,7 @@ try {
 
 const plans: Record<string, SavedPlan> = {};
 try {
-  const raw: unknown = JSON.parse(localStorage.getItem(PLAN_KEY) ?? '{}');
+  const raw: unknown = JSON.parse(localStorage.getItem(planKey) ?? '{}');
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
     for (const level of ALL_LEVELS) {
       const echoes = decodePlan((raw as Record<string, unknown>)[level.id], level.id);
@@ -52,7 +58,7 @@ try {
 $('#app').innerHTML = `
   <header class="site-header">
     <a class="brand" href="./" aria-label="ECHO HEIST 首页"><span class="brand-symbol">${icons.echo}</span><span>ECHO HEIST<span class="brand-cn">回声劫案</span></span></a>
-    <div class="header-note"><span class="status-dot"></span> A SOLO CO-OP HEIST <span class="version">VOL. 14.0</span></div>
+    <div class="header-note"><span class="status-dot"></span> A SOLO CO-OP HEIST <span class="version">VOL. 15.0</span></div>
     <button class="text-button" id="help-button">行动手册 <span class="key">?</span></button>
   </header>
   <main>
@@ -118,8 +124,12 @@ const endingUI = new EndingUI(() => {
 });
 const campaignUI = new CampaignUI(campaign, {
   mission: id => openMission(id),
-  stage: index => { if (campaign.returnTo(index)) { saveCampaign(); loadLevel(campaign.stage.level); } },
-  training: () => campaignMode ? setLevel(0) : openMission(campaign.data.selected, false),
+  stage: index => {
+    if (rewindCampaign(index)) {
+      saveCampaign(); loadLevel(campaign.stage.level); persistPlan();
+    }
+  },
+  training: () => { if (demo) location.href = location.pathname; else if (campaignMode) setLevel(0); else openMission(campaign.data.selected, false); },
   preview: togglePreview,
   scrub: frame => { previewGame = game.previewAt(frame); refreshUI(); },
   delay: (index, delta) => {
@@ -133,6 +143,7 @@ const storyUI = new StoryUI(campaign, () => {
   clearInput(); accumulator = 0;
   if (game.status === 'running') game.togglePause();
 }, () => { clearInput(); accumulator = 0; refreshUI(); }, sound);
+if (demo) $('#story-button').hidden = true;
 const operationUI = new OperationUI(() => { clearInput(); if (game.status === 'running') { game.togglePause(); refreshUI(); } });
 for (const selector of ['#mission-board', '#security-panel', '#power-panel', '#relay-panel', '#suppression-panel', '#delivery-panel']) {
   $(selector).addEventListener('toggle', () => {
@@ -150,19 +161,30 @@ function renderHint() {
   $('#more-hint').hidden = hintStep >= hints.length - 1;
   $('#more-hint').textContent = `再给一点提示（${hintStep + 1} / ${hints.length}）`;
 }
-$('.manual-steps').insertAdjacentHTML('beforeend', '<li><strong>安排一场完整劫案</strong><p>行动档案中的序章会逐步解锁。每段成功后保存安全锚点，下一段重新录制同伙。点击阶段名称可以回退；之后的阶段需要重做。</p></li><li><strong>调整时序，先看结果</strong><p>回声下方的加减按钮以 0.25 秒调整出场；按 P 预演已保存的回声，拖动时间检查门禁与暴露。E 操作电源和凭据终端，录制会保留这次操作请求。轨道上的 ✓ 表示完成，× 表示受阻或留候取消；点击标记会暂停并显示时间、操作者和原因。「操作记录」保留本轮结果，可只看问题项。预演没有真人送件，结果可能与实际行动不同。</p></li>');
+$('.manual-steps').insertAdjacentHTML('beforeend', '<li><strong>安排一场完整劫案</strong><p>行动档案中的序章会逐步解锁。每段成功后保存安全锚点，下一段重新录制本区同伙。《最后一盏灯》会留下一名回声在前一间工作，仍占一格。点击阶段名称可以回退；之后的阶段需要重做。</p></li><li><strong>调整时序，先看结果</strong><p>回声下方的加减按钮以 0.25 秒调整出场；按 P 预演已保存的回声，拖动时间检查门禁与暴露。E 操作电源和凭据终端，录制会保留这次操作请求。轨道上的 ✓ 表示完成，× 表示受阻或留候取消；点击标记会暂停并显示时间、操作者和原因。「操作记录」保留本轮结果，可只看问题项。预演没有真人送件，结果可能与实际行动不同。</p></li>');
 
 function saveCampaign() {
-  try { localStorage.setItem(CAMPAIGN_KEY, JSON.stringify(campaign.export())); campaignUI.checkpointSaved(true); }
+  try { localStorage.setItem(campaignKey, JSON.stringify(campaign.export())); campaignUI.checkpointSaved(true); }
   catch { campaignUI.checkpointSaved(false); }
+}
+
+function rewindCampaign(index: number): boolean {
+  if (!campaign.returnTo(index)) return false;
+  if (initialized) persistPlan();
+  initialized = false;
+  for (const s of campaign.mission.stages.slice(index + 1)) {
+    delete plans[s.level.id];
+    for (const v of s.variants ?? []) delete plans[v.stage.level.id];
+  }
+  return true;
 }
 
 function openMission(id: string, replay = true) {
   if (!campaign.select(id)) return;
-  if (replay && campaign.cleared() === campaign.mission.stages.length) campaign.returnTo(0);
+  if (replay && campaign.cleared() === campaign.mission.stages.length) rewindCampaign(0);
   campaignMode = true; levelIndex = -1;
-  loadLevel(campaign.stage.level); saveCampaign();
-  storyUI.arrive();
+  loadLevel(campaign.stage.level); saveCampaign(); persistPlan();
+  if (!demo) storyUI.arrive();
 }
 
 function togglePreview() {
@@ -184,9 +206,9 @@ function clearInput() { keys.clear(); pointerFastForward = false; }
 function isFastForwarding() { return game.status === 'running' && (pointerFastForward || keys.has('ShiftLeft') || keys.has('ShiftRight')); }
 
 function persistPlan() {
-  plans[game.level.id] = encodePlan(game.level.id, game.echoes);
+  plans[game.level.id] = encodePlan(game.level.id, game.localPlan);
   try {
-    localStorage.setItem(PLAN_KEY, JSON.stringify(plans));
+    localStorage.setItem(planKey, JSON.stringify(plans));
     $('#plan-status').textContent = '计划已保存到本机';
   } catch { $('#plan-status').textContent = '仅本次有效 · 无法写入本机存档'; }
 }
@@ -209,7 +231,7 @@ function setLevel(index: number) {
 function loadLevel(level: Level) {
   if (initialized) persistPlan();
   previewGame = null; previewWasRunning = false;
-  game = new Game(level);
+  game = new Game(level, campaignMode ? campaign.carryFor(level.id) : undefined);
   const restored = decodePlan(plans[game.level.id], game.level.id);
   if (restored) game.restorePlan(restored);
   $('#plan-status').textContent = restored?.length ? `已恢复 ${restored.length} 条回声` : '录制后自动保存';
@@ -235,6 +257,7 @@ function loadLevel(level: Level) {
 
 function primaryAction() {
   sound.unlock();
+  if (demo && campaign.cleared() === campaign.mission.stages.length && ['ready', 'won'].includes(game.status)) { openMission('C3-6'); return; }
   if (campaignMode && campaign.ending && ['ready', 'won'].includes(game.status)) { clearInput(); endingUI.show(campaign.ending, storyUI.state.endingNote()); return; }
   if (campaignMode && game.status === 'ready' && campaign.cleared() === campaign.mission.stages.length && campaign.nextMission) { openMission(campaign.nextMission.id); return; }
   if (game.status === 'ready') game.start();
@@ -268,7 +291,7 @@ function record() {
 }
 
 function refreshUI() {
-  campaignUI.render(game, campaignMode, previewGame);
+  campaignUI.render(game, campaignMode, previewGame, demo);
   $('.game-layout').classList.toggle('previewing', !!previewGame);
   const key = `${game.status}:${game.editingIndex}:${game.canUndo}:${game.echoes.length}:${game.echoes.map(e => `${e.colorIndex}-${e.frames.length}-${e.delay ?? 0}`).join(',')}:${game.attempts}:${game.hasLoot}:${[...game.openDoors].join('')}:${[...game.circuits].join(',')}`;
   if (uiKey !== key) {
@@ -279,6 +302,7 @@ function refreshUI() {
     $('.arena-badge').classList.toggle('recording', game.status === 'running');
     $('#echo-slots').innerHTML = Array.from({ length: MAX_ECHOES }, (_, i) => {
       const echo = game.echoes[i];
+      if (echo && i < game.lockedSlots) return `<div class="echo-slot filled retained-slot" style="--echo-color:${ECHO_COLORS[echo.colorIndex]}"><span class="echo-avatar">${icons.echo}</span><div class="echo-info"><strong>回声 01 · 配电室<span>留守</span></strong><small data-echo-state="0"></small></div><span class="retained-lock" title="回到首段锚点可调整">已留守</span></div>`;
       return echo ? `<div class="echo-slot filled ${game.editingIndex === i ? 'editing' : ''}" style="--echo-color:${ECHO_COLORS[echo.colorIndex]}"><span class="echo-avatar">${icons.echo}</span><div class="echo-info"><strong>回声 0${i + 1}<span>${(echo.frames.length / FPS).toFixed(1)}s</span></strong><small data-echo-state="${i}"></small></div><button class="rerecord-button" data-rerecord="${i}" aria-label="重录回声 ${i + 1}" ${game.editingIndex !== null ? 'disabled' : ''}>重录</button><button data-delete="${i}" title="删除回声 ${i + 1} 并重新规划" aria-label="删除回声 ${i + 1}" ${game.editingIndex !== null ? 'disabled' : ''}>×</button></div>` : `<div class="echo-slot empty"><span class="empty-cross">＋</span><span>等待另一个你</span><span class="slot-number">0${i + 1}</span></div>`;
     }).join('');
     $('#tracks').innerHTML = Array.from({ length: MAX_ECHOES }, (_, i) => {
@@ -300,7 +324,8 @@ function refreshUI() {
     $('#door-status').textContent = allDoors ? '所有通道已打开' : `${game.openDoors.size} / ${game.level.doors.length} 道门已开启`;
     $('#loot-status').textContent = game.editingIndex !== null ? '重录中：这一轮只录路线' : game.status === 'won' ? '安全撤离，行动完成' : game.level.objectiveLabel ? (game.hasLoot ? '目标已取得，前往标记的撤离点' : game.level.objectiveLabel) : game.hasLoot ? '已拿到藏品，返回左下角！' : '藏品位于右上角';
     $('#objective-loot > div').firstChild!.textContent = game.level.objective === 'deliver' ? '植入证据，确认送达' : game.level.objective === 'reach' ? '抵达安全锚点' : '取得目标，安全撤离';
-    if (!game.exitReady && (game.hasLoot || game.level.objective === 'reach')) $('#loot-status').textContent = `撤离前需：${game.powerRequirements(game.unmetPower(game.level.exitPower))}`;
+    if (!game.handoffReady) $('#loot-status').textContent = '前往下一间之前，只留一条停在 HOLD 的回声；多余回声请删除。';
+    else if (!game.exitReady && (game.hasLoot || game.level.objective === 'reach')) $('#loot-status').textContent = `撤离前需：${game.powerRequirements(game.unmetPower(game.level.exitPower))}`;
     else if (!game.hasLoot && !game.canCollect) $('#loot-status').textContent = `取物前需：${game.powerRequirements(game.unmetPower(game.level.lootPower))}`;
     if (game.level.circuits?.length) {
       $('#objective-doors > div').firstChild!.textContent = '安排所需通道';
@@ -314,6 +339,7 @@ function refreshUI() {
     $<HTMLButtonElement>('#retry-button').disabled = game.status === 'ready';
     $<HTMLButtonElement>('#undo-button').disabled = !game.canUndo;
     $<HTMLButtonElement>('#reset-button').disabled = game.editingIndex !== null;
+    $('#reset-button').textContent = game.carried ? '清空本区计划' : '清空计划';
     $('#edit-banner').hidden = game.editingIndex === null;
     $('#edit-label').textContent = game.editingIndex === null ? '' : `重录回声 0${game.editingIndex + 1} · R 保存新路线`;
   }
@@ -369,7 +395,7 @@ function refreshUI() {
       action = '前往旧渡口'; extra = '<p class="overlay-footnote">尾声已保存 · 可回到最终选择锚点</p>';
     } else if (game.status === 'ready' && campaignMode && campaign.cleared() === campaign.mission.stages.length && campaign.nextMission) {
       eyebrow = 'EVIDENCE SECURED'; title = `${campaign.mission.title} · 完成`; copy = campaign.mission.evidence;
-      action = `下一任务：${campaign.nextMission.title}`;
+      action = demo ? '再玩这场连续行动' : `下一任务：${campaign.nextMission.title}`;
     } else if (game.status === 'ready') {
       eyebrow = `OPERATION ${game.level.id} / BRIEFING`;
       title = game.level.title;
@@ -400,7 +426,7 @@ function refreshUI() {
         title = final ? `${mission.title} · 完成` : '这一段，已经安全了。';
         copy = campaign.stageAt(stageIndex).result;
         const next = campaign.nextMission;
-        action = !final ? '进入下一行动区' : campaign.ending ? '前往旧渡口' : next ? `下一任务：${next.title}` : '重玩这场行动';
+        action = !final ? '进入下一行动区' : demo ? '再玩这场连续行动' : campaign.ending ? '前往旧渡口' : next ? `下一任务：${next.title}` : '重玩这场行动';
         extra = `<div class="win-stamp">${final ? `◇ ${mission.evidence}` : `✓ 安全锚点 ${stageIndex + 1} / ${mission.stages.length}`}</div>`;
       }
     }
@@ -543,6 +569,11 @@ function loop(now: number) {
       });
       const feedback = game.operationLog.slice(operationCount).filter(op => op.actor === 'player').at(-1);
       if (feedback) toast(operationText(feedback));
+      if (!previewGame && game.level.continuity?.home && game.operationLog.slice(operationCount).some(op => op.result === 'success' && op.intent.type === 'circuit' && op.intent.id === 'CIV' && op.intent.on)) {
+        // A distant tram bell: the city responds to this physical switch.
+        sound.tone(784, 1.1, 'sine', 0.025); sound.tone(1046, 1.3, 'sine', 0.018, 0.18);
+        toast('街区恢复供电。远处的电车又响了；带着核心回街口。');
+      }
       accumulator -= 1 / FPS;
       if (game.status !== 'running' || game.frame < before) { accumulator = 0; clearInput(); break; }
     }
@@ -557,7 +588,7 @@ function loop(now: number) {
     if (event === 'won') {
       if (campaignMode && campaign.commit(game)) {
         saveCampaign();
-        storyUI.aftermath();
+        if (!demo) storyUI.aftermath();
       }
       if (!campaignMode) {
         completedTraining.add(game.level.id);
@@ -572,6 +603,6 @@ function loop(now: number) {
   requestAnimationFrame(loop);
 }
 
-if (new URLSearchParams(location.search).get('mode') === 'training') setLevel(0);
+if (!demo && new URLSearchParams(location.search).get('mode') === 'training') setLevel(0);
 else openMission(campaign.data.selected, false);
 requestAnimationFrame(loop);

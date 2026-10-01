@@ -15,6 +15,46 @@ async function seed(page: Page, save: unknown, story?: unknown) {
   }, { save, story });
 }
 
+test('a retained teammate is visible across rooms, survives local-plan reload and rolls back with its source', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  const campaign = new Campaign(checkpoint('C3-6'));
+  expect(campaign.commit(playWitness(campaign.stage))).toBe(true);
+  await clock(page); await seed(page, campaign.export(), { version: 1, seen: ['c3-arrival'], choices: {} });
+  await page.goto('/'); await advance(page);
+  await expect(page.locator('#mission-title')).toContainText('窗那边的同伙');
+  await expect(page.locator('#echo-count')).toHaveText('1 / 3');
+  await expect(page.locator('.retained-slot')).toContainText('配电室');
+  await expect(page.locator('[data-rerecord="0"], [data-delay-input="0"]')).toHaveCount(0);
+  await page.locator('#overlay-action').click(); await advance(page);
+  await move(page, 'd', 17); await page.keyboard.press('r'); await advance(page, 140);
+  await expect(page.locator('#echo-count')).toHaveText('2 / 3');
+  await page.screenshot({ path: '.local/last-light-core.png' });
+  await page.reload(); await advance(page);
+  await expect(page.locator('#echo-count')).toHaveText('2 / 3');
+  await page.locator('#preview-button').click();
+  await page.locator('#preview-frame').fill('180'); await page.locator('#preview-frame').dispatchEvent('input'); await advance(page);
+  await expect(page.locator('#continuity-status')).toContainText('守住 HOLD');
+  await page.locator('#preview-button').click(); await advance(page);
+  await page.locator('#reset-button').click(); await advance(page);
+  await expect(page.locator('#echo-count')).toHaveText('1 / 3');
+  await page.locator('[data-stage="0"]').click(); await advance(page);
+  const data = await page.evaluate(() => ({ campaign: JSON.parse(localStorage.getItem('echo-heist-campaign-v1')!), plans: JSON.parse(localStorage.getItem('echo-heist-plans-v1')!) }));
+  expect(data.campaign.runs['C3-6']).toEqual([]); expect(data.campaign.carries['C3-6-entry']).toBeUndefined();
+  expect(data.plans['C3-6-core']).toBeUndefined();
+  await page.setViewportSize({ width: 390, height: 844 }); await advance(page);
+  await expect(page.locator('#continuity-panel')).toContainText('另外两格');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.screenshot({ path: '.local/last-light-mobile.png', fullPage: true });
+  const mainSave = await page.evaluate(() => localStorage.getItem('echo-heist-campaign-v1'));
+  await page.goto('/?demo=last-light'); await advance(page);
+  await expect(page.locator('#chapter-label')).toContainText('独立试玩');
+  await expect(page.locator('#story-dialog')).not.toBeVisible();
+  await expect(page.locator('#mission-board')).not.toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('echo-heist-campaign-v1'))).toBe(mainSave);
+  await expect(page.locator('#training-mode')).toHaveText('返回完整主线');
+  expect(errors).toEqual([]);
+});
+
 test('opening pauses input, real keyboard cooperation saves evidence, and the journal has no future revelations', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await clock(page); await page.goto('/'); await advance(page);

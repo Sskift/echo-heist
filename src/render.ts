@@ -125,6 +125,28 @@ export class Renderer {
     this.text(game.level.delivery ? 'EVIDENCE REGISTRY' : game.level.doors.length > 1 ? 'SECURE ARCHIVE' : 'PRIVATE COLLECTION', 520, 76, '#718578', 12);
     this.text('NIGHT SHIFT  ·  02:14 AM', 520, 94, '#475e50', 9);
     this.text('AUTHORIZED PERSONNEL ONLY', 510, 523, '#40584a', 9);
+    if (game.level.handoff || game.level.continuity) {
+      const civic = game.circuits.get('CIV');
+      const restored = game.operationLog.filter(op => op.result === 'success' && op.intent.type === 'circuit' && op.intent.id === 'CIV' && op.intent.on).at(-1);
+      c.fillStyle = '#1b232b'; c.fillRect(60, 495, 218, 43);
+      this.text('街区 / 独立民用馈线', 68, 533, '#8195a1', 9);
+      for (let i = 0; i < 8; i++) {
+        const lit = civic && (!restored || this.reducedMotion || game.frame - restored.frame > i * 5);
+        c.fillStyle = lit ? '#efbd72' : '#293541'; c.fillRect(70 + i * 24, 500, 12, 14);
+      }
+      this.text(game.level.continuity?.home ? '同一间配电室 · 这次从右边回来' : '配电室', 65, 118, '#8ed4ed', 10);
+      this.text('封存室', 672, 80, '#b9b1a0', 11);
+      if (game.level.handoff) {
+        this.circle(game.level.loot, 11, '#efbd7280', '#efbd72');
+        this.text('下一段的目标 / 核心', game.level.loot.x, 214, '#efbd72', 9, 'center');
+      }
+      if (game.level.continuity?.home) {
+        this.text('CORE REMOVED / 核心已带走', 672, 210, '#7d8c91', 9);
+        c.strokeStyle = '#526573'; c.strokeRect(318, 414, 36, 36);
+        this.text('SEC / 停机', 336, 472, '#8195a1', 9, 'center');
+        this.text('货梯停运 · 改走人工门', 555, 480, '#efbd72', 9, 'center');
+      }
+    }
 
     for (const marker of game.level.soundMarkers ?? []) {
       this.circle(marker, 15, '#efbd7208', '#efbd7250');
@@ -134,7 +156,7 @@ export class Renderer {
 
     // In-floor wiring explains the relationship between each switch and door.
     for (const plate of game.level.plates) {
-      const lit = game.activePlates.has(plate.id);
+      const lit = game.activePlates.has(plate.id) || !!game.remote?.activePlates.has(plate.id);
       const color = lit ? `${C.lime}80` : '#53684665';
       for (const door of game.level.doors.filter(d => doorPlates(d).includes(plate.id))) {
         const end = { x: door.x + door.w / 2, y: door.y + door.h / 2 };
@@ -144,19 +166,24 @@ export class Renderer {
       c.fillStyle = lit ? '#c3ed8230' : '#273627'; c.fillRect(plate.x - 18, plate.y - 18, 36, 36);
       c.strokeStyle = lit ? C.lime : '#738558'; c.lineWidth = 1.5; c.strokeRect(plate.x - 18, plate.y - 18, 36, 36);
       this.text(plate.id, plate.x, plate.y + 5, lit ? C.lime : '#acbc84', 16, 'center');
-      this.text(lit ? `SWITCH ${plate.id} / ACTIVE` : `SWITCH ${plate.id}`, plate.x, plate.y + 43, lit ? C.lime : '#899c74', 9, 'center');
+      this.text(game.level.handoff || game.level.continuity ? `${plate.id} / ${lit ? '接通' : '待命'}` : lit ? `SWITCH ${plate.id} / ACTIVE` : `SWITCH ${plate.id}`, plate.x, plate.y + 43, lit ? C.lime : '#899c74', 9, 'center');
       if (plate.window) this.text(`${plate.window[0]}–${plate.window[1]}s 响应`, plate.x, plate.y + 58, C.amber, 9, 'center');
     }
 
     // Evacuation hatch.
-    const exit = game.level.exit ?? game.level.spawn;
+    const exit = game.exitPoint;
+    if (game.level.alternateExit) {
+      const other = exit === game.level.alternateExit.at ? game.level.exit! : game.level.alternateExit.at;
+      c.strokeStyle = '#7898a360'; c.setLineDash([3, 5]); c.strokeRect(other.x - 24, other.y - 24, 48, 48); c.setLineDash([]);
+      this.text(exit === game.level.alternateExit.at ? '货梯 / 本次走检修口' : '检修口 / 先解锁 HATCH', other.x, other.y + 43, '#7898a3', 9, 'center');
+    }
     c.save();
     c.fillStyle = game.objectiveComplete ? '#c3ed8220' : '#8cae9212';
     c.fillRect(exit.x - 30, exit.y - 30, 60, 60);
     c.strokeStyle = game.objectiveComplete ? C.lime : '#68937a'; c.lineWidth = 1.5;
     c.setLineDash([7, 5]); c.strokeRect(exit.x - 30, exit.y - 30, 60, 60); c.setLineDash([]);
     this.line([{ x: exit.x + 12, y: exit.y }, { x: exit.x - 12, y: exit.y }, { x: exit.x - 4, y: exit.y - 8 }], '#95bca0', 2);
-    this.text(!game.exitReady ? '供电未就绪 / WAIT' : game.level.objective === 'reach' ? '安全锚点 / ANCHOR' : '撤离点 / EXIT', exit.x, exit.y + 49, !game.exitReady ? C.amber : game.hasLoot ? C.lime : '#9bbca4', 10, 'center');
+    this.text(!game.handoffReady ? '需一名留守者 / HOLD' : !game.exitReady ? '供电未就绪 / WAIT' : game.level.objective === 'reach' ? '安全锚点 / ANCHOR' : '撤离点 / EXIT', exit.x, exit.y + 49, !game.exitReady ? C.amber : game.hasLoot ? C.lime : '#9bbca4', 10, 'center');
     c.restore();
 
     // Guard light is ray-cast against the same collision geometry as detection.
@@ -217,7 +244,7 @@ export class Renderer {
       c.strokeStyle = color; c.strokeRect(circuit.x - 18, circuit.y - 18, 36, 36);
       this.text('⏻', circuit.x, circuit.y + 6, color, 20, 'center');
       const align = game.blocked(circuit.x + 32, circuit.y + 40, 1) ? 'right' : game.blocked(circuit.x - 32, circuit.y + 40, 1) ? 'left' : 'center';
-      this.text(`${circuit.id} ${game.circuitState(circuit.id)} / E 操作`, circuit.x, circuit.y + 40, color, 10, align);
+      this.text(`${circuit.id} ${game.circuitState(circuit.id)} / ${circuit.feed ? `由 ${circuit.feed.plate} 供电` : 'E 操作'}`, circuit.x, circuit.y + 40, color, 10, align);
       if (circuit.label) this.text(circuit.label, circuit.x, circuit.y + 55, '#91a8bc', 9, align);
     }
     for (const terminal of game.level.terminals ?? []) {
@@ -330,6 +357,9 @@ export class Renderer {
       if (game.tokenOwner === `echo:${echo.colorIndex}`) this.circle({ x: at.x + 16, y: at.y + 10 }, 5, C.amber);
       c.restore();
     });
+    if (game.remote) for (const { echo } of game.remote.activeEchoes) {
+      this.actor(game.remote.echoAt(echo), ECHO_COLORS[echo.colorIndex], time, true, 'E1 / 配电室留守');
+    }
     game.guards.forEach((guard, index) => {
       const enabled = game.powered(game.level.guards[index].power);
       const sentry = game.level.guards[index].kind === 'sentry';

@@ -5,6 +5,7 @@ export type Intent = { type: 'circuit'; id: string; on: boolean } | { type: 'tak
 export type Input = { x: number; y: number; lure: boolean; interact?: boolean };
 export type Frame = Point & { angle: number; lure: boolean; intent?: Intent };
 export type Echo = { frames: Frame[]; colorIndex: number; delay?: number };
+export type Carry = { level: Level; echo: Echo };
 export type Status = 'ready' | 'running' | 'paused' | 'caught' | 'won';
 export type OperationResult = 'success' | 'blocked' | 'waiting' | 'cancelled' | 'ignored';
 export type OperationRecord = { frame: number; actor: string; label: string; intent: Intent; result: OperationResult; reason: string; point: Point };
@@ -54,9 +55,20 @@ export class Game {
   private interactHeld = false;
   private pendingNoise: Point[] = [];
   private wallCells = new Map<number, Map<number, Point[]>>();
+  readonly carried?: Carry;
+  readonly remote?: Game;
 
-  constructor(level: Level) {
+  constructor(level: Level, carried?: Carry) {
     this.level = level;
+    if (carried && level.continuity?.source === carried.level.id) {
+      this.carried = { level: carried.level, echo: cloneEcho(carried.echo) };
+      this.echoes = [cloneEcho(carried.echo)];
+      if (!level.continuity.home) {
+        this.remote = new Game(carried.level);
+        this.remote.spectator = true;
+        this.remote.restorePlan([carried.echo]);
+      }
+    }
     // Walls are static for the life of a level. Index every touched cell so
     // collision and vision queries also work with walls off the tile grid.
     for (const wall of level.walls) {
@@ -74,7 +86,10 @@ export class Game {
 
   get seconds(): number { return this.frame / FPS; }
   get remaining(): number { return Math.max(0, LOOP_SECONDS - this.seconds); }
-  get activeEchoes() { return this.echoes.map((echo, index) => ({ echo, index })).filter(({ echo, index }) => index !== this.editingIndex && this.frame >= (echo.delay ?? 0)); }
+  get lockedSlots(): number { return this.carried ? 1 : 0; }
+  get localPlan(): Echo[] { return this.echoes.slice(this.lockedSlots); }
+  get exitPoint(): Point { return this.level.alternateExit && this.powered(this.level.alternateExit.power) ? this.level.alternateExit.at : this.level.exit ?? this.level.spawn; }
+  get activeEchoes() { return this.echoes.map((echo, index) => ({ echo, index })).filter(({ echo, index }) => !(this.remote && index === 0) && index !== this.editingIndex && this.frame >= (echo.delay ?? 0)); }
   get canUndo(): boolean { return this.planHistory.length > 0 && this.editingIndex === null; }
 
   private snapshot(): Echo[] {
@@ -87,23 +102,27 @@ export class Game {
   }
 
   restorePlan(echoes: Echo[]) {
-    this.echoes = echoes.map(cloneEcho);
+    this.echoes = this.carried ? [cloneEcho(this.carried.echo)] : [];
+    for (const echo of echoes.slice(0, MAX_ECHOES - this.lockedSlots)) {
+      const used = new Set(this.echoes.map(e => e.colorIndex));
+      this.echoes.push({ ...cloneEcho(echo), colorIndex: used.has(echo.colorIndex) ? [0, 1, 2].find(i => !used.has(i))! : echo.colorIndex });
+    }
     this.editingIndex = null;
     this.planHistory = [];
     this.resetWorld('ready');
   }
 
   setDelay(index: number, frames: number): boolean {
-    if (!this.echoes[index] || this.editingIndex !== null || !Number.isInteger(frames) || frames < 0 || frames > FPS * 6 || frames % 15 !== 0) return false;
+    if (index < this.lockedSlots || !this.echoes[index] || this.editingIndex !== null || !Number.isInteger(frames) || frames < 0 || frames > FPS * 6 || frames % 15 !== 0) return false;
     if ((this.echoes[index].delay ?? 0) === frames) return false;
     this.rememberPlan(); this.echoes[index].delay = frames;
     this.resetWorld('ready'); this.events.push('plan'); return true;
   }
 
   previewAt(frame: number): Game {
-    const preview = new Game(this.level);
+    const preview = new Game(this.level, this.carried);
     preview.spectator = true;
-    preview.restorePlan(this.snapshot()); preview.start();
+    preview.restorePlan(this.localPlan); preview.start();
     for (let i = 0; i < Math.min(MAX_FRAMES, Math.max(0, Math.floor(frame))); i++) {
       if (preview.status !== 'running') break;
       preview.step({ x: 0, y: 0, lure: false });
@@ -118,7 +137,13 @@ export class Game {
   unmetPower(requirements: Power[] = []): Power[] { return requirements.filter(p => !this.powered(p)); }
   powerRequirements(requirements: Power[] = []): string { return requirements.map(p => `${p.id} ${this.circuitState(p.id, p.on)}`).join('、'); }
   get canCollect(): boolean { return !this.unmetPower(this.level.lootPower).length; }
-  get exitReady(): boolean { return !this.unmetPower(this.level.exitPower).length; }
+  get handoffReady(): boolean {
+    if (!this.level.handoff) return true;
+    const plate = this.level.plates.find(p => p.id === this.level.handoff!.plate);
+    const echo = this.echoes[0];
+    return this.echoes.length === 1 && !!plate && !!echo && distance(echo.frames.at(-1)!, plate) < 23 && this.activePlates.has(plate.id);
+  }
+  get exitReady(): boolean { return this.handoffReady && (!this.level.continuity || !!this.carried) && !this.unmetPower(this.level.exitPower).length; }
   get objectiveComplete(): boolean {
     return this.level.objective === 'deliver' ? !!this.level.delivery && this.evidenceDeposited && (this.level.delivery.receivers ?? []).every(r => this.evidenceReceipts.has(r.guard)) : this.level.objective === 'reach' || this.hasLoot;
   }
@@ -237,7 +262,7 @@ export class Game {
   interaction(): Intent | undefined {
     const delivery = this.level.delivery;
     if (this.level.objective === 'deliver' && delivery && distance(delivery, this.player) < 30) return { type: 'deposit', id: delivery.id };
-    const circuit = this.level.circuits?.find(c => distance(c, this.player) < 30);
+    const circuit = this.level.circuits?.find(c => !c.feed && distance(c, this.player) < 30);
     if (circuit) return { type: 'circuit', id: circuit.id, on: !this.circuits.get(circuit.id) };
     const terminal = this.level.terminals?.find(t => distance(t, this.player) < 30);
     if (terminal) return { type: terminal.kind === 'lock' ? 'authorize' : this.tokenOwner === 'player' ? 'give' : 'take', id: terminal.id };
@@ -284,7 +309,7 @@ export class Game {
       else if (!target) this.traceOperation(request, 'blocked', '这个电路不在当前行动区');
       else if (distance(request.at, target) >= 30) this.traceOperation(request, 'blocked', '操作位置已超出设备范围');
     }
-    for (const circuit of this.level.circuits ?? []) {
+    for (const circuit of (this.level.circuits ?? []).filter(c => !c.feed)) {
       const group = requests.filter(r => r.intent.type === 'circuit' && r.intent.id === circuit.id && distance(r.at, circuit) < 30);
       if (!group.length) continue;
       const values = new Set(group.map(r => (r.intent as Extract<Intent, { type: 'circuit' }>).on));
@@ -381,7 +406,7 @@ export class Game {
   }
 
   beginRerecord(index: number): boolean {
-    if (!Number.isInteger(index) || !this.echoes[index] || this.editingIndex !== null) return false;
+    if (!Number.isInteger(index) || index < this.lockedSlots || !this.echoes[index] || this.editingIndex !== null) return false;
     this.editingIndex = index;
     this.attempts++;
     this.resetWorld('ready');
@@ -407,6 +432,7 @@ export class Game {
   }
 
   echoActivity(index: number): string {
+    if (this.remote && index === 0) return `${this.level.continuity!.room} · ${this.remote.echoActivity(0)}`;
     if (index === this.editingIndex) return '正在重录';
     const echo = this.echoes[index];
     if (!echo) return '';
@@ -421,6 +447,7 @@ export class Game {
   }
 
   resetWorld(status: Status = 'running') {
+    this.remote?.resetWorld('running');
     this.player = { ...this.level.spawn, angle: -Math.PI / 2, lure: false };
     this.frame = 0;
     this.hasLoot = false;
@@ -463,7 +490,7 @@ export class Game {
 
   clear() {
     if (this.echoes.length) this.rememberPlan();
-    this.echoes = [];
+    this.echoes = this.carried ? [cloneEcho(this.carried.echo)] : [];
     this.editingIndex = null;
     this.attempts = 1;
     this.resetWorld('ready');
@@ -471,7 +498,7 @@ export class Game {
   }
 
   removeEcho(index: number) {
-    if (!Number.isInteger(index) || index < 0 || index >= this.echoes.length || this.editingIndex !== null) return;
+    if (!Number.isInteger(index) || index < this.lockedSlots || index >= this.echoes.length || this.editingIndex !== null) return;
     this.rememberPlan();
     this.echoes.splice(index, 1);
     this.attempts++;
@@ -541,6 +568,9 @@ export class Game {
     const actors = this.actors().map(a => a.at);
     const previous = this.openDoors;
     this.activePlates = new Set(this.level.plates.filter(p => (!p.window || (this.seconds >= p.window[0] && this.seconds < p.window[1])) && actors.some(a => distance(a, p) < 23)).map(p => p.id));
+    for (const circuit of this.level.circuits ?? []) if (circuit.feed) {
+      this.circuits.set(circuit.id, (circuit.feed.remote ? this.remote?.activePlates : this.activePlates)?.has(circuit.feed.plate) ?? false);
+    }
     this.openDoors = new Set(this.level.doors.filter(d => {
       const plates = doorPlates(d), count = plates.filter(p => this.activePlates.has(p)).length;
       const pressed = !plates.length || (d.plateMode === 'none' ? count === 0 : d.plateMode === 'one' ? count === 1 : d.plateMode === 'any' ? count > 0 : count === plates.length);
@@ -665,6 +695,15 @@ export class Game {
 
   step(input: Input) {
     if (this.status !== 'running') return;
+    if (this.remote) {
+      this.remote.step({ x: 0, y: 0, lure: false });
+      this.remote.drainEvents();
+      if (this.remote.status === 'caught') {
+        this.status = 'caught'; this.alarm = 1;
+        this.lastMessage = `${this.level.continuity!.room} 的留守回声暴露了。可回到首段锚点重新布置。`;
+        this.events.push('caught'); return;
+      }
+    }
     for (const field of this.level.suppressors ?? []) if (field.cycle && this.suppressionActive(field) !== this.suppressionActive(field, this.frame - 1)) this.signal(`${field.id} 抑制周期${this.suppressionActive(field) ? '开启' : '进入空档'}`);
     this.updatePlates();
     this.lureCooldown = Math.max(0, this.lureCooldown - DT);
@@ -702,7 +741,7 @@ export class Game {
     }
     this.frame++;
     this.noise = this.noise.map(n => ({ ...n, life: n.life - DT * 1.3 })).filter(n => n.life > 0);
-    if (!this.spectator && this.editingIndex === null && this.exitReady && this.objectiveComplete && distance(this.player, this.level.exit ?? this.level.spawn) < 30) {
+    if (!this.spectator && this.editingIndex === null && this.exitReady && this.objectiveComplete && distance(this.player, this.exitPoint) < 30) {
       this.status = 'won';
       this.events.push('won');
       return;

@@ -24,6 +24,7 @@ export class CampaignUI {
         <div class="stage-bar" id="stage-bar"><nav id="stage-rail" aria-label="任务阶段"></nav><span id="checkpoint-note" role="status">锚点自动保存在本机</span></div>
       </section>`);
     $('.stage-bar').insertAdjacentHTML('afterend', '<section id="consequence-panel" class="consequence-panel" hidden aria-label="下一阶段后果"><strong>给下一段留下什么</strong><p>以下是成功抵达锚点时才提交的结果。操作电路可改变选择；回退到本阶段可重新决定。</p><ul id="consequence-options"></ul></section>');
+    $('.stage-bar').insertAdjacentHTML('afterend', '<section id="continuity-panel" class="continuity-panel" hidden aria-label="连续行动"><strong>配电室 → 封存室 → 原路撤离</strong><p id="continuity-status" role="status"></p><p>各区共用 12 秒节拍：每轮同时从录像起点播放，短录像在终点待命。留守者一直占用一个回声名额。失败只重试当前区；点击首段锚点可重排留守者，后段锚点与计划随之撤销。</p></section>');
     $('.timeline').insertAdjacentHTML('afterend', `
       <div class="rehearsal-toolbar"><button id="preview-button" aria-pressed="false">◇ 预演回声</button><span id="interaction-tip">E 操作设备 · P 预演已保存的计划</span></div>
       <section id="preview-panel" class="preview-panel" hidden aria-label="回声预演"><div><strong>只读预演</strong><output id="preview-time">0.00s</output></div><p>仅播放已保存回声；真人不参与，也不会保存进度。拖动时间，检查门与设备。</p><input id="preview-frame" type="range" min="0" max="720" step="1" value="0" aria-label="预演时间"><ol id="preview-log"></ol></section>`);
@@ -58,8 +59,13 @@ export class CampaignUI {
 
   checkpointSaved(ok: boolean) { $('#checkpoint-note').textContent = ok ? '安全锚点已保存到本机' : '仅本次有效 · 本机存档不可用'; }
 
-  render(game: Game, campaignMode: boolean, preview: Game | null) {
+  render(game: Game, campaignMode: boolean, preview: Game | null, demo = false) {
     const world = preview ?? game;
+    $('#continuity-panel').hidden = !game.level.handoff && !game.level.continuity;
+    if (!$('#continuity-panel').hidden) {
+      const status = game.level.handoff ? '准备入口 · 窗那边的核心就是下一段目标。仅一条回声留守 HOLD，另外两格留给后续行动。' : `${preview ? '预演 · ' : ''}${game.level.continuity?.home ? '回到原处' : '隔窗协作'} · 回声 01 · ${world.echoActivity(0)} · 本区可用 2 格`;
+      if ($('#continuity-status').textContent !== status) $('#continuity-status').textContent = status;
+    }
     const delivery = world.level.delivery;
     $('#delivery-panel').hidden = world.level.objective !== 'deliver' || !delivery;
     if (delivery) {
@@ -153,7 +159,8 @@ export class CampaignUI {
       $('.level-nav').hidden = campaignMode;
       $('#story-strip').hidden = !campaignMode;
       $('#stage-bar').hidden = !campaignMode;
-      $('#training-mode').textContent = campaignMode ? '基础演习' : '返回主线';
+      $('#training-mode').textContent = demo ? '返回完整主线' : campaignMode ? '基础演习' : '返回主线';
+      $('#mission-board').hidden = demo;
       $('#campaign-summary').textContent = campaignMode ? `${mission.chapter} · ${mission.title}` : '原型演习 · 三种基本配合';
       $('#mission-cards').innerHTML = [...new Set(MISSIONS.map(m => m.chapter))].map(chapter => `<details class="chapter-group" ${chapter === mission.chapter ? 'open' : ''}><summary>${chapter === '序章' ? 'C0 / 昨天的搭档' : chapter === '机制试验' ? '机制试验 / 后续章节的可玩样例' : `${MISSIONS.find(m => m.chapter === chapter)!.id.split('-')[0]} / ${chapter}`}<span>${MISSIONS.filter(m => m.chapter === chapter && this.campaign.data.completed.includes(m.id)).length} / ${MISSIONS.filter(m => m.chapter === chapter).length}</span></summary><div class="mission-grid">${MISSIONS.filter(m => m.chapter === chapter).map(m => {
         const complete = this.campaign.data.completed.includes(m.id), available = this.campaign.available(m.id);
@@ -161,7 +168,7 @@ export class CampaignUI {
       }).join('')}</div></details>`).join('');
       if (campaignMode && stageIndex >= 0) {
         const stage = this.campaign.stageAt(stageIndex);
-        $('#chapter-label').textContent = `${mission.chapter} / ${String(MISSIONS.indexOf(mission) + 1).padStart(2, '0')} · 第 ${stageIndex + 1} / ${mission.stages.length} 段`;
+        $('#chapter-label').textContent = demo ? `独立试玩 · 与主线存档分开保存 · 第 ${stageIndex + 1} / ${mission.stages.length} 段` : `${mission.chapter} / ${String(MISSIONS.indexOf(mission) + 1).padStart(2, '0')} · 第 ${stageIndex + 1} / ${mission.stages.length} 段`;
         $('#operation-title').textContent = mission.title;
         $('#story-line').textContent = game.status === 'won' ? stage.result : stage.story;
         $('#stage-rail').innerHTML = mission.stages.map((s, i) => `<button data-stage="${i}" ${i > this.campaign.stageIndex ? 'disabled' : ''} ${i === stageIndex ? 'aria-current="step"' : ''} title="回到该锚点；其后阶段将重新规划"><span>${i < this.campaign.cleared() ? '✓' : String(i + 1).padStart(2, '0')}</span>${i > this.campaign.stageIndex && s.variants?.length ? '下一段 · 依所选方案' : this.campaign.stageAt(i).level.title}</button>`).join('');
@@ -171,6 +178,7 @@ export class CampaignUI {
     if (delayKey !== this.delayKey) {
       this.delayKey = delayKey;
       $('#echo-delays').innerHTML = game.echoes.map((echo, index) => {
+        if (index < game.lockedSlots) return '<p class="retained-delay">E1 · 配电室留守录像已随锚点保存；回到首段调整。</p>';
         const delay = echo.delay ?? 0, cut = Math.max(0, delay + echo.frames.length - MAX_FRAMES);
         return `<div class="delay-row"><span>E${index + 1} 出场 <strong>${(delay / FPS).toFixed(2)}s</strong></span><input type="number" min="0" max="6" step="0.25" value="${(delay / FPS).toFixed(2)}" data-current="${delay}" data-delay-input="${index}" aria-label="回声 ${index + 1} 出场秒数" ${game.editingIndex !== null || preview ? 'disabled' : ''}><button data-echo="${index}" data-delay="-15" aria-label="提前回声 ${index + 1} 四分之一秒" ${delay === 0 || game.editingIndex !== null ? 'disabled' : ''}>−</button><button data-echo="${index}" data-delay="15" aria-label="延迟回声 ${index + 1} 四分之一秒" ${delay === 360 || game.editingIndex !== null ? 'disabled' : ''}>＋</button>${cut ? `<small>末尾 ${(cut / FPS).toFixed(2)}s 不会播放</small>` : ''}</div>`;
       }).join('') + (game.echoes.length ? '<p>每格 0.25s · 调整后从本轮起点重新规划</p>' : '');

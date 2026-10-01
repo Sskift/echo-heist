@@ -13,3 +13,8 @@
 .credential-strip{display:flex;gap:8px 18px;flex-wrap:wrap;padding:12px 16px;margin-top:8px;border-left:2px solid #d6ad6d;background:#29281f;font-size:12px;line-height:1.7}.credential-strip strong{color:#efbd72}.credential-strip span{color:#c2baaa}.relay-panel{background:#27271f;border-color:#5d523d;color:#e2d7bb}.relay-panel p{color:#b8b2a0}
 .suppression-panel{background:#252030;border-color:#564165;color:#d7c2e8}.suppression-panel p{color:#b5a5c4}
 .consequence-panel{padding:14px 20px;border-top:1px solid #c9cfbf;background:#e9eddf;font-size:11px;line-height:1.8}.consequence-panel>strong{color:#30472e}.consequence-panel>p{color:#6b7b60;font-size:10px;margin-top:4px}.consequence-panel ul{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0;margin-top:10px}.consequence-panel li{padding:9px 12px;border:1px solid #ccd4bf;color:#6c7960;background:#f0f2e8}.consequence-panel li[data-selected=true]{color:#294329;border-color:#80995b;background:#e0e9d1}@media(max-width:550px){.consequence-panel{padding:12px 15px}.consequence-panel ul{grid-template-columns:1fr}}
+.continuity-panel { padding: 16px 20px; border: 1px solid #587889; border-left: 3px solid #8ed4ed; background: #15252b; margin: 12px 0 18px; color: #afc7d0; }
+.continuity-panel strong { color: #d1e6ea; font-size: 14px; }
+.continuity-panel p { margin: 7px 0 0; font-size: 12px; line-height: 1.8; }
+.retained-slot { border-style: dashed; }
+.retained-lock, .retained-delay { color: #8ed4ed; font-size: 10px; }

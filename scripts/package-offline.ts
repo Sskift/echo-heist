@@ -46,6 +46,10 @@ P：预演计划　Shift：按住快进　Esc：暂停
 收起未读完的片段后，可在修表铺续读；刷新也会恢复阅读位置。
 主线中的行动路线与最终公开范围，仍由你在关卡里实际完成的操作决定。
 
+0.15 新增 C3-6《最后一盏灯》：配电室布置、隔窗取核心、回原处恢复城市。
+直接试玩：在此 HTML 文件地址后加 ?demo=last-light，与完整主线分开存档。
+留守者占一个回声名额，各区共用 12 秒节拍；回到首段改计划会撤销后段锚点。
+
 构建对应：${commit}
 `);
 const sources: { title: string; author: string; sourcePage: string; license: string }[] = JSON.parse(readFileSync('licenses/asset-sources.json', 'utf8'));

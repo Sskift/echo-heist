@@ -1,9 +1,9 @@
-import { Game } from './engine.ts';
+import { Game, type Carry } from './engine.ts';
 import type { Stage } from './campaign-content.ts';
 
 // Author tool: all routes use movement and interaction inputs, never teleports.
-export function playWitness(stage: Stage): Game {
-  const game = new Game(stage.level); game.start();
+export function playWitness(stage: Stage, carry?: Carry): Game {
+  const game = new Game(stage.level, carry); game.start();
   const step = (x = 0, y = 0, interact = false, lure = false) => {
     if (game.status === 'ready') game.start();
     if (game.status !== 'running') throw new Error(`${stage.level.id}: ${game.status} / ${game.lastMessage}`);
