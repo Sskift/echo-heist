@@ -9,4 +9,4 @@
 - Use Chinese for player-facing copy, with brief English technical/atmospheric labels where appropriate.
 - Run `npm test` and `npm run build` for gameplay changes; inspect the browser for UI changes.
 - Do not add unrelated features or use subagents without explicit authorization.
-- The current owner request is the v0.25 visual polish pass: material separation/reflections, fine floor patterns, lamps/counters, garment finishing and edge camera composition. Follow the new scope at the top of `docs/next-steps.md`; verify representative scenes, mobile readability, repeated scene loading and offline output before delivery. The v0.24 feature plan stays complete.
+- v0.25 visual polish is delivered: material separation/reflections, fine floor patterns, lamps/counters, garment finishing and edge camera composition. Representative scenes, mobile readability, repeated loading and final offline output are verified; preserve these details in future changes. The v0.24 feature plan stays complete.
