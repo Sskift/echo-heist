@@ -10,3 +10,5 @@
 - Run `npm test` and `npm run build` for gameplay changes; inspect the browser for UI changes.
 - Do not add unrelated features or use subagents without explicit authorization.
 - v0.25 visual polish is delivered: material separation/reflections, fine floor patterns, lamps/counters, garment finishing and edge camera composition. Representative scenes, mobile readability, repeated loading and final offline output are verified; preserve these details in future changes. The v0.24 feature plan stays complete.
+
+- The v0.26 owner direction supersedes v0.25 decorative density: quiet scene, contextual prompts, optional mechanism annotations, broad matte pigments and sculpted architecture inspired by COCOON. Preserve narrative objects, readable hazards, exact collision/replay and access to detailed rules. Do not reintroduce permanent character/device nameplates or decorative floor copy.

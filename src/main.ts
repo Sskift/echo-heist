@@ -19,6 +19,7 @@ import { JourneyUI } from './journey-ui.ts';
 import { CONTRACTS, contractForLevel } from './contract-content.ts';
 import { ContractBook, CONTRACT_KEY, CONTRACT_PLAN_KEY } from './contracts.ts';
 import { ContractUI } from './contract-ui.ts';
+import './quiet.css';
 
 const ALL_LEVELS = [...LEVELS, ...CAMPAIGN_LEVELS];
 const demoName = new URLSearchParams(location.search).get('demo') ?? '';
@@ -77,42 +78,40 @@ try {
 
 $('#app').innerHTML = `
   <header class="site-header">
-    <a class="brand" href="./" aria-label="ECHO HEIST 首页"><span class="brand-symbol">${icons.echo}</span><span>ECHO HEIST<span class="brand-cn">回声劫案</span></span></a>
-    <div class="header-note"><span class="status-dot"></span> A SOLO CO-OP HEIST <span class="version">VOL. 23.0</span></div>
+    <a class="brand" href="./" aria-label="ECHO HEIST 首页"><span class="brand-symbol">${icons.echo}</span><span>回声劫案</span></a>
     <button class="text-button" id="help-button">行动手册 <span class="key">?</span></button>
   </header>
   <main>
     <section class="intro">
-      <div><p class="eyebrow">12 SECONDS. THREE ECHOES. ONE PERFECT HEIST.</p><h1>你的同伙，是过去的你<span>。</span></h1></div>
       <nav class="level-nav" aria-label="选择关卡">${LEVELS.map((level, i) => `<button class="level-tab" data-level="${i}"><span class="tab-number">${level.id}</span><span>${level.title}</span><span class="level-check" aria-label="已完成">${completedTraining.has(level.id) ? '✓' : ''}</span></button>`).join('')}</nav>
     </section>
     <div class="game-layout">
       <section class="console" aria-label="游戏区域">
-        <div class="console-bar"><div class="feed-label"><span class="status-dot"></span> LIVE FEED <span class="divider">/</span> <span id="map-code">ANNEX_01</span></div><div class="console-controls"><button class="fast-forward-button" id="fast-forward" title="按住快进，或按住 Shift" aria-label="按住三倍快进" aria-pressed="false">3× <span>快进</span></button><button class="icon-button active" id="trails-button" title="显示 / 隐藏回声轨迹" aria-label="显示回声轨迹" aria-pressed="true">${icons.eye}</button><button class="icon-button" id="sound-button" title="开启音效" aria-label="开启音效" aria-pressed="false">${icons.sound}<span class="sound-off"></span></button><button class="icon-button pause-button" id="pause-button" title="暂停 / 继续 (Esc)" aria-label="暂停游戏">Ⅱ</button><button class="icon-button" id="fullscreen-button" title="全屏" aria-label="切换全屏">⛶</button></div></div>
+        <div class="console-bar"><div class="feed-label"><span class="status-dot"></span> <span id="map-code"></span></div><div class="console-controls"><button class="fast-forward-button" id="fast-forward" title="按住快进，或按住 Shift" aria-label="按住三倍快进" aria-pressed="false">3× <span>快进</span></button><button class="icon-button" id="trails-button" title="显示 / 隐藏回声轨迹" aria-label="显示回声轨迹" aria-pressed="false">${icons.eye}</button><button class="icon-button" id="sound-button" title="开启音效" aria-label="开启音效" aria-pressed="false">${icons.sound}<span class="sound-off"></span></button><button class="icon-button pause-button" id="pause-button" title="暂停 / 继续 (Esc)" aria-label="暂停游戏">Ⅱ</button><button class="icon-button" id="fullscreen-button" title="全屏" aria-label="切换全屏">⛶</button></div></div>
         <div class="arena">
-          <canvas id="game-canvas" tabindex="0" aria-label="2.5D 等距场景。用 WASD 或方向键按画面方向移动，R 保存回声，空格制造声响。详细操作见行动手册。"></canvas>
+          <canvas id="game-canvas" tabindex="0" aria-label="2.5D 等距场景。用 WASD 或方向键按画面方向移动，R 保存回声，空格制造声响。详图可显示机关编号与连线，详细操作见行动手册。"></canvas>
           <div class="arena-badge"><span id="speed-indicator" hidden>3× FAST FORWARD</span><span class="rec-dot"></span><span id="record-label">STANDBY</span></div>
           <div class="edit-banner" id="edit-banner" hidden><span id="edit-label"></span><button id="cancel-rerecord">取消，保留原路线</button></div>
           <div class="arena-caption">ARCHIVE SECURITY SYSTEM <span>CAM_04</span></div>
           <div class="overlay" id="overlay"><div class="overlay-card" id="overlay-card"></div></div>
           <div class="toast" id="toast" role="status" aria-live="polite"></div>
         </div>
-        <div class="timeline"><div class="timeline-heading"><span>时间轨道 <small>REPLAY BUFFER</small></span><span class="timeline-scale"><span>0s</span><span>4s</span><span>8s</span><span>12s</span></span></div><div id="tracks"></div></div>
+        <div class="timeline"><div class="timeline-heading"><span>回声</span><span class="timeline-scale"><span>0s</span><span>4s</span><span>8s</span><span>12s</span></span></div><div id="tracks"></div></div>
         <div class="touch-controls" aria-label="触摸控制"><div class="dpad"><button data-direction="up" aria-label="向上移动">↑</button><button data-direction="left" aria-label="向左移动">←</button><button data-direction="down" aria-label="向下移动">↓</button><button data-direction="right" aria-label="向右移动">→</button></div><button class="touch-lure" id="touch-lure">制造声响</button></div>
       </section>
       <aside class="mission-panel">
         <div class="mission-heading"><span class="eyebrow">OPERATION <span id="mission-number">01</span> / 03</span><span class="mission-symbol">↗</span></div>
-        <h2 id="mission-title"></h2><p class="mission-subtitle" id="mission-subtitle"></p><p class="mission-description" id="mission-description"></p>
+        <h2 id="mission-title"></h2><details class="mission-brief" id="mission-brief"><summary>任务详情</summary><p class="mission-subtitle" id="mission-subtitle"></p><p class="mission-description" id="mission-description"></p></details>
         <div class="clock-panel"><div class="clock-top"><span>本轮剩余</span><span id="loop-number">TAKE 01</span></div><div class="clock"><span id="seconds">12</span><span class="clock-fraction" id="fraction">.00</span><span class="clock-unit">s</span></div><div class="clock-progress"><span id="clock-fill"></span></div></div>
-        <div class="objectives"><p class="section-label">行动目标 <span>OBJECTIVES</span></p><div class="objective" id="objective-doors"><span class="objective-check">01</span><div>让过去的你打开通道<small id="door-status">等待开关激活</small></div></div><div class="objective" id="objective-loot"><span class="objective-check">02</span><div>取走藏品，回到撤离点<small id="loot-status">寻找金色目标标记</small></div></div></div>
-        <div class="echo-section"><p class="section-label">你的同伙 <span id="echo-count">0 / 3</span></p><div id="echo-slots"></div><p class="plan-status" id="plan-status" role="status">录制后自动保存</p></div>
+        <div class="objectives"><div class="objective" id="objective-doors"><span class="objective-check">01</span><div>让过去的你打开通道<small id="door-status">等待开关激活</small></div></div><div class="objective" id="objective-loot"><span class="objective-check">02</span><div>取走藏品，回到撤离点<small id="loot-status">寻找金色目标标记</small></div></div></div>
+        <div class="echo-section"><p class="section-label">你的同伙 <span id="echo-count">0 / 3</span></p><div id="echo-slots"></div><p class="plan-status" id="plan-status" role="status"></p></div>
         <div class="mission-actions"><button class="primary-button" id="record-button">${icons.rewind}<span>留下回声</span><kbd>R</kbd></button><div class="secondary-actions"><button id="retry-button">重试本轮 <kbd>↵</kbd></button><button id="undo-button" title="撤销上次录制、重录、删除或清空 (Z)">撤销 <kbd>Z</kbd></button><button id="reset-button">清空计划</button></div></div>
         <details class="hint"><summary>卡住了？查看线索 <span>＋</span></summary><p class="map-directions">地图方向：北 ↗ · 东 ↘ · 南 ↙ · 西 ↖</p><p id="hint-text"></p></details>
       </aside>
     </div>
-    <footer class="game-footer"><div class="controls-legend"><span><kbd>W A S D</kbd> / <kbd>↑↓←→</kbd> 移动</span><span><kbd>R</kbd> 保存回声</span><span><kbd>SHIFT</kbd> 按住快进</span><span><kbd>SPACE</kbd> 声响诱饵</span><span><kbd>ESC</kbd> 暂停</span></div><span class="footer-motto">ONE THIEF. MULTIPLE ALIBIS.</span></footer>
+    <footer class="game-footer"><div class="controls-legend"><span><kbd>W A S D</kbd> / <kbd>↑↓←→</kbd> 移动</span><span><kbd>R</kbd> 保存回声</span><span><kbd>SHIFT</kbd> 按住快进</span><span><kbd>SPACE</kbd> 声响诱饵</span><span><kbd>ESC</kbd> 暂停</span></div></footer>
   </main>
-  <dialog id="help-dialog"><button class="dialog-close" aria-label="关闭行动手册">×</button><p class="eyebrow">FIELD MANUAL / 002</p><h2>你只需要一个同伙。<br />昨天的你就够了。</h2><p class="manual-intro">每一轮有 12 秒。走过的路线会被录下，成为下一轮与你同时行动的回声。</p><ol class="manual-steps"><li><strong>走到开关，留下自己</strong><p>WASD 和方向键按画面方向移动，先走到 A。路线提示使用地图方向：北 ↗、东 ↘、南 ↙、西 ↖。按 R 保存路线并开始下一轮。提前录制的回声会停在终点，直到这一轮结束。</p></li><li><strong>让过去为现在开门</strong><p>回声从起点重放，你可以自由行动。它会踩开关、重放声响，也会被守卫发现。回声是投影，可穿过后来关闭的门，无法拿走藏品。</p></li><li><strong>拿到藏品，安全撤离</strong><p>接触金色藏品自动拾取，再返回标记的撤离点。12 秒用尽会自动录制；槽位满时可以点击重录，调整某一名同伙的路线。</p></li><li><strong>修改计划，不必全部重来</strong><p>点击回声卡片的「重录」，其他同伙照常行动，被重录的旧回声暂时退场。这一轮只录路线；按 R 替换，或取消以保留旧路线。误删或录错可以按 Z 撤销。按住 Shift 以三倍速度推进，松开恢复正常。</p></li></ol><div class="manual-shortcuts"><span><kbd>R</kbd> 保存回声</span><span><kbd>Enter</kbd> 重试，保留同伙</span><span><kbd>Shift</kbd> 按住快进</span><span><kbd>Z</kbd> 撤销计划修改</span></div><p class="manual-note">已保存的回声计划按关卡保存在本机，刷新或切换关卡不会丢失。正在录制的草稿和撤销历史仅在本次关卡有效。建议使用桌面键盘游玩。</p><button class="primary-button" id="close-help">知道了，开始行动 ${icons.arrow}</button></dialog>
+  <dialog id="help-dialog"><button class="dialog-close" aria-label="关闭行动手册">×</button><p class="eyebrow">行动手册</p><h2>让过去的你来配合。</h2><p class="manual-intro">每一轮有 12 秒。走过的路线会被录下，成为下一轮与你同时行动的回声。</p><ol class="manual-steps"><li><strong>走到开关，留下自己</strong><p>WASD 和方向键按画面方向移动，先走到开关；需要查看编号时，打开「详图」。路线提示使用地图方向：北 ↗、东 ↘、南 ↙、西 ↖。按 R 保存路线并开始下一轮。提前录制的回声会停在终点，直到这一轮结束。</p></li><li><strong>让过去为现在开门</strong><p>回声从起点重放，你可以自由行动。它会踩开关、重放声响，也会被守卫发现。回声是投影，可穿过后来关闭的门，无法拿走藏品。</p></li><li><strong>拿到藏品，安全撤离</strong><p>接触金色藏品自动拾取，再返回标记的撤离点。12 秒用尽会自动录制；槽位满时可以点击重录，调整某一名同伙的路线。</p></li><li><strong>修改计划，不必全部重来</strong><p>点击回声卡片的「重录」，其他同伙照常行动，被重录的旧回声暂时退场。这一轮只录路线；按 R 替换，或取消以保留旧路线。误删或录错可以按 Z 撤销。按住 Shift 以三倍速度推进，松开恢复正常。</p></li></ol><div class="manual-shortcuts"><span><kbd>R</kbd> 保存回声</span><span><kbd>Enter</kbd> 重试，保留同伙</span><span><kbd>Shift</kbd> 按住快进</span><span><kbd>Z</kbd> 撤销计划修改</span></div><p class="manual-note">已保存的回声计划按关卡保存在本机，刷新或切换关卡不会丢失。正在录制的草稿和撤销历史仅在本次关卡有效。建议使用桌面键盘游玩。</p><button class="primary-button" id="close-help">知道了，开始行动 ${icons.arrow}</button></dialog>
 `;
 
 let levelIndex = 0;
@@ -122,6 +121,16 @@ let previewGame: Game | null = null;
 let previewWasRunning = false;
 let game = new Game(LEVELS[0]);
 const renderer = new Renderer($('#game-canvas'));
+$('#mission-brief').append($('.objectives'));
+$('#fullscreen-button').insertAdjacentHTML('beforebegin', '<button id="annotations-button" class="media-button" aria-label="显示机关详图" aria-pressed="false" title="机关编号与连线">详图</button>');
+function showAnnotations(enabled: boolean) {
+  renderer.annotations = enabled;
+  $('#annotations-button').setAttribute('aria-pressed', String(enabled));
+  $('#annotations-button').setAttribute('aria-label', enabled ? '收起机关详图' : '显示机关详图');
+  $('#annotations-button').classList.toggle('active', enabled);
+}
+$('#annotations-button').addEventListener('click', () => { showAnnotations(!renderer.annotations); focusGame(); });
+$('.hint').addEventListener('toggle', () => { if (($('.hint') as HTMLDetailsElement).open) showAnnotations(true); });
 const journeyUI = new JourneyUI($('.arena'), () => { renderer.finishArrival(); clearInput(); focusGame(); });
 $('#fullscreen-button').insertAdjacentHTML('beforebegin', '<button id="camera-button" class="media-button" title="切换全景 / 跟随近景" aria-label="切换跟随近景" aria-pressed="false">近景</button>');
 $('#camera-button').addEventListener('click', () => {
@@ -190,7 +199,7 @@ const contractUI = new ContractUI(contracts, {
   leave: () => openMission(campaign.data.selected,false),
   readOnly: () => !!previewGame,
 });
-for (const selector of ['#mission-board', '#security-panel', '#power-panel', '#relay-panel', '#suppression-panel', '#delivery-panel', '#credential-journey details']) {
+for (const selector of ['#mission-board', '#mission-brief', '#security-panel', '#power-panel', '#relay-panel', '#suppression-panel', '#delivery-panel', '#credential-journey details']) {
   const details = $<HTMLDetailsElement>(selector);
   const pauseForReading = () => {
     if (game.status === 'running') { game.togglePause(); clearInput(); accumulator = 0; refreshUI(); }
@@ -297,7 +306,7 @@ function persistPlan() {
   target[game.level.id] = encodePlan(game.level.id, game.localPlan);
   try {
     localStorage.setItem(isContract?CONTRACT_PLAN_KEY:planKey, JSON.stringify(target));
-    $('#plan-status').textContent = '计划已保存到本机';
+    $('#plan-status').textContent = '';
   } catch { $('#plan-status').textContent = '仅本次有效 · 无法写入本机存档'; }
 }
 
@@ -334,7 +343,7 @@ function loadLevel(level: Level) {
     }
   }
   if (campaignMode && campaign.depart(game)) saveCampaign();
-  $('#plan-status').textContent = restored?.length ? `已恢复 ${restored.length} 条回声` : '录制后自动保存';
+  $('#plan-status').textContent = '';
   initialized = true;
   clearInput(); accumulator = 0;
   uiKey = ''; overlayKey = '';
@@ -346,7 +355,7 @@ function loadLevel(level: Level) {
   $('#mission-subtitle').textContent = level.subtitle;
   $('#mission-description').textContent = level.description;
   hintStep = 0; renderHint();
-  $('#map-code').textContent = `ANNEX_${level.id}`;
+  $('#map-code').textContent = level.title;
   $<HTMLDetailsElement>('.hint').open = false;
   document.querySelectorAll<HTMLButtonElement>('.level-tab').forEach((tab, i) => {
     tab.classList.toggle('selected', !campaignMode && i === levelIndex);
@@ -419,7 +428,7 @@ function refreshUI() {
     $('#echo-slots').innerHTML = Array.from({ length: game.echoLimit }, (_, i) => {
       const echo = game.echoes[i];
       if (echo && i < game.lockedSlots) return `<div class="echo-slot filled retained-slot" style="--echo-color:${ECHO_COLORS[echo.colorIndex]}"><span class="echo-avatar">${icons.echo}</span><div class="echo-info"><strong>回声 01 · 配电室<span>留守</span></strong><small data-echo-state="0"></small></div><span class="retained-lock" title="回到首段锚点可调整">已留守</span></div>`;
-      return echo ? `<div class="echo-slot filled ${game.editingIndex === i ? 'editing' : ''}" style="--echo-color:${ECHO_COLORS[echo.colorIndex]}"><span class="echo-avatar">${icons.echo}</span><div class="echo-info"><strong>回声 0${i + 1}<span>${(echo.frames.length / FPS).toFixed(1)}s</span></strong><small data-echo-state="${i}"></small></div><button class="rerecord-button" data-rerecord="${i}" aria-label="重录回声 ${i + 1}" ${game.editingIndex !== null ? 'disabled' : ''}>重录</button><button data-delete="${i}" title="删除回声 ${i + 1} 并重新规划" aria-label="删除回声 ${i + 1}" ${game.editingIndex !== null ? 'disabled' : ''}>×</button></div>` : `<div class="echo-slot empty"><span class="empty-cross">＋</span><span>等待另一个你</span><span class="slot-number">0${i + 1}</span></div>`;
+      return echo ? `<div class="echo-slot filled ${game.editingIndex === i ? 'editing' : ''}" style="--echo-color:${ECHO_COLORS[echo.colorIndex]}"><span class="echo-avatar">${icons.echo}</span><div class="echo-info"><strong>回声 0${i + 1}<span>${(echo.frames.length / FPS).toFixed(1)}s</span></strong><small data-echo-state="${i}"></small></div><button class="rerecord-button" data-rerecord="${i}" aria-label="重录回声 ${i + 1}" ${game.editingIndex !== null ? 'disabled' : ''}>重录</button><button data-delete="${i}" title="删除回声 ${i + 1} 并重新规划" aria-label="删除回声 ${i + 1}" ${game.editingIndex !== null ? 'disabled' : ''}>×</button></div>` : `<div class="echo-slot empty"><span class="empty-cross">＋</span><span>空闲</span><span class="slot-number">0${i + 1}</span></div>`;
     }).join('');
     $('#tracks').innerHTML = Array.from({ length: game.echoLimit }, (_, i) => {
       const echo = game.echoes[i];

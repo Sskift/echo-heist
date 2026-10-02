@@ -1,0 +1,89 @@
+/* Keep the room dominant. Explanations remain available when requested. */
+:root { background: #e4e8df; --paper: #e9ece3; --line: #cbd5ca; }
+.site-header { height: 54px; padding: 0 28px; background: transparent; border: 0; }
+.brand { font: 500 14px 'Microsoft YaHei', sans-serif; letter-spacing: 3px; }
+.brand-symbol { width: 26px; height: 26px; border-radius: 50%; background: #45696a; color: #e3e9cc; }
+.brand-symbol svg { width: 18px; height: 18px; }
+main { max-width: 1640px; padding: 8px 28px 24px; }
+.intro { margin-bottom: 10px; }
+.intro:has(.level-nav[hidden]) { display: none; }
+.game-layout { grid-template-columns: minmax(0, 1fr) 238px; border: 0; border-radius: 12px; overflow: hidden; background: #edf0e7; box-shadow: none; }
+.console { justify-content: flex-start; background: #263c43; }
+.console-bar { height: 44px; padding: 0 16px; background: #263c43; border: 0; gap: 14px; }
+.feed-label { flex: 1; min-width: 0; font: 11px 'Microsoft YaHei', sans-serif; letter-spacing: .5px; color: #c4d2c8; }
+#map-code { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: inherit; }
+.feed-label .status-dot { display: none; }
+.console-controls { gap: 9px; flex-shrink: 0; }
+.console-controls button { color: #c1d4cc; }
+.console-controls .media-button { border: 0; padding: 5px; min-height: 28px; }
+#annotations-button[aria-pressed=true] { color: #f1e7bc; background: #536b6a; border-radius: 4px; }
+.arena { margin: 0; aspect-ratio: 8 / 5; }
+.arena #game-canvas { border: 0; }
+.mission-panel { padding: 19px 17px; border: 0; background: #edf0e7; }
+.mission-heading { display: none; }
+.mission-panel h2 { font-size: 17px; line-height: 1.5; margin-bottom: 8px; }
+.mission-brief { margin: 8px 0 12px; font-size: 11px; color: #516c60; }
+.mission-brief summary { cursor: pointer; padding: 6px 0; }
+.mission-brief .mission-subtitle { display: none; }
+.mission-brief .mission-description { display: block; font-size: 11px; line-height: 1.8; margin: 8px 0; }
+.mission-brief .objectives { padding-bottom: 0; }
+.clock-panel { padding: 10px 0 14px; margin-top: 0; }
+.clock-top { font-size: 10px; }
+#loop-number { display: none; }
+.clock { height: 66px; }
+.clock #seconds { font-size: 57px; }
+.clock-fraction { font-size: 24px; }
+.echo-section { margin-top: 10px; }
+.echo-slot { border-radius: 5px; }
+.echo-slot.empty { height: 30px; min-height: 30px; border-color: #d5ddd1; color: #8b9a89; }
+.echo-slot.empty .empty-cross { font-size: 14px; }
+.plan-status:empty { display: none; }
+.timeline { padding: 10px 16px 12px; background: #263c43; border: 0; }
+.timeline-heading { font-size: 9px; color: #9fb5b0; }
+.timeline-heading small { display: none; }
+.game-footer { display: none; }
+.campaign-shell { border: 0; border-radius: 9px; margin-bottom: 10px; background: #edf0e7; overflow: hidden; }
+.campaign-toolbar { padding: 8px 15px; border: 0; }
+.story-strip { padding: 4px 15px 10px; grid-template-columns: auto 1fr; gap: 16px; }
+.story-strip h2 { font-size: 16px; margin: 0; }
+.story-strip > p, #chapter-label { display: none; }
+.stage-bar { padding: 7px 10px; border: 0; background: #dde5da; }
+#checkpoint-note { font-size: 9px; }
+.rehearsal-toolbar { margin: 0; padding: 7px 16px; border: 0; background: #263c43; }
+#interaction-tip { display: none; }
+.rehearsal-toolbar button { font-size: 10px; }
+.security-panel, .operation-panel { margin: 0; border-width: 1px 0 0; border-color: #ffffff12; border-radius: 0; }
+.hint summary { font-size: 11px; }
+.mission-actions { margin-top: 13px; }
+.primary-button { border-radius: 5px; }
+.console-controls button:focus-visible { outline-color: #e4e8bc; }
+@media(max-width: 1000px) {
+  .game-layout { grid-template-columns: 1fr; }
+  .mission-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 22px; }
+  .mission-panel h2, .mission-brief, .hint { grid-column: 1 / -1; }
+  .mission-panel h2 { margin-bottom: 0; }
+  .mission-brief { margin: 0; }
+  .mission-actions { grid-column: 1 / -1; }
+  .clock-panel, .echo-section { margin: 0; }
+}
+@media(max-width: 550px) {
+  .site-header { height: 44px; padding: 0 13px; }
+  main { padding: 4px 13px 16px; }
+  .brand { font-size: 12px; }
+  .console-bar { padding: 0 8px; gap: 4px; height: 38px; }
+  .console-controls { gap: 3px; }
+  .feed-label { display: none; }
+  .console-controls { justify-content: space-between; width: 100%; }
+  .console-controls button { min-width: 28px; min-height: 30px; }
+  #camera-button, #annotations-button { font-size: 10px; }
+  .mission-panel { padding: 15px; }
+  .story-strip { padding: 2px 12px 8px; }
+  .story-strip h2 { font-size: 14px; }
+  .campaign-toolbar { padding: 8px 12px; }
+  #checkpoint-note { display: none; }
+  .timeline { padding: 8px 12px; }
+}
+
+/* Decorative copy is omitted; success/failure explanations remain in the cards. */
+.overlay-eyebrow { display: none; }
+.console-bar .feed-label { visibility: hidden; }

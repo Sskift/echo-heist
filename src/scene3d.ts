@@ -8,16 +8,18 @@ import { VIEW_WIDTH, VIEW_HEIGHT } from './isometric.ts';
 import { SetDressing, setting, sceneLook } from './set-dressing.ts';
 import { SceneFinish, SurfaceRelief } from './scene-finish.ts';
 import { WindowLight } from './window-light.ts';
+import { signalGlyph } from './scene-signals.ts';
 import { passageLandmarks } from './room-journey.ts';
 
 type Actor = ReturnType<Models3D['character']>;
-type Label = { at: Point; height: number; text: string; color: string };
+type Label = { at: Point; height: number; text: string; color: string; contextual: boolean };
 type Wall = { root: THREE.Group; x: number; y: number; w: number; h: number; tall: boolean };
 const world = (at: Point, height = 0) => new THREE.Vector3(at.x / TILE - 15, height, at.y / TILE - 9);
 const colors = { brass: '#bca16d', light: '#f7d897', cyan: '#8ed4ed', lime: '#c3ed82', red: '#ed947c' };
 
 export class Renderer {
-  trails = true;
+  trails = false;
+  annotations = false;
   detail = true;
   closeup = false;
   rewindFlash = 0;
@@ -38,7 +40,7 @@ export class Renderer {
   private readonly overlay = document.createElement('canvas');
   private readonly ground = document.createElement('canvas');
   private readonly groundTexture: THREE.CanvasTexture;
-  private readonly keyLight = new THREE.DirectionalLight('#a8c5df', 2.25);
+  private readonly keyLight = new THREE.DirectionalLight('#f6dfc0', 2.6);
   private readonly mat = new Map<string, THREE.MeshStandardMaterial>();
   private readonly cube = new RoundedBoxGeometry(1, 1, 1, 2, 0.035);
   private readonly dressing = new SetDressing((...args) => this.box(...args));
@@ -65,10 +67,10 @@ export class Renderer {
     this.gl = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance', preserveDrawingBuffer: true });
     this.gl.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
     this.gl.setSize(VIEW_WIDTH, VIEW_HEIGHT, false);
-    this.gl.shadowMap.enabled = true; this.gl.shadowMap.type = THREE.PCFShadowMap;
-    this.gl.toneMapping = THREE.ACESFilmicToneMapping; this.gl.toneMappingExposure = 1.12;
+    this.gl.shadowMap.enabled = true; this.gl.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.gl.toneMapping = THREE.ACESFilmicToneMapping; this.gl.toneMappingExposure = 1.06;
     this.scene.background = new THREE.Color('#14252d');
-    this.scene.add(new THREE.HemisphereLight('#adc7e0', '#42372d', 0.86));
+    this.scene.add(new THREE.HemisphereLight('#b6d5d3', '#665260', 1.15));
     this.keyLight.position.set(-12, 18, -8); this.keyLight.castShadow = true;
     this.keyLight.shadow.mapSize.set(2048, 2048); this.keyLight.shadow.camera.left = -23; this.keyLight.shadow.camera.right = 23; this.keyLight.shadow.camera.top = 18; this.keyLight.shadow.camera.bottom = -18;
     this.keyLight.shadow.camera.near = 1; this.keyLight.shadow.camera.far = 65; this.keyLight.shadow.bias = -0.0002; this.keyLight.shadow.normalBias = 0.035;
@@ -89,8 +91,8 @@ export class Renderer {
   private material(color: string, metalness = 0, roughness = 0.8) {
     const key = `${color}:${metalness}:${roughness}`;
     if (!this.mat.has(key)) this.mat.set(key, new THREE.MeshStandardMaterial({ color, metalness,
-      roughness: metalness ? 0.37 : roughness, roughnessMap: this.relief.patina,
-      bumpMap: metalness ? this.relief.metal : this.relief.plaster, bumpScale: metalness ? 0.006 : 0.018,
+      roughness: metalness ? 0.66 : Math.max(.88, roughness),
+      bumpMap: metalness ? this.relief.metal : this.relief.plaster, bumpScale: metalness ? 0.003 : 0.005,
       envMapIntensity: metalness ? 1.15 : 0.45 }));
     return this.mat.get(key)!;
   }
@@ -118,7 +120,7 @@ export class Renderer {
       studio.dispose(); pmrem.dispose();
     }
     this.scene.environment = this.detail ? this.reflections!.texture : null;
-    this.scene.environmentIntensity = .14;
+    this.scene.environmentIntensity = .09;
     // Keep shared models and materials; dispose only per-room render resources.
     this.levelRoot.traverse(o => {
       if (o.userData.ownedGeometry && o instanceof THREE.Mesh) o.geometry.dispose();
@@ -128,17 +130,16 @@ export class Renderer {
     });
     for (const a of this.actors.values()) a.mixer.uncacheRoot(a.body);
     this.levelRoot.clear(); this.walls = []; this.actors.clear(); this.guardMotion.clear(); this.doors.clear(); this.terminals.clear(); this.tickets.clear(); this.circuits.clear(); this.suppressors.clear(); this.scanners.clear(); this.lamps = []; this.civicWindows = []; this.loot = undefined; this.propertyCabinet = undefined;
-    const style = setting(level), look = sceneLook(level), { plaster, panel, floor: floorColor } = look;
+    const style = setting(level), look = sceneLook(level), { plaster, floor: floorColor } = look;
     (this.scene.background as THREE.Color).set(look.background);
-    this.box(this.levelRoot, 0, -0.48, 0, 30.35, 0.92, 18.35, '#25333c');
+    this.dressing.sculpt(this.levelRoot, 0, -.49, 0, 30.35, 1, 18.35, look.panel, .25);
     this.box(this.levelRoot, 0, -0.04, 0, 30, 0.12, 18, floorColor);
-    this.box(this.levelRoot, 0, -0.94, 0, 30.5, 0.12, 18.5, '#465357');
     if (this.detail) this.dressing.foundation(level, this.levelRoot);
     const floorCanvas = this.dressing.floor(level, this.detail, floorColor);
     const texture = new THREE.CanvasTexture(floorCanvas); texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = 8;
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 18), new THREE.MeshStandardMaterial({ map: texture,
-      roughness: style === 'museum' ? 0.74 : 0.84, roughnessMap: this.relief.patina, envMapIntensity: .3,
-      bumpMap: style === 'museum' || style === 'archive' ? this.relief.wood : this.relief.stone, bumpScale: 0.022 }));
+      roughness: .96, envMapIntensity: .12,
+      bumpMap: this.relief.stone, bumpScale: 0.004 }));
     floor.rotation.x = -Math.PI / 2; floor.position.y = 0.03; floor.receiveShadow = true; floor.userData.ownedGeometry = true; floor.userData.ownedTexture = true; this.levelRoot.add(floor);
     const fx = new THREE.Mesh(new THREE.PlaneGeometry(30, 18), new THREE.MeshBasicMaterial({ map: this.groundTexture, transparent: true, depthWrite: false, toneMapped: false }));
     fx.rotation.x = -Math.PI / 2; fx.position.y = 0.047; fx.userData.ownedGeometry = true; fx.userData.ownedMaterial = true; this.levelRoot.add(fx);
@@ -161,17 +162,13 @@ export class Renderer {
         if ((cx + cy) % 2) for (let shelf = 0; shelf < 3; shelf++) this.model('books', root, 0, 0.12, w * 0.64, h * 0.42, 0.24, 0.15 + shelf * 0.43);
         if ((cx + cy) % 3 === 0) this.model('plant', root, 0, 0, w * 0.65, h * 0.65, 0.5, height);
       } else {
-        this.box(root, 0, height / 2, 0, w, height, h, plaster);
-        this.box(root, 0, Math.min(height / 2, 0.36), 0, w + 0.02, Math.min(height, 0.72), h + 0.02, panel);
-        this.box(root, 0, height + 0.035, 0, w + 0.04, 0.07, h + 0.04, look.panel);
-        if (this.detail) { this.dressing.wallDetails(level, root, w, h, height); this.dressing.architecture(level, root, w, h, height); }
+        this.dressing.sculpt(root, 0, height / 2, 0, w, height, h, plaster, Math.min(.22, height / 3));
+        if (this.detail) this.dressing.wallDetails(level, root, w, h, height);
         if (height > 1) {
-          this.box(root, 0, 0.74, 0, w + 0.06, 0.055, h + 0.06, look.trim, 0.6);
-          const count = Math.floor(Math.max(w, h) / 3);
+          const count = Math.floor(Math.max(w, h) / 4.5);
           for (let i = 0; i < count; i++) {
-            const along = -Math.max(w, h) / 2 + 1.5 + i * 3;
+            const along = -Math.max(w, h) / 2 + 2.25 + i * 4.5;
             const px = w > h ? along : 0, pz = h > w ? along : 0;
-            this.box(root, px, height / 2, pz, w > h ? 0.18 : w + 0.05, height + 0.06, h > w ? 0.18 : h + 0.05, look.cap);
             if (border && !near && this.detail && i % 2 === 0) {
               const lamp = this.dressing.sconce(root, level, px + (h > w ? w / 2 + .03 : 0), pz + (w > h ? h / 2 + .03 : 0), w > h);
               if (this.lamps.length < 6) {
@@ -217,16 +214,8 @@ export class Renderer {
       if (this.detail) this.dressing.doorCrown(level, group, width);
       const panelGroup = new THREE.Group(); group.add(panelGroup);
       this.box(panelGroup, 0, 0.87, 0, width - 0.25, 1.7, 0.12, look.panel, 0.35);
-      const industrial = style === 'power' || style === 'retention';
-      for (let i = 0; i < (industrial ? 6 : 3); i++) this.box(panelGroup, 0, 0.25 + i * (industrial ? 0.24 : 0.56), 0.07, width - 0.34, 0.06, 0.045, look.trim, 0.6);
-      if (this.detail && !industrial && style !== 'vault') {
-        for (const side of [-1, 1]) {
-          this.box(panelGroup, side * width * .215, .86, .073, width * .34, 1.09, .025, '#213b42');
-          this.box(panelGroup, side * width * .215, 1.41, .094, width * .35, .025, .025, look.trim, .5);
-          this.box(panelGroup, side * .095, .81, .125, .035, .19, .065, look.trim, .75);
-        }
-        this.box(panelGroup, 0, .87, .08, .035, 1.65, .035, look.trim, .6);
-      }
+      this.box(panelGroup, 0, .87, .075, .065, 1.5, .04, look.cap);
+      this.box(panelGroup, 0, 1.53, .075, width - .45, .035, .035, look.cap);
       if (style === 'vault') {
         const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.035, 6, 20), this.material(look.trim, 0.7)); wheel.position.set(0, 0.9, 0.19); wheel.userData.ownedGeometry = true; panelGroup.add(wheel);
         for (let i = 0; i < 3; i++) { const spoke = this.box(panelGroup, 0, 0.9, 0.19, 0.57, 0.035, 0.05, look.trim, 0.6); spoke.rotation.z = i * Math.PI / 3; }
@@ -270,15 +259,19 @@ export class Renderer {
   }
   private groundEffects(game: Game) {
     const c = this.ground.getContext('2d')!; c.clearRect(0, 0, WIDTH, HEIGHT);
+    const ids = [...new Set([...game.level.plates.map(p => p.id), ...game.level.doors.flatMap(doorPlates), ...(game.remote?.level.plates.map(p => p.id) ?? [])])].sort();
+    const signal = (id: string, x: number, y: number, radius: number, color: string) => signalGlyph(c, ids.indexOf(id), x, y, radius, color);
     const line = (points: Point[], color: string, dash: number[] = []) => { c.beginPath(); points.forEach((p, i) => i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y)); c.strokeStyle = color; c.lineWidth = 2; c.setLineDash(dash); c.stroke(); c.setLineDash([]); };
     for (const plate of game.level.plates) {
+      const linked = this.annotations || Math.hypot(game.player.x - plate.x, game.player.y - plate.y) < 42;
       const active = game.activePlates.has(plate.id) || game.remote?.activePlates.has(plate.id);
-      for (const d of game.level.doors.filter(d => doorPlates(d).includes(plate.id))) line([plate, { x: plate.x, y: d.y + d.h / 2 }, { x: d.x + d.w / 2, y: d.y + d.h / 2 }], active ? '#c3ed82a0' : '#4d6f6965', [4, 6]);
-      for (const terminal of game.level.terminals?.filter(t => t.plate === plate.id) ?? []) line([plate, { x: plate.x, y: terminal.y }, terminal], active ? '#c3ed82a0' : '#4d6f6965', [4, 6]);
-      c.fillStyle = active ? '#c3ed8280' : '#234847b0'; c.fillRect(plate.x - 17, plate.y - 17, 34, 34); c.strokeStyle = active ? colors.lime : '#90ac9a'; c.lineWidth = 2; c.strokeRect(plate.x - 17, plate.y - 17, 34, 34);
-      c.font = 'bold 15px sans-serif'; c.textAlign = 'center'; c.fillStyle = active ? '#fff8c5' : '#d2d9c0'; c.fillText(plate.id, plate.x, plate.y + 5); c.textAlign = 'left';
+      if (linked) for (const d of game.level.doors.filter(d => doorPlates(d).includes(plate.id))) line([plate, { x: plate.x, y: d.y + d.h / 2 }, { x: d.x + d.w / 2, y: d.y + d.h / 2 }], active ? '#c3ed82a0' : '#4d6f6965', [4, 6]);
+      if (linked) for (const terminal of game.level.terminals?.filter(t => t.plate === plate.id) ?? []) line([plate, { x: plate.x, y: terminal.y }, terminal], active ? '#c3ed82a0' : '#4d6f6965', [4, 6]);
+      c.fillStyle = active ? '#cbf3c980' : '#233c4240'; c.beginPath(); c.roundRect(plate.x - 17, plate.y - 17, 34, 34, 8); c.fill(); c.strokeStyle = active ? colors.lime : '#e6dfc5'; c.lineWidth = active ? 2.5 : 1.5; c.stroke();
+      if (!this.annotations) signal(plate.id, plate.x, plate.y, 9, active ? '#fbffdf' : '#e8e4cc');
+      if (this.annotations) { c.font = 'bold 15px sans-serif'; c.textAlign = 'center'; c.fillStyle = active ? '#fff8c5' : '#d2d9c0'; c.fillText(plate.id, plate.x, plate.y + 5); c.textAlign = 'left'; }
     }
-    for (const circuit of game.level.circuits ?? []) {
+    if (this.annotations) for (const circuit of game.level.circuits ?? []) {
       if (circuit.feed) {
         const source = (circuit.feed.remote ? game.carried?.level : game.level)?.plates.find(p => p.id === circuit.feed!.plate);
         const active = !!game.circuits.get(circuit.id);
@@ -286,11 +279,26 @@ export class Renderer {
       }
       for (const door of game.level.doors.filter(d => d.power?.id === circuit.id)) line([circuit, { x: circuit.x, y: door.y + door.h / 2 }, { x: door.x + door.w / 2, y: door.y + door.h / 2 }], game.powered(door.power) ? '#b8e6d7b0' : '#54798166', [3, 4]);
     }
-    for (const terminal of game.level.terminals ?? []) if (terminal.power) {
+    if (this.annotations) for (const terminal of game.level.terminals ?? []) if (terminal.power) {
       const circuit = game.level.circuits?.find(c => c.id === terminal.power!.id);
       if (circuit) line([circuit, { x: circuit.x, y: terminal.y }, terminal], game.powered(terminal.power) ? '#b8e6d7b0' : '#54798166', [3, 4]);
     }
-    const exit = game.exitPoint; c.fillStyle = '#214c4380'; c.fillRect(exit.x - 24, exit.y - 24, 48, 48); c.strokeStyle = game.exitReady ? colors.lime : '#bdb092'; c.lineWidth = 2; c.setLineDash([7, 5]); c.strokeRect(exit.x - 26, exit.y - 26, 52, 52); c.setLineDash([]);
+    for (const door of game.level.doors) {
+      const ids = doorPlates(door), x = door.x + door.w / 2 + (door.h > door.w ? door.w / 2 + 12 : 0), y = door.y + door.h / 2 + (door.h > door.w ? 0 : door.h / 2 + 12);
+      ids.forEach((id, i) => signal(id, x + (i - (ids.length - 1) / 2) * 18, y, 7, game.openDoors.has(door.id) ? '#e0ffc0' : '#f2dbb8'));
+    }
+    for (const marker of game.level.soundMarkers ?? []) {
+      c.strokeStyle = '#dfceaa80'; c.lineWidth = 1.5;
+      for (const radius of [8, 14]) { c.beginPath(); c.arc(marker.x, marker.y, radius, -.8, .8); c.stroke(); c.beginPath(); c.arc(marker.x, marker.y, radius, Math.PI - .8, Math.PI + .8); c.stroke(); }
+    }
+    const exit = game.exitPoint;
+    c.strokeStyle = game.exitReady ? '#def4c4' : '#bfb9a4'; c.lineWidth = 2.5;
+    c.beginPath(); c.arc(exit.x, exit.y, 23, 0, Math.PI * 2); c.stroke();
+    c.globalAlpha = .25; c.lineWidth = 7; c.stroke(); c.globalAlpha = 1;
+    for (let i = 0; i < 3; i++) { c.beginPath(); c.arc(exit.x, exit.y, 17 - i * 4, Math.PI * .12, Math.PI * 1.15); c.lineWidth = 1.2; c.stroke(); }
+    if (!game.spectator) {
+      c.strokeStyle = '#f8e5be99'; c.lineWidth = 1.3; c.beginPath(); c.arc(game.player.x, game.player.y, 11, 0, Math.PI * 2); c.stroke();
+    }
     game.guards.forEach((g, i) => {
       if (!game.powered(game.level.guards[i].power)) return;
       const range = game.visionRange(i), tint = g.suspicion > 0.2 ? '239,133,103' : '237,192,113';
@@ -321,10 +329,11 @@ export class Renderer {
     const gesture = action && !this.reducedMotion ? Math.sin((game.frame - action.frame) / 24 * Math.PI) : 0;
     a.pose(this.reducedMotion ? 0 : game.frame, moving, gesture, game.tokenOwner === owner, suppressed);
   }
-  private label(at: Point, height: number, text: string, color = '#e9e4d0') { this.labels.push({ at, height, text, color }); }
+  private label(at: Point, height: number, text: string, color = '#e9e4d0', contextual = false) {
+    if (this.annotations || contextual) this.labels.push({ at, height, text, color, contextual });
+  }
   private hud(game: Game, dt: number) {
     const c = this.ctx; c.clearRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
-    const compact = this.canvas.clientWidth < 600;
     const scale = Math.max(1, VIEW_WIDTH / Math.max(320, this.canvas.clientWidth) * 0.9);
     c.font = `500 ${12 * scale}px "Microsoft YaHei", sans-serif`;
     const rects: { x: number; y: number; width: number }[] = [];
@@ -335,7 +344,12 @@ export class Renderer {
       for (const x of [-0.4, 0.4]) for (const z of [-0.4, 0.4]) for (const y of [0, 2.08]) points.push(new THREE.Vector3(x, y, z).add(a.group.position).project(this.camera));
       return { left: (Math.min(...points.map(p => p.x)) + 1) * VIEW_WIDTH / 2, right: (Math.max(...points.map(p => p.x)) + 1) * VIEW_WIDTH / 2, top: (1 - Math.max(...points.map(p => p.y))) * VIEW_HEIGHT / 2, bottom: (1 - Math.min(...points.map(p => p.y))) * VIEW_HEIGHT / 2 };
     });
-    for (const label of this.labels) {
+    // In quiet view only the nearest usable object gets a prompt.
+    const visibleLabels = this.annotations ? this.labels : this.labels.filter(l => l.contextual)
+      .sort((a, b) => Math.hypot(a.at.x - game.player.x, a.at.y - game.player.y) - Math.hypot(b.at.x - game.player.x, b.at.y - game.player.y)).slice(0, 1);
+    this.canvas.dataset.labels = String(visibleLabels.length);
+    this.canvas.dataset.annotations = String(this.annotations);
+    for (const label of visibleLabels) {
       const projected = world(label.at, label.height).project(this.camera), anchorX = (projected.x + 1) * VIEW_WIDTH / 2, anchorY = (1 - projected.y) * VIEW_HEIGHT / 2;
       if (anchorX < 8 || anchorX > VIEW_WIDTH - 8 || anchorY < 8 || anchorY > VIEW_HEIGHT - 15) continue;
       const width = c.measureText(label.text).width + 14 * scale;
@@ -351,16 +365,15 @@ export class Renderer {
         c.strokeStyle = '#b7cab8a0'; c.lineWidth = scale; c.beginPath(); c.moveTo(anchorX, anchorY); c.lineTo(x, y + (y < anchorY ? 8 : -15) * scale); c.stroke();
         c.fillStyle = '#d2d8b7'; c.beginPath(); c.arc(anchorX, anchorY, 1.7 * scale, 0, Math.PI * 2); c.fill();
       }
-      c.fillStyle = '#14282be5'; c.beginPath(); c.roundRect(x - width / 2, y - 15 * scale, width, 22 * scale, 4 * scale); c.fill(); c.fillStyle = label.color; c.textAlign = 'center'; c.fillText(label.text, x, y); rects.push({ x, y, width });
-    }
-    if (!compact) {
-    c.textAlign = 'left'; c.font = '600 13px "Microsoft YaHei", sans-serif'; c.fillStyle = '#b9c9c2'; c.fillText('回 声 劫 案  /  夜 间 行 动', 35, 37);
-    c.font = '11px "Microsoft YaHei", sans-serif'; c.fillStyle = '#9caea9'; c.fillText(game.level.district ?? game.level.title, 35, 58);
-    c.textAlign = 'right'; c.fillText(this.closeup ? '跟随近景' : '全景 · 2.5D', VIEW_WIDTH - 35, 37);
-    c.textAlign = 'center'; c.fillText('WASD / 方向键按画面移动 · R 留下回声 · E 操作', VIEW_WIDTH / 2, VIEW_HEIGHT - 25);
-    c.textAlign = 'right'; c.fillText('地图北 ↗  /  东 ↘', VIEW_WIDTH - 35, VIEW_HEIGHT - 25); c.textAlign = 'left';
+      c.fillStyle = '#203939d9'; c.beginPath(); c.roundRect(x - width / 2, y - 15 * scale, width, 22 * scale, 4 * scale); c.fill(); c.fillStyle = label.color; c.textAlign = 'center'; c.fillText(label.text, x, y); rects.push({ x, y, width });
     }
     if (!this.ready) { c.fillStyle = '#d4d8be'; c.fillText(this.canvas.dataset.sceneReady === 'error' ? '模型加载失败，请刷新重试' : '正在布置场景…', 35, 82); }
+    if (!this.annotations) game.guards.forEach((guard, i) => {
+      if (guard.suspicion <= .2 || !game.powered(game.level.guards[i].power)) return;
+      const point = world(guard, 2.35).project(this.camera);
+      c.font = `700 ${16 * scale}px sans-serif`; c.textAlign = 'center'; c.fillStyle = colors.red;
+      c.fillText('!', (point.x + 1) * VIEW_WIDTH / 2, (1 - point.y) * VIEW_HEIGHT / 2);
+    });
     if (game.alarm > 0.1) { c.strokeStyle = `rgba(239,133,103,${game.alarm * 0.8})`; c.lineWidth = 7; c.strokeRect(4, 4, VIEW_WIDTH - 8, VIEW_HEIGHT - 8); }
     if (this.rewindFlash > 0 && !this.reducedMotion) { this.rewindFlash = Math.max(0, this.rewindFlash - dt * 2); c.fillStyle = `rgba(160,220,235,${this.rewindFlash * 0.15})`; c.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT); }
   }
@@ -440,14 +453,15 @@ export class Renderer {
       const material = this.terminals.get(t.id)!.material as THREE.MeshStandardMaterial; material.color.set(color); material.emissive.set(color);
       this.tickets.get(t.id)!.visible = holding;
       if (t.appearance !== 'lost-property') this.label(t, 1.22, `${t.id}${holding ? ' ◆' : t.authorization && game.authorized.has(t.authorization) ? ' ✓' : ''}`, color);
-      if (Math.hypot(game.player.x - t.x, game.player.y - t.y) < 30 && !game.spectator && !(t.appearance === 'lost-property' && holding)) this.label(t, 1.95, t.appearance === 'lost-property' ? 'E 归档回执' : t.kind === 'lock' ? 'E 签入' : t.transfer === 'give' ? 'E 归还' : holding ? 'E 取件' : game.tokenOwner === 'player' ? 'E 交付' : 'E 接收');
+      if (Math.hypot(game.player.x - t.x, game.player.y - t.y) < 30 && !game.spectator && !(t.appearance === 'lost-property' && holding)) this.label(t, 1.95, t.appearance === 'lost-property' ? 'E 归档回执' : t.kind === 'lock' ? 'E 签入' : t.transfer === 'give' ? 'E 归还' : holding ? 'E 取件' : game.tokenOwner === 'player' ? 'E 交付' : 'E 接收', colors.light, true);
     }
     for (const t of game.level.circuits ?? []) {
       const on = game.circuits.get(t.id), color = on ? colors.lime : colors.light, { lamp, lever } = this.circuits.get(t.id)!;
       const material = lamp.material as THREE.MeshStandardMaterial; material.color.set(color); material.emissive.set(color); if (lever) lever.rotation.x = on ? -0.5 : 0.65;
       this.label(t, 1.25, `${t.id}${t.mechanical ? ' 门闩' : t.feed ? ` ← ${t.feed.plate}` : ''} · ${game.circuitState(t.id)}`, color);
-      if (t.mechanical && !game.spectator && Math.hypot(game.player.x - t.x, game.player.y - t.y) < 30) this.label(t, 1.95, on ? 'E 扣紧' : 'E 松闩');
+      if (!t.feed && !game.spectator && Math.hypot(game.player.x - t.x, game.player.y - t.y) < 30) this.label(t, 1.95, t.mechanical ? (on ? 'E 扣紧' : 'E 松闩') : (on ? 'E 断开' : 'E 接通'), colors.light, true);
     }
+    if (game.level.delivery && !game.evidenceDeposited && !game.spectator && Math.hypot(game.player.x - game.level.delivery.x, game.player.y - game.level.delivery.y) < 30) this.label(game.level.delivery, 1.9, 'E 植入', colors.light, true);
     if (this.loot) { this.loot.visible = game.level.delivery ? !game.evidenceDeposited : !game.hasLoot; this.label(game.level.delivery ?? game.level.loot, 1.42, game.level.handoff ? '核心 · 下一段目标' : game.level.delivery ? `${game.level.delivery.id} · E 植入` : game.hasLoot ? '已取走' : game.level.lootLabel ?? '目标', colors.light); }
     if (game.level.handoff || game.level.continuity) this.label({ x: 160, y: 530 }, 0.1, game.circuits.get('CIV') ? '街区恢复供电' : '街区停电', colors.light);
     for (const p of game.level.plates) if (p.window) this.label(p, 0.25, `${p.id} · ${p.window.join('–')}s`, colors.light);

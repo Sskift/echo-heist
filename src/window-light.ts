@@ -22,7 +22,7 @@ export class WindowLight {
       for (let v = 8; v < 143; v += 2) {
         const px = ox + along.x * u + inward.x * v, py = oy + along.y * u + inward.y * v;
         if (blockers.some(b => px >= b.x && px < b.x + b.w && py >= b.y && py < b.y + b.h)) blocked = true;
-        if (blocked || Math.abs(u) < 1.8 || (v > 46 && v < 51) || (v > 92 && v < 97)) continue;
+        if (blocked) continue;
         const arch = Math.sqrt(Math.max(0, 1 - (u / 19) ** 2));
         if (v > 112 + arch * 30) continue;
         const alpha = .17 * Math.sin((v - 8) / 135 * Math.PI) * Math.min(1, (19 - Math.abs(u)) / 3);

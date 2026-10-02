@@ -7,9 +7,22 @@ test('3D models load, screen-up input records correct world poses, and camera ch
   await clock(page); await page.goto('/?mode=training'); await advance(page);
   await expect(page.locator('#game-canvas')).toHaveAttribute('data-scene-ready', 'ready');
   await page.locator('#overlay-action').click(); await advance(page);
+  await expect(page.locator('#game-canvas')).toHaveAttribute('data-annotations', 'false');
+  await expect(page.locator('#game-canvas')).toHaveAttribute('data-labels', '0');
+  await expect(page.locator('#mission-description')).not.toBeVisible();
+  await page.locator('#mission-brief summary').click();
+  await expect(page.locator('#mission-description')).toBeVisible();
+  await page.locator('#mission-brief summary').click();
+  await page.locator('#overlay-action').click(); await advance(page);
   await page.keyboard.down('ArrowUp'); await advance(page, 12); await page.keyboard.up('ArrowUp');
   await page.keyboard.press('r'); await advance(page);
   const plan = await page.evaluate(() => localStorage.getItem('echo-heist-plans-v1'));
+  await page.locator('#annotations-button').click(); await advance(page);
+  await expect(page.locator('#annotations-button')).toHaveAttribute('aria-pressed', 'true');
+  expect(Number(await page.locator('#game-canvas').getAttribute('data-labels'))).toBeGreaterThan(2);
+  await page.locator('#annotations-button').click(); await advance(page);
+  await expect(page.locator('#game-canvas')).toHaveAttribute('data-labels', '0');
+  expect(await page.evaluate(() => localStorage.getItem('echo-heist-plans-v1'))).toBe(plan);
   const frames = Object.values(JSON.parse(plan!))[0] as { echoes: { frames: { x: number; y: number }[] }[] };
   const first = frames.echoes[0].frames[0], last = frames.echoes[0].frames.at(-1)!;
   expect(last.x).toBeLessThan(first.x); expect(last.y).toBeLessThan(first.y);
@@ -24,6 +37,7 @@ test('3D models load, screen-up input records correct world poses, and camera ch
   await page.locator('#preview-button').click(); await advance(page);
   await page.setViewportSize({ width: 390, height: 844 }); await advance(page);
   await page.locator('.hint summary').click();
+  await expect(page.locator('#annotations-button')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.map-directions')).toHaveText('地图方向：北 ↗ · 东 ↘ · 南 ↙ · 西 ↖');
   const drawingWidth = await page.locator('#game-canvas').evaluate(c => (c as HTMLCanvasElement).width);
   expect(drawingWidth).toBeLessThanOrEqual(585); // Phone rendering must not retain the 1280px desktop buffer.
