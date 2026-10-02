@@ -19,9 +19,10 @@ export class CharacterArt {
   private readonly coat = new THREE.Group();
   private readonly satchel = new THREE.Group();
   private readonly feet: THREE.Group[] = [];
-  private readonly palms: THREE.Mesh[] = [];
+  private readonly palms: THREE.Group[] = [];
   private readonly tails: THREE.Mesh[] = [];
   private readonly materials = new Map<string, THREE.MeshStandardMaterial>();
+  private static weave?: THREE.CanvasTexture;
 
   constructor(rig: THREE.Object3D, private owner: THREE.Group, role: CharacterRole, private tint?: string) {
     const guard = role === 'guard', tracker = role === 'tracker';
@@ -35,11 +36,17 @@ export class CharacterArt {
     // Profiles give the coat a chest, a waist and a flared hem instead of a box.
     this.profile(this.torso, [[0, .24], [.12, .245], [.49, .29], [.66, .23], [.7, .14]], cloth, .65);
     for (const side of [-1, 1]) {
-      const lapel = this.box(this.torso, side * .105, .51, .18, .095, .28, .035, seam); lapel.rotation.z = side * .34;
+      const shape = new THREE.Shape();
+      shape.moveTo(side * .03, .67); shape.lineTo(side * .205, .57); shape.lineTo(side * .09, .34); shape.lineTo(side * .035, .5); shape.closePath();
+      const lapel = this.mesh(this.torso, new THREE.ExtrudeGeometry(shape, {depth: .018, bevelEnabled: true, bevelSize: .006, bevelThickness: .005, bevelSegments: 1, steps: 1}), seam); lapel.position.z = .165;
       this.box(this.torso, side * .185, .62, 0, .18, .035, .24, guard ? brass : seam);
       this.box(this.torso, side * .16, .2, .17, .13, .06, .022, seam);
-      const tail = this.profile(this.coat, [[-.44, .155], [-.38, .15], [0, .115]], cloth, 1.05);
-      tail.position.set(side * .135, 0, -.035); tail.rotation.z = side * .085; this.tails.push(tail);
+      this.ellipsoid(this.torso, side * .22, .65, .025, .017, .011, .017, brass);
+      // Two halves of one flared coat, with front/back vents and a stitched hem.
+      const start = side < 0 ? Math.PI + .045 : .045;
+      const tail = this.mesh(this.coat, new THREE.LatheGeometry([new THREE.Vector2(.34, -.44), new THREE.Vector2(.327, -.36), new THREE.Vector2(.245, 0)], 18, start, Math.PI - .09), cloth);
+      tail.scale.z = .67; this.tails.push(tail);
+      this.mesh(tail, new THREE.LatheGeometry([new THREE.Vector2(.341, -.425), new THREE.Vector2(.34, -.416)], 18, start, Math.PI - .09), seam);
     }
     this.box(this.torso, 0, .05, 0, .5, .055, .34, leather);
     this.box(this.torso, 0, .05, .18, .075, .065, .028, brass);
@@ -58,6 +65,9 @@ export class CharacterArt {
       this.box(this.satchel, .25, .06, -.16, .25, .3, .14, '#75553c');
       this.box(this.satchel, .25, .17, -.24, .26, .09, .03, '#99704c');
       this.box(this.satchel, .25, .10, -.256, .04, .05, .018, brass);
+      for (const x of [.14, .36]) this.box(this.satchel, x, .03, -.235, .014, .22, .016, '#a38360');
+      this.box(this.satchel, .25, -.08, -.235, .21, .013, .016, '#a38360');
+      this.box(this.torso, -.14, .34, .236, .015, .27, .008, '#d39e73');
     }
     // Faceted rounded face, ears, brows and cap keep a readable profile at
     // the game camera distance without recreating the oversized source head.
@@ -81,18 +91,24 @@ export class CharacterArt {
     }
     for (const side of ['Left', 'Right']) {
       this.link(`${side}Arm`, `${side}ForeArm`, .115, .09, cloth);
-      this.link(`${side}ForeArm`, `${side}Hand`, .088, .065, cloth);
+      const sleeve = this.link(`${side}ForeArm`, `${side}Hand`, .088, .065, cloth);
+      const cuff = this.mesh(sleeve, new THREE.CylinderGeometry(.075, .071, .14, 16), seam); cuff.position.y = -.41;
+      this.ellipsoid(sleeve, .069, -.41, .025, .013, .022, .013, brass);
       this.link(`${side}UpLeg`, `${side}Leg`, .115, .087, guard ? '#253446' : '#293b40');
       this.link(`${side}Leg`, `${side}Foot`, .085, .061, '#293339');
-      this.palms.push(this.ellipsoid(this.root, 0, 0, 0, .075, .105, .065, leather));
+      const palm = new THREE.Group(); this.root.add(palm); this.palms.push(palm);
+      this.ellipsoid(palm, 0, -.024, 0, .065, .092, .045, leather);
+      this.ellipsoid(palm, side === 'Left' ? -.052 : .052, .01, .018, .026, .053, .026, leather);
+      for (const x of [-.024, .024]) this.box(palm, x, -.017, .044, .006, .08, .005, '#705544');
       const boot = new THREE.Group(); this.root.add(boot); this.feet.push(boot);
       this.ellipsoid(boot, 0, -.015, .065, .082, .086, .155, leather);
+      this.box(boot, 0, -.063, .055, .173, .025, .313, '#705544');
       this.box(boot, 0, -.083, .055, .166, .034, .31, '#20272b');
     }
     this.link('Head', 'Neck', .08, .10, skin);
     // Static garment and face details share one draw per material. Limbs and
     // split hems remain independent so the animation still articulates them.
-    for (const group of [this.torso, this.head, this.satchel, ...this.feet]) this.batch(group);
+    for (const group of [this.torso, this.head, this.satchel, ...this.feet, ...this.palms]) this.batch(group);
     if (!tint) {
       const canvas = document.createElement('canvas'); canvas.width = canvas.height = 64;
       const c = canvas.getContext('2d')!, gradient = c.createRadialGradient(32, 32, 4, 32, 32, 32);
@@ -124,8 +140,23 @@ export class CharacterArt {
     }
   }
   private material(color: string) {
+    if (!CharacterArt.weave) {
+      const canvas = document.createElement('canvas'); canvas.width = canvas.height = 64;
+      const context = canvas.getContext('2d')!, pixels = context.createImageData(64, 64);
+      for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) {
+        const value = 202 + (((x + y) % 4 < 2) ? 23 : -18), i = (y * 64 + x) * 4;
+        pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = value; pixels.data[i + 3] = 255;
+      }
+      context.putImageData(pixels, 0, 0); CharacterArt.weave = new THREE.CanvasTexture(canvas);
+      CharacterArt.weave.wrapS = CharacterArt.weave.wrapT = THREE.RepeatWrapping; CharacterArt.weave.repeat.set(3, 3);
+    }
+    const metal = color === '#c7a365', leather = ['#392e2c', '#75553c', '#99704c', '#805f43', '#705544'].includes(color);
+    const skin = color === '#c79b7b', fabric = !metal && !leather && !skin;
     if (!this.materials.has(color)) this.materials.set(color, new THREE.MeshStandardMaterial({
-      color: this.tint ?? color, roughness: .77, emissive: this.tint ?? '#000000', emissiveIntensity: this.tint ? .28 : 0,
+      color: this.tint ?? color, roughness: metal ? .3 : leather ? .52 : .86, metalness: metal ? .72 : 0,
+      bumpMap: fabric && !this.tint ? CharacterArt.weave : null, bumpScale: .006,
+      envMapIntensity: metal ? 1.4 : leather ? .65 : .3,
+      emissive: this.tint ?? '#000000', emissiveIntensity: this.tint ? .28 : 0,
       transparent: !!this.tint, opacity: this.tint ? .65 : 1, depthWrite: !this.tint,
     }));
     return this.materials.get(color)!;
@@ -140,15 +171,17 @@ export class CharacterArt {
     mesh.position.set(x, y, z); mesh.scale.set(w, h, d); return mesh;
   }
   private ellipsoid(parent: THREE.Object3D, x: number, y: number, z: number, w: number, h: number, d: number, color: string) {
-    const mesh = this.mesh(parent, new THREE.SphereGeometry(1, 10, 8), color);
+    const mesh = this.mesh(parent, new THREE.SphereGeometry(1, 20, 12), color);
     mesh.position.set(x, y, z); mesh.scale.set(w, h, d); return mesh;
   }
   private profile(parent: THREE.Object3D, sections: number[][], color: string, depth: number) {
-    const mesh = this.mesh(parent, new THREE.LatheGeometry(sections.map(([y, r]) => new THREE.Vector2(r, y)), 12), color);
+    const mesh = this.mesh(parent, new THREE.LatheGeometry(sections.map(([y, r]) => new THREE.Vector2(r, y)), 20), color);
     mesh.scale.z = depth; return mesh;
   }
   private link(from: string, to: string, top: number, bottom: number, color: string) {
-    const mesh = this.mesh(this.root, new THREE.CylinderGeometry(top, bottom, 1, 8), color); this.links.push({mesh, from, to});
+    const profile = [[-.5, 0], [-.5, bottom * .8], [-.45, bottom], [.35, top], [.47, top * .92], [.5, 0]];
+    const mesh = this.mesh(this.root, new THREE.LatheGeometry(profile.map(([y, r]) => new THREE.Vector2(r, y)), 16), color);
+    this.links.push({mesh, from, to}); return mesh;
   }
   pose(frame: number, moving: boolean, suppressed: boolean) {
     this.inverse.copy(this.owner.matrixWorld).invert();
@@ -173,6 +206,8 @@ export class CharacterArt {
     this.tails.forEach((tail, i) => tail.rotation.x = sway * (i ? -1 : 1));
     ['Left', 'Right'].forEach((side, i) => {
       this.palms[i].position.copy(this.points.get(`${side}Hand`)!);
+      this.direction.copy(this.points.get(`${side}ForeArm`)!).sub(this.points.get(`${side}Hand`)!);
+      this.palms[i].quaternion.setFromUnitVectors(this.yAxis, this.direction.normalize());
       this.feet[i].position.copy(this.points.get(`${side}Foot`)!);
     });
     this.hand.copy(this.points.get('RightHand')!);

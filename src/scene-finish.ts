@@ -35,19 +35,23 @@ export class SurfaceRelief {
   readonly plaster = this.texture('plaster');
   readonly wood = this.texture('wood');
   readonly stone = this.texture('stone');
-  private texture(kind: 'plaster' | 'wood' | 'stone') {
+  readonly metal = this.texture('metal');
+  readonly patina = this.texture('patina');
+  private texture(kind: 'plaster' | 'wood' | 'stone' | 'metal' | 'patina') {
     const canvas = document.createElement('canvas'); canvas.width = canvas.height = 256;
     const context = canvas.getContext('2d')!, pixels = context.createImageData(256, 256);
     let seed = 1879;
     const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
     for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
-      const grain = kind === 'wood' ? Math.sin(y * 1.1 + Math.sin(x * 0.027) * 2) * 12 : 0;
-      const value = 144 + grain + (random() - 0.5) * (kind === 'stone' ? 30 : 45), i = (y * 256 + x) * 4;
+      const grain = kind === 'wood' ? Math.sin(y * 1.1 + Math.sin(x * 0.027) * 2) * 12
+        : kind === 'metal' ? Math.sin(y * 2.7) * 9
+        : Math.sin(x * .071) * Math.sin(y * .047) * 8;
+      const value = (kind === 'patina' ? 218 : 144) + grain + (random() - 0.5) * (kind === 'metal' ? 10 : kind === 'stone' ? 30 : 24), i = (y * 256 + x) * 4;
       pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = value; pixels.data[i + 3] = 255;
     }
     context.putImageData(pixels, 0, 0);
     const texture = new THREE.CanvasTexture(canvas); texture.wrapS = texture.wrapT = THREE.RepeatWrapping; texture.anisotropy = 4;
-    texture.repeat.set(kind === 'plaster' ? 2 : 8, kind === 'plaster' ? 2 : 5);
+    texture.repeat.set(kind === 'plaster' || kind === 'patina' ? 2 : 8, kind === 'plaster' || kind === 'patina' ? 2 : 5);
     return texture;
   }
 }

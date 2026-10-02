@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Circuit, Level, Point, Terminal } from './levels.ts';
 import type { PassageLandmark } from './room-journey.ts';
 
@@ -32,6 +33,43 @@ export const sceneLook = (level: Level) => looks[setting(level)];
 export class SetDressing {
   constructor(private box: Box) {}
 
+  batchFixed(root: THREE.Group) {
+    // Combine only fixed boxes using shared materials. Dynamic lamps, tickets,
+    // textured signs and articulated child groups retain their own objects.
+    const batches = new Map<THREE.Material, THREE.BufferGeometry[]>();
+    for (const child of [...root.children]) {
+      if (!(child instanceof THREE.Mesh) || child.userData.ownedGeometry || child.userData.ownedMaterial || Array.isArray(child.material)) continue;
+      child.updateMatrix(); const geometry = child.geometry.clone().applyMatrix4(child.matrix);
+      if (!batches.has(child.material)) batches.set(child.material, []);
+      batches.get(child.material)!.push(geometry); root.remove(child);
+    }
+    for (const [material, pieces] of batches) {
+      const mesh = new THREE.Mesh(mergeGeometries(pieces), material);
+      mesh.castShadow = mesh.receiveShadow = true; mesh.userData.ownedGeometry = true; root.add(mesh);
+      for (const piece of pieces) piece.dispose();
+    }
+  }
+
+  sconce(parent: THREE.Object3D, level: Level, x: number, z: number, horizontal: boolean) {
+    const group = new THREE.Group(), look = sceneLook(level);
+    group.position.set(x, 0, z); if (!horizontal) group.rotation.y = Math.PI / 2; parent.add(group);
+    const industrial = ['power', 'retention', 'vault'].includes(setting(level));
+    this.box(group, 0, 1.94, .025, .22, .52, .08, look.panel, .4);
+    this.box(group, 0, 1.68, .17, .07, .09, .31, look.trim, .7);
+    this.box(group, 0, 1.83, .29, .07, .3, .07, look.trim, .7);
+    const shade = new THREE.Mesh(new THREE.CylinderGeometry(industrial ? .12 : .1, .15, .33, 16),
+      new THREE.MeshStandardMaterial({color: look.light, emissive: look.light, emissiveIntensity: .65, roughness: .35}));
+    shade.position.set(0, 2.02, .29); shade.castShadow = false;
+    shade.userData.ownedGeometry = shade.userData.ownedMaterial = true; group.add(shade);
+    for (const y of [1.85, 2.2]) this.box(group, 0, y, .29, .32, .045, .32, look.trim, .65);
+    if (industrial) for (const side of [-1, 1]) this.box(group, side * .13, 2.02, .37, .022, .34, .035, look.panel, .5);
+    else {
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(.18, .12, 16), new THREE.MeshStandardMaterial({color: look.trim, metalness: .65, roughness: .3}));
+      cap.position.set(0, 2.27, .29); cap.userData.ownedGeometry = cap.userData.ownedMaterial = true; group.add(cap);
+    }
+    this.batchFixed(group); return group;
+  }
+
   passage(parent: THREE.Object3D, landmark: PassageLandmark) {
     const group = new THREE.Group(); group.position.set(landmark.at.x / 32 - 15, 0, landmark.at.y / 32 - 9); parent.add(group);
     const stair = landmark.kind !== 'threshold', depth = stair ? 1.35 : .52;
@@ -43,6 +81,18 @@ export class SetDressing {
       this.box(group, .78, .38, -.44, .065, .75, .065, '#b9a26c', .65);
       this.box(group, .78, .78, -.44, .16, .075, .16, '#a8c2b4', .2);
     } else for (const x of [-.35, 0, .35]) this.box(group, x, .04, 0, .1, .02, .22, '#b9a26c', .4);
+  }
+
+  floorPlate(parent: THREE.Object3D, at: Point) {
+    const group = new THREE.Group(); group.position.set(at.x / 32 - 15, 0, at.y / 32 - 9); parent.add(group);
+    // Flush hardware surrounds the existing state-colored floor indicator.
+    // The center stays open so the real A/B label and active state remain visible.
+    for (const side of [-1, 1]) {
+      this.box(group, side * .56, .047, 0, .035, .025, 1.13, '#9faea1', .65);
+      this.box(group, 0, .047, side * .56, 1.13, .025, .035, '#9faea1', .65);
+      for (const end of [-1, 1]) this.box(group, side * .48, .058, end * .48, .065, .016, .065, '#bca16d', .7);
+    }
+    this.batchFixed(group);
   }
 
   lostProperty(parent: THREE.Object3D, at: Point) {
@@ -72,6 +122,7 @@ export class SetDressing {
       });
     });
     names[1].visible = false;
+    this.batchFixed(group);
     const ticket = this.box(group, 0, 1.01, .56, .43, .032, .19, '#eee0b8'); ticket.visible = false;
     const screen = this.box(group, .55, 1.06, .5, .075, .075, .027, '#7caaa7');
     screen.material = new THREE.MeshStandardMaterial({color: '#7caaa7', emissive: '#7caaa7', emissiveIntensity: .3}); screen.userData.ownedMaterial = true;
@@ -176,10 +227,13 @@ export class SetDressing {
     const tile = style === 'vault' ? 96 : 64;
     c.fillStyle = look.floor; c.fillRect(0, 0, 960, 576);
     for (let y = 0; y < 576; y += tile) for (let x = 0; x < 960; x += tile) {
-      c.fillStyle = (x + y) % (tile * 2) ? '#ffffff09' : '#192d3810'; c.fillRect(x + 1, y + 1, tile - 2, tile - 2);
+      const variation = (x / tile * 29 + y / tile * 17) % 19 / 19;
+      c.fillStyle = `rgba(232,230,207,${.02 + variation * .09})`; c.fillRect(x + 1, y + 1, tile - 2, tile - 2);
       c.strokeStyle = formal ? '#3c50482e' : '#25384645'; c.lineWidth = 1; c.strokeRect(x, y, tile, tile);
       if (detail && formal) {
-        c.strokeStyle = '#e5e3cf30'; c.beginPath(); c.moveTo(x + 4, y + 40); c.lineTo(x + 22, y + 36); c.lineTo(x + 28, y + 20); c.lineTo(x + 57, y + 14); c.stroke();
+        c.strokeStyle = '#eee7cc24'; c.lineWidth = .7; c.beginPath(); c.moveTo(x + 4, y + 14 + variation * 32);
+        c.bezierCurveTo(x + 14, y + 37 - variation * 18, x + 37, y + 19 + variation * 23, x + 57, y + 6 + variation * 40); c.stroke();
+        c.strokeStyle = '#e5e3cf30'; c.beginPath(); c.moveTo(x + 1, y + tile - 1); c.lineTo(x + 1, y + 1); c.lineTo(x + tile - 1, y + 1); c.stroke();
       }
     }
     if (!detail) return;
@@ -218,15 +272,19 @@ export class SetDressing {
   }
 
   floor(level: Level, detail: boolean, fallback: string) {
-    const canvas = document.createElement('canvas'); canvas.width = 960; canvas.height = 576;
+    const canvas = document.createElement('canvas'), resolution = detail ? 2 : 1;
+    canvas.width = 960 * resolution; canvas.height = 576 * resolution;
     const c = canvas.getContext('2d')!, style = setting(level);
-    if (!['museum', 'station', 'archive'].includes(style)) { this.chapterFloor(c, level, detail); this.floorContact(c, level); return canvas; }
+    c.scale(resolution, resolution);
+    if (!['museum', 'station', 'archive'].includes(style)) { this.chapterFloor(c, level, detail); if (detail) this.surfaceGrain(c); this.floorContact(c, level); return canvas; }
     c.fillStyle = style === 'station' ? '#637572' : style === 'museum' ? '#79624c' : fallback; c.fillRect(0, 0, 960, 576);
     if (style === 'station') {
       c.fillStyle = '#526662'; c.fillRect(480, 32, 224, 512); c.fillStyle = '#7c7769'; c.fillRect(736, 32, 192, 512);
       for (let y = 32; y < 544; y += 48) for (let x = 32; x < 928; x += 48) {
-        c.fillStyle = (x + y) % 96 ? '#e3dcc20a' : '#192d2a0e'; c.fillRect(x + 1, y + 1, 46, 46);
+        const variation = (x * 13 + y * 7) % 19;
+        c.fillStyle = `rgba(225,219,193,${variation / 190})`; c.fillRect(x + 1, y + 1, 46, 46);
         c.strokeStyle = '#283e3b40'; c.lineWidth = 1; c.strokeRect(x, y, 48, 48);
+        if (detail) { c.strokeStyle = '#e3e3ce28'; c.beginPath(); c.moveTo(x + 1, y + 46); c.lineTo(x + 1, y + 1); c.lineTo(x + 46, y + 1); c.stroke(); }
       }
       if (detail) {
         c.strokeStyle = '#c2b174'; c.lineWidth = 4; c.strokeRect(52, 52, 856, 472);
@@ -247,19 +305,30 @@ export class SetDressing {
         if (detail) { c.strokeStyle = '#d2ba8520'; c.beginPath(); c.moveTo(x - offset + 4, y + 7); c.lineTo(x - offset + 62, y + 6); c.stroke(); }
       }
       if (detail && style === 'museum') {
-        // Alternating parquet blocks give the old gallery a crafted floor;
-        // this remains a single baked texture with no gameplay geometry.
-        c.fillStyle = '#584536'; c.fillRect(0, 0, 960, 576);
-        for (let y = 0; y < 576; y += 64) for (let x = 0; x < 960; x += 64) {
+        // Diagonal parquet with individual grain and bevels is baked once;
+        // it has no additional geometry, cover or collision.
+        c.fillStyle = '#4a3b30'; c.fillRect(0, 0, 960, 576);
+        c.save(); c.translate(480, 288); c.rotate(Math.PI / 4);
+        for (let y = -576; y < 576; y += 64) for (let x = -576; x < 576; x += 64) {
           c.save(); c.translate(x + 32, y + 32); if ((x + y) % 128) c.rotate(Math.PI / 2);
           for (let p = 0; p < 4; p++) {
-            const shade = (x * 7 + y * 11 + p * 17) % 31;
-            c.fillStyle = `rgb(${105 + shade},${78 + shade * 0.72},${51 + shade * 0.55})`; c.fillRect(-31.5, -31.5 + p * 16, 63, 15);
-            c.strokeStyle = '#dcc58d24'; c.lineWidth = 0.6;
-            for (let line = 0; line < 3; line++) { c.beginPath(); c.moveTo(-27, -28 + p * 16 + line * 4); c.bezierCurveTo(-12, -30 + p * 16 + line * 4, 12, -24 + p * 16 + line * 4, 27, -28 + p * 16 + line * 4); c.stroke(); }
+            const shade = ((x * 7 + y * 11 + p * 17) % 23 + 23) % 23, top = -31.5 + p * 16;
+            const grain = c.createLinearGradient(0, top, 0, top + 15);
+            grain.addColorStop(0, `rgb(${127 + shade},${99 + shade * .72},${72 + shade * .55})`);
+            grain.addColorStop(.18, `rgb(${111 + shade},${82 + shade * .72},${57 + shade * .55})`);
+            grain.addColorStop(1, `rgb(${102 + shade},${76 + shade * .72},${53 + shade * .55})`);
+            c.fillStyle = grain; c.fillRect(-31.5, top, 63, 15);
+            c.lineWidth = .35;
+            for (let line = 0; line < 8; line++) {
+              c.strokeStyle = line % 2 ? '#2f241c24' : '#ddc69a28';
+              c.beginPath(); c.moveTo(-30, top + 1 + line * 1.7);
+              c.bezierCurveTo(-12, top + line * 1.6 - 1, 7, top + line * 1.6 + 4, 30, top + line * 1.7 + 1); c.stroke();
+            }
+            if (shade < 5) { c.strokeStyle = '#3e2c2325'; c.beginPath(); c.ellipse(10 - shade * 4, top + 8, 10, 2, 0, 0, Math.PI * 2); c.stroke(); }
           }
           c.restore();
         }
+        c.restore();
       }
       if (detail && style === 'museum') {
         c.strokeStyle = '#283e36'; c.lineWidth = 13; c.strokeRect(55, 55, 850, 466);
@@ -272,8 +341,18 @@ export class SetDressing {
         c.font = '500 15px serif'; c.textAlign = 'center'; c.fillStyle = '#ccb78c90'; c.fillText('旧 馆 · 失 物 档 案', 234, 288);
       }
     }
+    if (detail) this.surfaceGrain(c);
     this.floorContact(c, level);
     return canvas;
+  }
+
+  private surfaceGrain(c: CanvasRenderingContext2D) {
+    let seed = 9151;
+    const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
+    for (let i = 0; i < 9000; i++) {
+      c.fillStyle = i % 2 ? '#efe5d314' : '#172f3520';
+      c.fillRect(random() * 960, random() * 576, .35 + random() * .8, .35 + random() * .6);
+    }
   }
 
   private floorContact(context: CanvasRenderingContext2D, level: Level) {
@@ -451,11 +530,18 @@ export class SetDressing {
     }
     const glassHeight = Math.max(0.56, Math.min(width, depth) * 0.63), top = 1.06 + glassHeight;
     const glass = this.box(parent, 0, 1.06 + glassHeight / 2, 0, width * 0.81, glassHeight, depth * 0.81, '#91b6af');
-    glass.material = new THREE.MeshStandardMaterial({ color: '#b1d6ca', transparent: true, opacity: 0.08, depthWrite: false, roughness: 0.2, metalness: 0.1 }); glass.castShadow = false; glass.userData.ownedMaterial = true;
+    glass.material = new THREE.MeshPhysicalMaterial({ color: '#c3e0da', transparent: true, opacity: 0.14, depthWrite: false,
+      roughness: 0.12, metalness: 0, clearcoat: 1, clearcoatRoughness: .1, envMapIntensity: 1.25 }); glass.castShadow = false; glass.userData.ownedMaterial = true;
     for (const x of [-1, 1]) for (const z of [-1, 1]) this.box(parent, x * width * 0.407, 1.06 + glassHeight / 2, z * depth * 0.407, 0.023, glassHeight, 0.023, '#ae9160', 0.5);
     for (const z of [-1, 1]) this.box(parent, 0, top, z * depth * 0.407, width * 0.83, 0.027, 0.027, '#ae9160', 0.5);
     for (const x of [-1, 1]) this.box(parent, x * width * 0.407, top, 0, 0.027, 0.027, depth * 0.83, '#ae9160', 0.5);
     this.box(parent, 0, 0.87, depth * 0.425, width * 0.25, 0.12, 0.018, '#dfd0a3');
+    // Recessed cabinet fronts and small pulls give the plinth a human scale.
+    for (const side of [-1, 1]) {
+      this.box(parent, side * width * .21, .55, depth * .425, width * .36, .45, .025, '#5c5040');
+      this.box(parent, side * width * .21, .69, depth * .449, width * .095, .025, .035, '#c6ad74', .7);
+    }
+    if (parent instanceof THREE.Group) this.batchFixed(parent);
   }
 
   cover(level: Level, parent: THREE.Object3D, width: number, depth: number, index: number) {
@@ -583,6 +669,7 @@ export class SetDressing {
         this.box(group, 0.27, 1.02, -0.16, 0.045, 0.25, 0.045, '#bc9a61', 0.6);
         this.box(group, 0.27, 1.13, -0.08, 0.18, 0.045, 0.21, '#bc9a61', 0.6);
       } else for (let i = 0; i < 2; i++) this.box(group, 0.25, 0.9 + i * 0.045, -0.1, 0.28, 0.035, 0.35, i ? '#94aba0' : '#b9a06e');
+      this.batchFixed(group);
       const ticket = this.box(group, 0, 0.4, 0.33, 0.32, 0.07, 0.045, '#ffe0a0'); ticket.visible = false;
       const screen = this.box(group, 0, 0.9, -0.32, 0.37, 0.035, 0.13, '#78bfc2');
       screen.material = new THREE.MeshStandardMaterial({ color: '#78bfc2', emissive: '#78bfc2', emissiveIntensity: 0.35 }); screen.userData.ownedMaterial = true;
@@ -608,6 +695,7 @@ export class SetDressing {
         this.box(group, 0, 0.965, -0.23, 0.72, 0.16, 0.12, casing);
         this.box(group, 0, 1.06, -0.23, 0.79, 0.04, 0.16, trim, 0.4);
       }
+      this.batchFixed(group);
       const ticket = this.box(group, 0, 0.54, 0.325, 0.32, 0.07, 0.045, '#ffe0a0'); ticket.visible = false;
       const screen = this.box(group, 0, 0.9, -0.05, 0.4, 0.045, 0.23, '#78bfc2');
       screen.material = new THREE.MeshStandardMaterial({ color: '#78bfc2', emissive: '#78bfc2', emissiveIntensity: 0.35 }); screen.userData.ownedMaterial = true;
@@ -619,15 +707,37 @@ export class SetDressing {
     }
     const cabinet = station && ['FAST', 'SERVICE', 'ARCHIVE', 'RETURN'].includes(terminal.id);
     const tint = terminal.id === 'SERVICE' ? '#a77e45' : terminal.id === 'FAST' ? '#437e82' : '#48616a';
-    this.box(group, 0, 0.38, 0, cabinet ? 0.88 : 0.68, 0.76, 0.55, cabinet ? tint : '#6a6553', 0.2);
-    this.box(group, 0, 0.81, 0, cabinet ? 1 : 0.82, 0.1, 0.71, '#b9ad87', 0.4);
+    const width = cabinet ? .88 : .74, body = cabinet ? tint : station ? '#3e5d59' : '#5e5646';
+    this.box(group, 0, .07, 0, width + .05, .14, .61, '#253d40');
+    this.box(group, 0, .44, 0, width, .65, .55, body);
+    this.box(group, 0, .76, 0, width + .09, .045, .62, '#b69a66', .65);
+    this.box(group, 0, .825, 0, cabinet ? 1 : .86, .09, .71, '#b9b09a');
+    this.box(group, 0, .405, .286, width - .16, .42, .025, '#263f40');
+    for (const side of [-1, 1]) {
+      this.box(group, side * (width / 2 - .045), .43, .3, .035, .57, .045, '#a78e61', .65);
+      this.box(group, side * (width / 2 - .07), .16, .313, .065, .042, .025, '#d0ba78', .65);
+    }
+    this.box(group, 0, .64, .31, width - .18, .075, .035, body);
+    this.box(group, 0, .53, .325, .22, .03, .045, '#d0ba78', .65);
+    // A bound register and a seal belong to the desk, distinct from the one
+    // luminous credential which appears only in its actual holder's slot.
+    const register = new THREE.Group(); register.position.set(-.2, .882, .14); register.rotation.y = -.16; group.add(register);
+    this.box(register, 0, .016, 0, .25, .032, .29, '#384f47');
+    this.box(register, 0, .039, .005, .215, .018, .25, '#c7bda1');
+    this.box(register, 0, .055, 0, .25, .017, .29, '#384f47');
+    this.box(register, -.07, .065, 0, .011, .005, .25, '#b89d67', .5); this.batchFixed(register);
+    if (terminal.kind === 'lock') {
+      this.box(group, .26, .89, .12, .17, .035, .17, '#a08761', .5);
+      this.box(group, .26, .975, .12, .065, .14, .065, '#3d4440');
+    }
     if (cabinet) {
       this.box(group, 0, 0.52, 0.29, 0.69, 0.28, 0.03, '#1d3b42');
       this.box(group, 0, 0.39, 0.34, 0.28, 0.035, 0.06, '#d0ba78', 0.65);
       this.box(group, -0.3, 0.13, 0.29, 0.12, 0.05, 0.035, '#d0ba78', 0.65);
       this.box(group, 0.3, 0.13, 0.29, 0.12, 0.05, 0.035, '#d0ba78', 0.65);
     }
-    const ticket = this.box(group, 0, 0.57, 0.315, 0.32, 0.07, 0.045, '#ffe0a0'); ticket.visible = false;
+    this.batchFixed(group);
+    const ticket = this.box(group, 0, 0.57, 0.34, 0.32, 0.07, 0.045, '#ffe0a0'); ticket.visible = false;
     const screen = this.box(group, 0, 0.875, -0.1, 0.4, 0.045, 0.23, '#78bfc2');
     screen.material = new THREE.MeshStandardMaterial({ color: '#78bfc2', emissive: '#78bfc2', emissiveIntensity: 0.35 }); screen.userData.ownedMaterial = true;
     return { screen, ticket };

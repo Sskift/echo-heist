@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Game, type Frame } from './engine.ts';
 import { doorPlates, ECHO_COLORS, HEIGHT, TILE, WIDTH, type Level, type Point } from './levels.ts';
 import { Models3D, type ModelName, type CharacterRole } from './models3d.ts';
@@ -29,6 +30,7 @@ export class Renderer {
   private readonly gl: THREE.WebGLRenderer;
   private readonly finish: SceneFinish;
   private readonly relief = new SurfaceRelief();
+  private reflections?: THREE.WebGLRenderTarget;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.OrthographicCamera(-20, 20, 12.5, -12.5, 0.1, 150);
   private readonly models = new Models3D();
@@ -86,7 +88,10 @@ export class Renderer {
   }
   private material(color: string, metalness = 0, roughness = 0.8) {
     const key = `${color}:${metalness}:${roughness}`;
-    if (!this.mat.has(key)) this.mat.set(key, new THREE.MeshStandardMaterial({ color, metalness, roughness: metalness ? 0.48 : roughness, bumpMap: metalness ? null : this.relief.plaster, bumpScale: 0.025 }));
+    if (!this.mat.has(key)) this.mat.set(key, new THREE.MeshStandardMaterial({ color, metalness,
+      roughness: metalness ? 0.37 : roughness, roughnessMap: this.relief.patina,
+      bumpMap: metalness ? this.relief.metal : this.relief.plaster, bumpScale: metalness ? 0.006 : 0.018,
+      envMapIntensity: metalness ? 1.15 : 0.45 }));
     return this.mat.get(key)!;
   }
   private box(parent: THREE.Object3D, x: number, y: number, z: number, w: number, h: number, d: number, color: string, metal = 0) {
@@ -105,6 +110,15 @@ export class Renderer {
   }
   private build(level: Level) {
     this.level = level;
+    // A single local reflection probe gives brass and glass shaped highlights.
+    // Simple mode skips both the probe bake and environment shading.
+    if (this.detail && !this.reflections) {
+      const studio = new RoomEnvironment(), pmrem = new THREE.PMREMGenerator(this.gl);
+      this.reflections = pmrem.fromScene(studio, .055);
+      studio.dispose(); pmrem.dispose();
+    }
+    this.scene.environment = this.detail ? this.reflections!.texture : null;
+    this.scene.environmentIntensity = .14;
     // Keep shared models and materials; dispose only per-room render resources.
     this.levelRoot.traverse(o => {
       if (o.userData.ownedGeometry && o instanceof THREE.Mesh) o.geometry.dispose();
@@ -122,7 +136,9 @@ export class Renderer {
     if (this.detail) this.dressing.foundation(level, this.levelRoot);
     const floorCanvas = this.dressing.floor(level, this.detail, floorColor);
     const texture = new THREE.CanvasTexture(floorCanvas); texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = 8;
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 18), new THREE.MeshStandardMaterial({ map: texture, roughness: style === 'museum' ? 0.7 : 0.87, bumpMap: style === 'museum' || style === 'archive' ? this.relief.wood : this.relief.stone, bumpScale: 0.055 }));
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 18), new THREE.MeshStandardMaterial({ map: texture,
+      roughness: style === 'museum' ? 0.74 : 0.84, roughnessMap: this.relief.patina, envMapIntensity: .3,
+      bumpMap: style === 'museum' || style === 'archive' ? this.relief.wood : this.relief.stone, bumpScale: 0.022 }));
     floor.rotation.x = -Math.PI / 2; floor.position.y = 0.03; floor.receiveShadow = true; floor.userData.ownedGeometry = true; floor.userData.ownedTexture = true; this.levelRoot.add(floor);
     const fx = new THREE.Mesh(new THREE.PlaneGeometry(30, 18), new THREE.MeshBasicMaterial({ map: this.groundTexture, transparent: true, depthWrite: false, toneMapped: false }));
     fx.rotation.x = -Math.PI / 2; fx.position.y = 0.047; fx.userData.ownedGeometry = true; fx.userData.ownedMaterial = true; this.levelRoot.add(fx);
@@ -157,9 +173,11 @@ export class Renderer {
             const px = w > h ? along : 0, pz = h > w ? along : 0;
             this.box(root, px, height / 2, pz, w > h ? 0.18 : w + 0.05, height + 0.06, h > w ? 0.18 : h + 0.05, look.cap);
             if (border && !near && this.detail && i % 2 === 0) {
-              const lamp = this.model('lamp', root, px, pz + (w > h ? h / 2 + 0.03 : 0), 0.35, 0.35, 0.55, 1.65);
-              if (lamp && h > w) { lamp.position.x = w / 2; lamp.rotation.y = Math.PI / 2; }
-              this.bulb(root, px + (h > w ? w / 2 + 0.1 : 0), 1.85, pz + (w > h ? h / 2 + 0.1 : 0), look.light, this.lamps.length < 6);
+              const lamp = this.dressing.sconce(root, level, px + (h > w ? w / 2 + .03 : 0), pz + (w > h ? h / 2 + .03 : 0), w > h);
+              if (this.lamps.length < 6) {
+                const light = new THREE.PointLight(look.light, 4.5, 5.2, 2);
+                light.position.set(0, 1.97, .38); lamp.add(light); this.lamps.push(light);
+              }
             }
             if (border && !near && this.detail && i % 2 === 1) {
               if (this.dressing.wallBay(level, root, px + (h > w ? w / 2 + 0.045 : 0), pz + (w > h ? h / 2 + 0.045 : 0), w > h, i)) continue;
@@ -186,6 +204,7 @@ export class Renderer {
           }
         }
       }
+      this.dressing.batchFixed(root);
       this.walls.push({ root, x: cell.x, y: cell.y, w: w * TILE, h: h * TILE, tall: height > 1 });
     }
     if (this.detail) windowLight.attach(this.levelRoot);
@@ -200,13 +219,23 @@ export class Renderer {
       this.box(panelGroup, 0, 0.87, 0, width - 0.25, 1.7, 0.12, look.panel, 0.35);
       const industrial = style === 'power' || style === 'retention';
       for (let i = 0; i < (industrial ? 6 : 3); i++) this.box(panelGroup, 0, 0.25 + i * (industrial ? 0.24 : 0.56), 0.07, width - 0.34, 0.06, 0.045, look.trim, 0.6);
+      if (this.detail && !industrial && style !== 'vault') {
+        for (const side of [-1, 1]) {
+          this.box(panelGroup, side * width * .215, .86, .073, width * .34, 1.09, .025, '#213b42');
+          this.box(panelGroup, side * width * .215, 1.41, .094, width * .35, .025, .025, look.trim, .5);
+          this.box(panelGroup, side * .095, .81, .125, .035, .19, .065, look.trim, .75);
+        }
+        this.box(panelGroup, 0, .87, .08, .035, 1.65, .035, look.trim, .6);
+      }
       if (style === 'vault') {
         const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.035, 6, 20), this.material(look.trim, 0.7)); wheel.position.set(0, 0.9, 0.19); wheel.userData.ownedGeometry = true; panelGroup.add(wheel);
         for (let i = 0; i < 3; i++) { const spoke = this.box(panelGroup, 0, 0.9, 0.19, 0.57, 0.035, 0.05, look.trim, 0.6); spoke.rotation.z = i * Math.PI / 3; }
       }
+      this.dressing.batchFixed(group); this.dressing.batchFixed(panelGroup);
       this.doors.set(door.id, panelGroup);
     }
     for (const landmark of passageLandmarks(level)) this.dressing.passage(this.levelRoot, landmark);
+    if (this.detail) for (const plate of level.plates) this.dressing.floorPlate(this.levelRoot, plate);
     if (level.lostProperty) this.propertyCabinet = this.dressing.lostProperty(this.levelRoot, level.lostProperty);
     for (const terminal of level.terminals ?? []) {
       const { screen, ticket } = terminal.appearance === 'lost-property' && this.propertyCabinet ? this.propertyCabinet : this.dressing.terminal(this.levelRoot, terminal, style === 'station');
@@ -347,6 +376,12 @@ export class Renderer {
     if (this.level !== game.level || this.detail !== this.lastDetail) this.build(game.level);
     const focus = game.spectator && game.activeEchoes[0] ? game.echoAt(game.activeEchoes[0].echo) : game.player;
     const target = this.closeup ? world(focus, 0.45) : new THREE.Vector3(0, 0.3, 0);
+    if (this.closeup) {
+      // Keep the surrounding room in the shot when following an edge route.
+      // The actor still drives the camera; simulation and screen input do not change.
+      target.x = THREE.MathUtils.clamp(target.x, -8.5, 8.5);
+      target.z = THREE.MathUtils.clamp(target.z, -4.5, 4.5);
+    }
     let arrivalZoom = 1, arrivalShade = 0;
     if (this.arrival && !this.reducedMotion) {
       this.arrival.elapsed += Math.max(0, dt);
