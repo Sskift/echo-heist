@@ -99,3 +99,6 @@ body.immersive { background: #253940; color: #d7e2d6; }
   .immersive .touch-lure { font-size: 10px; padding: 15px 10px; }
   .immersive #planning-panel { left: 6px; right: 6px; bottom: 6px; padding: 15px; max-height: 54dvh; }
 }
+
+/* A quiet cue only when the introductory pressure plate is really held. */
+.immersive #record-button.lesson-ready { outline: 2px solid #f5df9c; outline-offset: 4px; box-shadow: 0 0 18px #d4dca338; }

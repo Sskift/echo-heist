@@ -91,6 +91,7 @@ export class SetDressing {
       for (const end of [-1, 1]) this.box(group, side * .48, .058, end * .48, .065, .016, .065, '#bca16d', .7);
     }
     this.batchFixed(group);
+    return group;
   }
 
   lostProperty(parent: THREE.Object3D, at: Point) {

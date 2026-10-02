@@ -1,3 +1,4 @@
+import { firstLesson } from './scene-feedback.ts';
 import './style.css';
 import './planning.css';
 import { Game } from './engine.ts';
@@ -482,6 +483,7 @@ function refreshUI() {
       $('#door-status').textContent = `${game.openDoors.size} / ${game.level.doors.length} 道门开启 · 可以分时通过`;
     } else $('#objective-doors > div').firstChild!.textContent = '让过去的你打开通道';
     const button = $<HTMLButtonElement>('#record-button');
+    button.classList.toggle('lesson-ready', !planningUI.open && !previewGame && firstLesson(game).record);
     button.disabled = planningUI.open || !['ready', 'running'].includes(game.status);
     button.querySelector('span')!.textContent = game.editingIndex !== null ? (game.status === 'ready' ? '开始重录' : '保存新路线') : game.status === 'ready' ? '开始行动' : '留下回声';
     $('#pause-button').textContent = game.status === 'paused' ? '▷' : 'Ⅱ';
