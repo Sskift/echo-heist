@@ -45,7 +45,8 @@ export class ContractUI {
   }
   render(active: boolean, demo: boolean) {
     $('#contracts-button').hidden=demo;
-    $('#contracts-button').textContent=this.book.unlocked?'夜班委托':'夜班委托 · 通关后解锁';
+    $('#contracts-button').textContent='夜班委托';
+    $('#contracts-button').title=this.book.unlocked?'查看夜班委托与成绩':'完成主线后解锁';
     $('#contract-strip').hidden=!active;
     const c=active ? this.book.active : undefined;
     const key=`${active}:${c?.id}:${this.book.unlocked}`;

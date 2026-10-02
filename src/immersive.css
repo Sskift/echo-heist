@@ -1,0 +1,101 @@
+/* The room is the default view. Planning is an explicit, paused workspace. */
+body.immersive { background: #253940; color: #d7e2d6; }
+.immersive .site-header { height: 50px; padding: 0 22px; gap: 22px; color: #c7d4ca; }
+.immersive .brand { margin-right: auto; font-size: 12px; letter-spacing: 2px; }
+.immersive .site-header > button { border: 0; background: none; font-size: 11px; padding: 8px 0; color: #b9cbc1; }
+.immersive .site-header .key { display: none; }
+.immersive .site-header #contracts-button { background: none; border: 0; color: #b9cbc1; }
+.immersive main { padding: 0 12px 12px; max-width: none; }
+.immersive .game-layout { display: grid; grid-template-columns: minmax(0, 1fr); min-height: calc(100dvh - 62px); background: #253940; overflow: visible; }
+.immersive .game-layout.planning-open { grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; }
+.immersive .console { height: calc(100dvh - 62px); border-radius: 12px; overflow: hidden; background: #203239; justify-content: flex-start; align-items: center; min-width: 0; min-height: 0; }
+.immersive .console-bar { width: 100%; background: #203239; height: 40px; padding: 0 18px; }
+.immersive .console-bar .feed-label { visibility: visible; }
+.immersive .arena { width: 100%; max-width: none; aspect-ratio: auto; margin: 0; flex: 1; min-height: 0; }
+.immersive .arena #game-canvas { width: 100%; height: 100%; aspect-ratio: auto; }
+.immersive .action-hud, .immersive .touch-controls { flex-shrink: 0; }
+.immersive .action-hud { display: flex; width: 100%; justify-content: center; align-items: center; gap: 28px; min-height: 76px; padding: 12px 20px; background: #203239; }
+.immersive #hud-clock { width: 94px; }
+.immersive .clock-panel { margin: 0; padding: 0; border: 0; }
+.immersive .clock-top { font-size: 9px; color: #a9c1b6; }
+.immersive .clock { height: 30px; letter-spacing: -1px; }
+.immersive .clock #seconds { font-size: 30px; }
+.immersive .clock-fraction { font-size: 17px; color: #a9c1b6; }
+.immersive .clock-unit { font-size: 10px; margin-left: 4px; color: #a9c1b6; }
+.immersive .clock-progress { margin-top: 4px; height: 2px; background: #48605e; }
+.immersive .clock-progress > span { background: #c0d9bc; }
+.immersive .clock-panel.urgent .clock { color: #ffb394; }
+.immersive .clock-panel.urgent .clock-progress > span { background: #ffb394; }
+.immersive #hud-actions { display: flex; align-items: center; gap: 18px; }
+.immersive #record-button { width: 150px; border: 1px solid #8faea0; background: #cbdcc4; color: #253e3d; }
+.immersive #record-button kbd { background: transparent; color: #3f625a; border-color: #99b5a1; }
+.immersive #retry-button, .immersive #planning-button { background: none; color: #cfdbcd; border: 0; font-size: 11px; min-height: 40px; }
+.immersive #retry-button kbd { display: none; }
+.immersive #planning-button { border-left: 1px solid #4c645f; padding-left: 25px; display: flex; align-items: center; gap: 12px; }
+.immersive #planning-button kbd { background: #2e464a; color: #b9cdbe; border-color: #61776c; }
+.immersive #hud-echoes { font: 10px var(--mono); color: #94b0a6; }
+.immersive #planning-panel { color: #29483f; background: #e5eadf; display: flex; flex-direction: column; padding: 18px; max-height: calc(100dvh - 62px); overflow-y: auto; border-radius: 12px; scrollbar-width: thin; }
+.planning-heading { position: sticky; top: 0; z-index: 2; background: #e5eadf; display: flex; align-items: center; gap: 10px; padding-bottom: 15px; border-bottom: 1px solid #bdcbbd; }
+.planning-heading strong { font-size: 13px; }
+.planning-heading > span { font-size: 9px; color: #617b6b; }
+.planning-heading button { margin-left: auto; border: 0; background: none; font-size: 10px; color: #3d6559; }
+.planning-heading kbd { font-size: 8px; }
+.immersive #planning-panel h2 { font-size: 16px; margin-top: 18px; }
+.immersive .mission-description { max-width: none; }
+.immersive .mission-actions { margin: 0 0 12px; padding: 0; }
+.immersive .secondary-actions { justify-content: flex-end; gap: 25px; }
+.immersive .echo-section { margin: 0; padding-top: 14px; }
+.immersive .timeline { border-radius: 7px 7px 0 0; margin-top: 12px; padding: 14px 12px; }
+.immersive .timeline-heading { grid-template-columns: 36px 1fr; gap: 0; }
+.immersive .rehearsal-toolbar { padding: 6px 12px 12px; border-radius: 0 0 7px 7px; }
+.immersive .security-panel, .immersive .operation-panel { margin: 10px 0 0; border-radius: 6px; }
+.immersive .security-panel p, .immersive .security-panel li, .immersive .operation-panel p { overflow-wrap: anywhere; }
+.immersive .preview-panel { margin-top: 0; }
+.immersive #action-library { margin-top: 18px; padding: 12px 0; border-top: 1px solid #bdcbbd; font-size: 11px; }
+.immersive #action-library > summary { cursor: pointer; }
+.immersive .campaign-shell { margin-top: 12px; border-radius: 6px; overflow: visible; }
+.immersive .campaign-toolbar { flex-wrap: wrap; padding: 8px; }
+.immersive #mission-board { min-width: 0; width: 100%; }
+.immersive #mission-board > summary { white-space: normal; }
+.immersive #mission-cards { position: static; width: 100%; max-height: 320px; overflow-y: auto; box-shadow: none; }
+.immersive .story-strip { display: block; padding: 8px; }
+.immersive #stage-rail { flex-wrap: wrap; }
+.immersive .stage-bar { display: block; padding: 8px; }
+.immersive #checkpoint-note { display: block; margin-top: 8px; white-space: normal; }
+.immersive .level-nav { flex-wrap: wrap; margin-top: 10px; width: 100%; }
+.immersive .hint { margin-top: 5px; }
+.immersive .game-layout.planning-open .arena > #overlay { display: none; }
+.immersive .planning-open .touch-controls { pointer-events: none; opacity: .4; }
+.immersive .planning-open .mission-grid { grid-template-columns: 1fr; }
+.immersive button:focus-visible, .immersive summary:focus-visible { outline-color: #86ae94; }
+@media(max-width: 900px) {
+  .immersive .game-layout.planning-open { grid-template-columns: minmax(0, 1fr); }
+  .immersive #planning-panel { position: fixed; z-index: 15; left: 12px; right: 12px; bottom: 12px; max-height: 52dvh; box-shadow: 0 -12px 40px #152a3840; }
+  .immersive .planning-open .console { justify-content: flex-start; }
+  .immersive .planning-open .arena { max-width: none; flex: 0 0 calc(44dvh - 50px); margin: 0; }
+  .immersive .planning-open .action-hud { display: none; }
+  .immersive .planning-open .touch-controls { display: none; }
+}
+@media(max-width: 550px) {
+  .immersive .site-header { height: 46px; padding: 0 12px; gap: 15px; }
+  .immersive .brand { font-size: 11px; letter-spacing: 1px; }
+  .immersive .brand-symbol { display: none; }
+  .immersive .site-header > button { max-width: 80px; font-size: 9px; line-height: 1.5; }
+  .immersive main { padding: 0 6px 6px; }
+  .immersive .game-layout { min-height: calc(100dvh - 52px); }
+  .immersive .console { height: calc(100dvh - 52px); }
+  .immersive .console-bar { padding: 0 10px; }
+  .immersive .arena { max-width: 100%; }
+  .immersive .action-hud { padding: 12px 10px; min-height: 70px; gap: 12px; }
+  .immersive #hud-clock { width: 66px; flex-shrink: 0; }
+  .immersive #hud-actions { gap: 8px; }
+  .immersive #record-button { width: 112px; padding: 0 8px; font-size: 10px; }
+  .immersive #record-button kbd, .immersive #planning-button kbd { display: none; }
+  .immersive #retry-button { font-size: 10px; }
+  .immersive #planning-button { flex-direction: column; justify-content: center; gap: 4px; padding-left: 12px; white-space: nowrap; font-size: 10px; }
+  .immersive .touch-controls { order: 5; width: 100%; border: 0; background: #203239; padding: 10px 12px 18px; gap: 8px; }
+  .immersive .dpad { grid-template-columns: 36px 36px 36px; grid-template-rows: 34px 34px; }
+  .immersive .dpad button, .immersive .touch-lure { background: #2e4749; color: #c4d9c8; border-color: #536c63; }
+  .immersive .touch-lure { font-size: 10px; padding: 15px 10px; }
+  .immersive #planning-panel { left: 6px; right: 6px; bottom: 6px; padding: 15px; max-height: 54dvh; }
+}

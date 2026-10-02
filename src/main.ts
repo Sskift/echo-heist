@@ -20,6 +20,7 @@ import { CONTRACTS, contractForLevel } from './contract-content.ts';
 import { ContractBook, CONTRACT_KEY, CONTRACT_PLAN_KEY } from './contracts.ts';
 import { ContractUI } from './contract-ui.ts';
 import './quiet.css';
+import { PlanningUI } from './planning-ui.ts';
 
 const ALL_LEVELS = [...LEVELS, ...CAMPAIGN_LEVELS];
 const demoName = new URLSearchParams(location.search).get('demo') ?? '';
@@ -133,11 +134,18 @@ $('#annotations-button').addEventListener('click', () => { showAnnotations(!rend
 $('.hint').addEventListener('toggle', () => { if (($('.hint') as HTMLDetailsElement).open) showAnnotations(true); });
 const journeyUI = new JourneyUI($('.arena'), () => { renderer.finishArrival(); clearInput(); focusGame(); });
 $('#fullscreen-button').insertAdjacentHTML('beforebegin', '<button id="camera-button" class="media-button" title="切换全景 / 跟随近景" aria-label="切换跟随近景" aria-pressed="false">近景</button>');
-$('#camera-button').addEventListener('click', () => {
-  renderer.closeup = !renderer.closeup;
+const narrowScreen = matchMedia('(max-width: 550px)');
+let cameraChosen = false;
+function cameraView(closeup: boolean) {
+  renderer.closeup = closeup;
   $('#camera-button').textContent = renderer.closeup ? '全景' : '近景';
   $('#camera-button').setAttribute('aria-pressed', String(renderer.closeup));
   $('#camera-button').setAttribute('aria-label', renderer.closeup ? '切换全景' : '切换跟随近景');
+}
+cameraView(narrowScreen.matches);
+narrowScreen.addEventListener('change', () => { if (!cameraChosen) cameraView(narrowScreen.matches); });
+$('#camera-button').addEventListener('click', () => {
+  cameraChosen = true; cameraView(!renderer.closeup);
   focusGame();
 });
 const sound = new Sound();
@@ -157,6 +165,7 @@ let helpWasRunning = false;
 let initialized = false;
 let pointerFastForward = false;
 let hintStep = 0;
+let planningWasRunning = false;
 const dialog = $<HTMLDialogElement>('#help-dialog');
 const endingUI = new EndingUI(() => {
   if (campaign.revisitEnding()) { clearInput(); saveCampaign(); loadLevel(campaign.stage.level); focusGame(); }
@@ -211,6 +220,16 @@ for (const selector of ['#mission-board', '#mission-brief', '#security-panel', '
 }
 $('#touch-lure').insertAdjacentHTML('afterend', '<button class="touch-lure" id="touch-interact">E 操作设备</button>');
 $('.clock-panel').insertAdjacentElement('afterend', $('.mission-actions'));
+const planningUI = new PlanningUI(() => {
+  planningWasRunning = game.status === 'running';
+  if (planningWasRunning) game.togglePause();
+  clearInput(); accumulator = 0; overlayKey = ''; refreshUI();
+}, resume => {
+  previewGame = null; previewWasRunning = false;
+  if (resume && planningWasRunning && game.status === 'paused') game.togglePause();
+  planningWasRunning = false;
+  clearInput(); accumulator = 0; overlayKey = ''; uiKey = ''; refreshUI(); focusGame();
+});
 $('#hint-text').insertAdjacentHTML('afterend', '<button id="more-hint" class="more-hint" hidden>再给一点提示</button>');
 $('#more-hint').addEventListener('click', () => { hintStep++; renderHint(); });
 function renderHint() {
@@ -285,9 +304,10 @@ function openMission(id: string, replay = true) {
 
 function togglePreview() {
   if (game.editingIndex !== null) return;
+  if (!planningUI.open) planningUI.show();
   if (previewGame) {
     previewGame = null;
-    if (previewWasRunning && game.status === 'paused') game.togglePause();
+    if (previewWasRunning && !planningUI.open && game.status === 'paused') game.togglePause();
     previewWasRunning = false; overlayKey = ''; uiKey = ''; refreshUI(); focusGame();
   } else {
     previewWasRunning = game.status === 'running';
@@ -317,7 +337,7 @@ function toast(text: string) {
   toastTimer = window.setTimeout(() => $('#toast').classList.remove('visible'), 2600);
 }
 
-function focusGame() { $('#game-canvas').focus({ preventScroll: true }); }
+function focusGame() { if (!planningUI.open) $('#game-canvas').focus({ preventScroll: true }); }
 
 function setLevel(index: number) {
   leaveContractMode();
@@ -327,6 +347,7 @@ function setLevel(index: number) {
 }
 
 function loadLevel(level: Level) {
+  planningUI.close(false);
   journeyUI.clear(); renderer.finishArrival();
   if (initialized) persistPlan();
   previewGame = null; previewWasRunning = false;
@@ -365,6 +386,7 @@ function loadLevel(level: Level) {
 }
 
 function primaryAction() {
+  if (planningUI.open) return;
   sound.unlock();
   if (contractMode && game.status==='won') { contractUI.show(); return; }
   if (demo && campaign.cleared() === campaign.mission.stages.length && ['ready', 'won'].includes(game.status)) { openMission(demoMission); return; }
@@ -394,6 +416,7 @@ function primaryAction() {
 }
 
 function record() {
+  if (planningUI.open) return;
   sound.unlock();
   if (game.status === 'ready') { primaryAction(); return; }
   if (game.status === 'running') {
@@ -405,6 +428,7 @@ function record() {
 }
 
 function refreshUI() {
+  planningUI.render(game.echoes.length, game.echoLimit, !!previewGame);
   const preparation = campaignMode && !demo ? campaign.preparation : undefined;
   $('#preparation-strip').hidden = !preparation;
   if (preparation) {
@@ -458,7 +482,7 @@ function refreshUI() {
       $('#door-status').textContent = `${game.openDoors.size} / ${game.level.doors.length} 道门开启 · 可以分时通过`;
     } else $('#objective-doors > div').firstChild!.textContent = '让过去的你打开通道';
     const button = $<HTMLButtonElement>('#record-button');
-    button.disabled = !['ready', 'running'].includes(game.status);
+    button.disabled = planningUI.open || !['ready', 'running'].includes(game.status);
     button.querySelector('span')!.textContent = game.editingIndex !== null ? (game.status === 'ready' ? '开始重录' : '保存新路线') : game.status === 'ready' ? '开始行动' : '留下回声';
     $('#pause-button').textContent = game.status === 'paused' ? '▷' : 'Ⅱ';
     $('#pause-button').setAttribute('aria-label', game.status === 'paused' ? '继续游戏' : '暂停游戏');
@@ -472,8 +496,10 @@ function refreshUI() {
   operationUI.render(game, previewGame);
   const fast = isFastForwarding();
   if (previewGame) document.querySelectorAll<HTMLButtonElement>('#record-button, #retry-button, #undo-button, #reset-button, [data-delete], [data-rerecord]').forEach(button => { button.disabled = true; });
-  $<HTMLButtonElement>('#pause-button').disabled = !!previewGame;
-  $<HTMLButtonElement>('#fast-forward').disabled = !!previewGame;
+  $<HTMLButtonElement>('#record-button').disabled = planningUI.open || !!previewGame || !['ready', 'running'].includes(game.status);
+  $<HTMLButtonElement>('#retry-button').disabled = planningUI.open || !!previewGame || game.status === 'ready';
+  $<HTMLButtonElement>('#pause-button').disabled = !!previewGame || planningUI.open;
+  $<HTMLButtonElement>('#fast-forward').disabled = !!previewGame || planningUI.open;
   $('#speed-indicator').hidden = !fast;
   $('#fast-forward').classList.toggle('active', fast);
   $('#fast-forward').setAttribute('aria-pressed', String(fast));
@@ -585,6 +611,7 @@ $('#cancel-rerecord').addEventListener('click', () => {
 $('#echo-slots').addEventListener('click', event => {
   const rerecord = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-rerecord]');
   if (rerecord && game.beginRerecord(Number(rerecord.dataset.rerecord))) {
+    planningUI.close(false);
     accumulator = 0; clearInput(); focusGame();
     $('#toast').classList.remove('visible');
     $('#plan-status').textContent = '旧路线保留中 · R 保存新路线';
@@ -644,8 +671,23 @@ document.addEventListener('focusin', event => {
 window.addEventListener('keydown', event => {
   if (dialog.open || endingUI.open || mediaUI.open || storyUI.open || contractUI.open) return;
   if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (planningUI.open && event.code === 'Escape') {
+    event.preventDefault();
+    if (!event.repeat) {
+      // Commit a changed delay before the panel returns to the scene.
+      if (isEditingControl(event.target)) (event.target as HTMLElement).blur();
+      planningUI.close();
+    }
+    return;
+  }
   if (isEditingControl(event.target)) return;
+  if (event.code === 'KeyG') {
+    event.preventDefault();
+    if (!event.repeat) { if (planningUI.open) planningUI.close(); else planningUI.show(); }
+    return;
+  }
   if (event.code === 'KeyP' || (previewGame && event.code === 'Escape')) { event.preventDefault(); if (!event.repeat) togglePreview(); return; }
+  if (planningUI.open) return;
   if (previewGame) return;
   if (event.key === '?') { event.preventDefault(); showHelp(); return; }
   const onControl = event.target instanceof HTMLElement && event.target.closest('button, summary, a');
@@ -678,7 +720,7 @@ const touchCodes: Record<string, string> = { up: 'ArrowUp', down: 'ArrowDown', l
 for (const button of document.querySelectorAll<HTMLButtonElement>('[data-direction], #touch-lure, #touch-interact')) {
   const code = button.id === 'touch-interact' ? 'KeyE' : button.id === 'touch-lure' ? 'Space' : touchCodes[button.dataset.direction!];
   button.addEventListener('pointerdown', event => {
-    if (previewGame) return;
+    if (previewGame || planningUI.open) return;
     if (game.status === 'ready' && campaignMode && campaign.cleared() === campaign.mission.stages.length) return;
     event.preventDefault(); button.setPointerCapture(event.pointerId); keys.add(code); sound.unlock();
     if (game.status === 'ready') startAction();
@@ -689,7 +731,7 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-directi
 function loop(now: number) {
   const elapsed = Math.min((now - lastFrame) / 1000, 0.1);
   lastFrame = now;
-  if (game.status === 'running') {
+  if (game.status === 'running' && !planningUI.open) {
     accumulator += elapsed * (isFastForwarding() ? 3 : 1);
     while (accumulator >= 1 / FPS) {
       const before = game.frame;

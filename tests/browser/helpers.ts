@@ -35,6 +35,21 @@ export async function move(page: Page, key: string, frames: number) {
   for (const k of keys) await page.keyboard.up(k);
 }
 
+export async function openPlanning(page: Page, library = false) {
+  if (await page.locator('#planning-button').getAttribute('aria-expanded') !== 'true') await page.locator('#planning-button').click();
+  if (library && !await page.locator('#action-library').evaluate(el => (el as HTMLDetailsElement).open)) await page.locator('#action-library > summary').click();
+}
+export async function closePlanning(page: Page) {
+  if (await page.locator('#planning-button').getAttribute('aria-expanded') === 'true') await page.locator('#close-planning').click();
+}
+export async function preview(page: Page) {
+  await openPlanning(page);
+  const wasPreview = await page.locator('#preview-button').getAttribute('aria-pressed') === 'true';
+  await page.locator('#preview-button').click();
+  // The scenarios resume their real keyboard routes after inspecting a preview.
+  if (wasPreview) await closePlanning(page);
+}
+
 // Drive authored routes through real controls. The headless model only chooses
 // key durations; it never reads or changes the browser's game state.
 export async function routeAction(page: Page, model: Game, action: WitnessAction) {
@@ -45,10 +60,11 @@ export async function routeAction(page: Page, model: Game, action: WitnessAction
   }
   if ('delay' in action) {
     if (!model.setDelay(action.echo,action.delay)) throw new Error('Reference delay rejected');
+    await openPlanning(page);
     const input=page.locator(`[data-delay-input="${action.echo}"]`);
-    await input.fill((action.delay/60).toFixed(2)); await input.dispatchEvent('change'); return;
+    await input.fill((action.delay/60).toFixed(2)); await input.dispatchEvent('change'); await closePlanning(page); return;
   }
-  if ('remove' in action) { model.removeEcho(action.remove); await page.locator(`[data-delete="${action.remove}"]`).click(); return; }
+  if ('remove' in action) { model.removeEcho(action.remove); await openPlanning(page); await page.locator(`[data-delete="${action.remove}"]`).click(); await closePlanning(page); return; }
   if (model.status==='ready') { model.start(); await page.locator('#overlay-action').click(); }
   if ('press' in action) {
     const key=action.press==='interact'?'e':'Space';

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { advance, clock } from './helpers.ts';
+import { advance, clock , openPlanning, closePlanning, preview } from './helpers.ts';
 
 // Keep the default full-detail renderer, including real models and shadows.
 test('3D models load, screen-up input records correct world poses, and camera changes keep plans intact on phone', async ({ page }) => {
@@ -10,10 +10,11 @@ test('3D models load, screen-up input records correct world poses, and camera ch
   await expect(page.locator('#game-canvas')).toHaveAttribute('data-annotations', 'false');
   await expect(page.locator('#game-canvas')).toHaveAttribute('data-labels', '0');
   await expect(page.locator('#mission-description')).not.toBeVisible();
+  await openPlanning(page);
   await page.locator('#mission-brief summary').click();
   await expect(page.locator('#mission-description')).toBeVisible();
   await page.locator('#mission-brief summary').click();
-  await page.locator('#overlay-action').click(); await advance(page);
+  await closePlanning(page); await advance(page);
   await page.keyboard.down('ArrowUp'); await advance(page, 12); await page.keyboard.up('ArrowUp');
   await page.keyboard.press('r'); await advance(page);
   const plan = await page.evaluate(() => localStorage.getItem('echo-heist-plans-v1'));
@@ -31,11 +32,12 @@ test('3D models load, screen-up input records correct world poses, and camera ch
   await expect(page.locator('#camera-button')).toHaveText('全景');
   expect(await page.evaluate(() => localStorage.getItem('echo-heist-plans-v1'))).toBe(plan);
   await page.locator('.arena').screenshot({ path: '.local/scene3d-echo-close.png' });
-  await page.locator('#preview-button').click(); await advance(page);
+  await preview(page); await advance(page);
   await page.locator('#preview-frame').fill('180'); await page.locator('#preview-frame').dispatchEvent('input'); await advance(page);
   expect(await page.evaluate(() => localStorage.getItem('echo-heist-plans-v1'))).toBe(plan);
-  await page.locator('#preview-button').click(); await advance(page);
+  await preview(page); await advance(page);
   await page.setViewportSize({ width: 390, height: 844 }); await advance(page);
+  await openPlanning(page);
   await page.locator('.hint summary').click();
   await expect(page.locator('#annotations-button')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.map-directions')).toHaveText('地图方向：北 ↗ · 东 ↘ · 南 ↙ · 西 ↖');

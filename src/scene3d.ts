@@ -3,7 +3,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Game, type Frame } from './engine.ts';
 import { doorPlates, ECHO_COLORS, HEIGHT, TILE, WIDTH, type Level, type Point } from './levels.ts';
-import { Models3D, type ModelName, type CharacterRole } from './models3d.ts';
+import { Models3D, type CharacterRole } from './models3d.ts';
 import { VIEW_WIDTH, VIEW_HEIGHT } from './isometric.ts';
 import { SetDressing, setting, sceneLook } from './set-dressing.ts';
 import { SceneFinish, SurfaceRelief } from './scene-finish.ts';
@@ -63,6 +63,8 @@ export class Renderer {
   private previousTime = 0;
   private lastDetail = true;
   private renderWidth = 0;
+  private renderHeight = 0;
+  private overlayHeight = VIEW_HEIGHT;
   constructor(public canvas: HTMLCanvasElement) {
     this.gl = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance', preserveDrawingBuffer: true });
     this.gl.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
@@ -98,10 +100,6 @@ export class Renderer {
   }
   private box(parent: THREE.Object3D, x: number, y: number, z: number, w: number, h: number, d: number, color: string, metal = 0) {
     const mesh = new THREE.Mesh(this.cube, this.material(color, metal)); mesh.position.set(x, y, z); mesh.scale.set(w, h, d); mesh.castShadow = true; mesh.receiveShadow = true; parent.add(mesh); return mesh;
-  }
-  private model(name: ModelName, parent: THREE.Object3D, x: number, z: number, width: number, depth: number, height?: number, y = 0) {
-    if (!this.ready) return;
-    const model = this.models.furniture(name, width, depth, height); model.position.set(x, y, z); parent.add(model); return model;
   }
   private bulb(parent: THREE.Object3D, x: number, y: number, z: number, color = colors.light, light = false) {
     const material = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.1, roughness: 0.3 });
@@ -157,10 +155,6 @@ export class Renderer {
       const height = near ? 0.25 : border ? 3.25 : furniture ? 1.5 : 1.45;
       if (furniture && this.dressing.cover(level, root, w, h, cx + cy)) {
         // The entire prop remains inside the existing occupied footprint.
-      } else if (furniture && this.ready) {
-        this.model((cx + cy) % 2 ? 'bookcase' : 'cabinet', root, 0, 0, w * 0.98, h * 0.98, height);
-        if ((cx + cy) % 2) for (let shelf = 0; shelf < 3; shelf++) this.model('books', root, 0, 0.12, w * 0.64, h * 0.42, 0.24, 0.15 + shelf * 0.43);
-        if ((cx + cy) % 3 === 0) this.model('plant', root, 0, 0, w * 0.65, h * 0.65, 0.5, height);
       } else {
         this.dressing.sculpt(root, 0, height / 2, 0, w, height, h, plaster, Math.min(.22, height / 3));
         if (this.detail) this.dressing.wallDetails(level, root, w, h, height);
@@ -241,12 +235,12 @@ export class Renderer {
       this.box(this.levelRoot, at.x, 1.73, at.z, glass.w / TILE, 0.05, glass.h / TILE, '#b2bfaf', 0.6);
     }
     if (level.objective !== 'reach' || level.delivery || level.handoff) {
-      const at = world(level.delivery ?? level.loot); this.model('desk', this.levelRoot, at.x, at.z, 1.1, 0.9, 0.75);
+      const at = world(level.delivery ?? level.loot); this.dressing.pedestal(this.levelRoot, at.x, at.z);
       this.loot = new THREE.Group(); this.loot.position.copy(at); this.levelRoot.add(this.loot);
       const core = !!level.handoff || !!level.lootLabel?.includes('核心');
       if (level.lootLabel?.includes('怀表')) this.dressing.watch(this.loot, 0.82, 0.75);
       else if (core) this.dressing.core(this.loot);
-      else this.model('books', this.loot, 0, 0, 0.4, 0.35, 0.17, 0.8);
+      else this.dressing.document(this.loot);
       this.bulb(this.loot, 0, core ? 1.49 : 1.15, 0, level.delivery ? colors.cyan : colors.light, true);
     }
     if (level.id.startsWith('C4-6')) for (const [id, y] of [['FAST', 176], ['SERVICE', 432]] as const) for (const x of [400, 496]) {
@@ -333,7 +327,7 @@ export class Renderer {
     if (this.annotations || contextual) this.labels.push({ at, height, text, color, contextual });
   }
   private hud(game: Game, dt: number) {
-    const c = this.ctx; c.clearRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
+    const c = this.ctx; c.clearRect(0, 0, VIEW_WIDTH, this.overlayHeight);
     const scale = Math.max(1, VIEW_WIDTH / Math.max(320, this.canvas.clientWidth) * 0.9);
     c.font = `500 ${12 * scale}px "Microsoft YaHei", sans-serif`;
     const rects: { x: number; y: number; width: number }[] = [];
@@ -342,7 +336,7 @@ export class Renderer {
     const silhouettes = [...this.actors.values()].filter(a => a.group.visible).map(a => {
       const points: THREE.Vector3[] = [];
       for (const x of [-0.4, 0.4]) for (const z of [-0.4, 0.4]) for (const y of [0, 2.08]) points.push(new THREE.Vector3(x, y, z).add(a.group.position).project(this.camera));
-      return { left: (Math.min(...points.map(p => p.x)) + 1) * VIEW_WIDTH / 2, right: (Math.max(...points.map(p => p.x)) + 1) * VIEW_WIDTH / 2, top: (1 - Math.max(...points.map(p => p.y))) * VIEW_HEIGHT / 2, bottom: (1 - Math.min(...points.map(p => p.y))) * VIEW_HEIGHT / 2 };
+      return { left: (Math.min(...points.map(p => p.x)) + 1) * VIEW_WIDTH / 2, right: (Math.max(...points.map(p => p.x)) + 1) * VIEW_WIDTH / 2, top: (1 - Math.max(...points.map(p => p.y))) * this.overlayHeight / 2, bottom: (1 - Math.min(...points.map(p => p.y))) * this.overlayHeight / 2 };
     });
     // In quiet view only the nearest usable object gets a prompt.
     const visibleLabels = this.annotations ? this.labels : this.labels.filter(l => l.contextual)
@@ -350,13 +344,13 @@ export class Renderer {
     this.canvas.dataset.labels = String(visibleLabels.length);
     this.canvas.dataset.annotations = String(this.annotations);
     for (const label of visibleLabels) {
-      const projected = world(label.at, label.height).project(this.camera), anchorX = (projected.x + 1) * VIEW_WIDTH / 2, anchorY = (1 - projected.y) * VIEW_HEIGHT / 2;
-      if (anchorX < 8 || anchorX > VIEW_WIDTH - 8 || anchorY < 8 || anchorY > VIEW_HEIGHT - 15) continue;
+      const projected = world(label.at, label.height).project(this.camera), anchorX = (projected.x + 1) * VIEW_WIDTH / 2, anchorY = (1 - projected.y) * this.overlayHeight / 2;
+      if (anchorX < 8 || anchorX > VIEW_WIDTH - 8 || anchorY < 8 || anchorY > this.overlayHeight - 15) continue;
       const width = c.measureText(label.text).width + 14 * scale;
       let x = anchorX, y = anchorY;
       for (let i = 0; i < 18; i++) {
         const row = Math.ceil(i / 2) * (i % 2 ? -1 : 1);
-        y = Math.max(20 * scale, Math.min(VIEW_HEIGHT - 15 * scale, anchorY + row * 25 * scale));
+        y = Math.max(20 * scale, Math.min(this.overlayHeight - 15 * scale, anchorY + row * 25 * scale));
         x = Math.max(width / 2 + 8, Math.min(VIEW_WIDTH - width / 2 - 8, anchorX));
         if (!rects.some(r => Math.abs(r.x - x) < (r.width + width) / 2 + 3 * scale && Math.abs(r.y - y) < 24 * scale)
           && !silhouettes.some(r => x + width / 2 > r.left && x - width / 2 < r.right && y + 7 * scale > r.top && y - 15 * scale < r.bottom)) break;
@@ -372,17 +366,22 @@ export class Renderer {
       if (guard.suspicion <= .2 || !game.powered(game.level.guards[i].power)) return;
       const point = world(guard, 2.35).project(this.camera);
       c.font = `700 ${16 * scale}px sans-serif`; c.textAlign = 'center'; c.fillStyle = colors.red;
-      c.fillText('!', (point.x + 1) * VIEW_WIDTH / 2, (1 - point.y) * VIEW_HEIGHT / 2);
+      c.fillText('!', (point.x + 1) * VIEW_WIDTH / 2, (1 - point.y) * this.overlayHeight / 2);
     });
-    if (game.alarm > 0.1) { c.strokeStyle = `rgba(239,133,103,${game.alarm * 0.8})`; c.lineWidth = 7; c.strokeRect(4, 4, VIEW_WIDTH - 8, VIEW_HEIGHT - 8); }
-    if (this.rewindFlash > 0 && !this.reducedMotion) { this.rewindFlash = Math.max(0, this.rewindFlash - dt * 2); c.fillStyle = `rgba(160,220,235,${this.rewindFlash * 0.15})`; c.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT); }
+    if (game.alarm > 0.1) { c.strokeStyle = `rgba(239,133,103,${game.alarm * 0.8})`; c.lineWidth = 7; c.strokeRect(4, 4, VIEW_WIDTH - 8, this.overlayHeight - 8); }
+    if (this.rewindFlash > 0 && !this.reducedMotion) { this.rewindFlash = Math.max(0, this.rewindFlash - dt * 2); c.fillStyle = `rgba(160,220,235,${this.rewindFlash * 0.15})`; c.fillRect(0, 0, VIEW_WIDTH, this.overlayHeight); }
   }
   draw(game: Game, time: number) {
     const dt = Math.min(0.1, time - this.previousTime); this.previousTime = time;
     const width = Math.round(this.canvas.clientWidth || VIEW_WIDTH);
-    if (this.renderWidth !== width) {
-      this.renderWidth = width; this.gl.setSize(width, Math.round(width * VIEW_HEIGHT / VIEW_WIDTH), false);
-      this.finish.resize(width, Math.round(width * VIEW_HEIGHT / VIEW_WIDTH));
+    const height = Math.round(this.canvas.clientHeight || width * VIEW_HEIGHT / VIEW_WIDTH);
+    if (this.renderWidth !== width || this.renderHeight !== height) {
+      this.renderWidth = width; this.renderHeight = height; this.gl.setSize(width, height, false);
+      this.finish.resize(width, height);
+      const aspect = width / height, halfHeight = Math.max(12.5, 20 / aspect);
+      this.camera.left = -halfHeight * aspect; this.camera.right = halfHeight * aspect;
+      this.camera.top = halfHeight; this.camera.bottom = -halfHeight;
+      this.overlayHeight = Math.round(VIEW_WIDTH / aspect); this.overlay.height = this.overlayHeight;
       const size = width < 600 ? 1024 : 2048;
       if (this.keyLight.shadow.mapSize.x !== size) { this.keyLight.shadow.map?.dispose(); this.keyLight.shadow.map = null; this.keyLight.shadow.mapSize.set(size, size); }
     }
@@ -471,6 +470,6 @@ export class Renderer {
     for (const s of game.level.suppressors ?? []) { const active = game.suppressionActive(s); this.suppressors.get(s.id)!.emissiveIntensity = active ? 1.6 : 0.03; this.label({ x: s.x + s.w / 2, y: s.y }, 0.15, `${s.id} · ${active ? '抑制' : '空档'}`, '#d2a0ef'); }
     for (const r of game.level.delivery?.receivers ?? []) this.label(r.at, 0.1, `${r.guard} 回执${game.evidenceReceipts.has(r.guard) ? ' ✓' : ' …'}`, colors.cyan);
     this.finish.draw(this.scene, this.camera, this.detail, width); this.hud(game, dt);
-    if (arrivalShade > 0) { this.ctx.fillStyle = `rgba(6,18,26,${arrivalShade})`; this.ctx.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT); }
+    if (arrivalShade > 0) { this.ctx.fillStyle = `rgba(6,18,26,${arrivalShade})`; this.ctx.fillRect(0, 0, VIEW_WIDTH, this.overlayHeight); }
   }
 }

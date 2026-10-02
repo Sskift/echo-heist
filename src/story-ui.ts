@@ -43,7 +43,7 @@ export class StoryUI {
     let raw: unknown;
     try { raw = JSON.parse(localStorage.getItem(STORY_KEY) ?? 'null'); } catch { /* New journal. */ }
     this.state = new StoryState(raw);
-    document.querySelector('.campaign-toolbar')!.insertAdjacentHTML('beforeend', '<button id="story-button">修表铺 · 故事与线索</button>');
+    document.querySelector('.campaign-toolbar')!.insertAdjacentHTML('beforeend', '<button id="story-button" title="修表铺 · 故事与线索">修表铺</button>');
     document.body.insertAdjacentHTML('beforeend', `<dialog id="story-dialog" class="story-dialog" aria-labelledby="story-title">
       <div class="story-art">${room}<div class="room-caption"><span>THE WATCHMAKER'S ROOM</span><strong id="story-place"></strong></div></div>
       <div class="story-content"><div class="story-tools"><span id="story-mode"></span><button id="story-sound"></button><button id="story-close" aria-label="收起故事，回到行动">收起 ×</button></div>

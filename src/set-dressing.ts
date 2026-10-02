@@ -97,9 +97,9 @@ export class SetDressing {
     const group = new THREE.Group(); group.position.set(at.x / 32 - 15, 0, at.y / 32 - 9); parent.add(group);
     // The player approaches the front at one tile south of this cabinet.
     this.box(group, 0, .1, 0, 1.72, .2, 1.06, '#283e3c');
-    this.box(group, 0, .98, 0, 1.54, 1.66, .86, '#624a37');
-    this.box(group, 0, 1.88, 0, 1.77, .16, 1.04, '#9a7c4c');
-    this.box(group, 0, 2.0, -.08, 1.15, .11, .66, '#3b514d');
+    this.sculpt(group, 0, .98, 0, 1.54, 1.66, .86, '#b8c3af', .3);
+    this.sculpt(group, 0, 1.83, 0, 1.68, .22, .96, '#d9d2b4', .1);
+    this.sculpt(group, 0, 1.99, -.05, .92, .16, .55, '#536f70', .07);
     for (const x of [-.7, .7]) {
       this.box(group, x, .98, .45, .07, 1.63, .07, '#b29a67', .5);
       this.box(group, x, 1.78, .45, .14, .14, .13, '#c6b57b', .5);
@@ -270,83 +270,83 @@ export class SetDressing {
     if (parent instanceof THREE.Group) this.batchFixed(parent);
   }
 
+  private oval(parent: THREE.Object3D, x: number, y: number, z: number, w: number, h: number, d: number, color: string, glow = 0) {
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), new THREE.MeshStandardMaterial({color, roughness: .88, emissive: color, emissiveIntensity: glow}));
+    mesh.position.set(x, y, z); mesh.scale.set(w, h, d); mesh.castShadow = !glow; mesh.receiveShadow = true;
+    mesh.userData.ownedGeometry = mesh.userData.ownedMaterial = true; parent.add(mesh); return mesh;
+  }
+
+  private ring(parent: THREE.Object3D, x: number, y: number, z: number, radius: number, color: string, horizontal = false, glow = 0) {
+    const mesh = new THREE.Mesh(new THREE.TorusGeometry(radius, .035, 8, 32), new THREE.MeshStandardMaterial({color, roughness: .82, emissive: color, emissiveIntensity: glow}));
+    mesh.position.set(x, y, z); if (horizontal) mesh.rotation.x = -Math.PI / 2;
+    mesh.castShadow = !glow; mesh.userData.ownedGeometry = mesh.userData.ownedMaterial = true; parent.add(mesh); return mesh;
+  }
+
+  pedestal(parent: THREE.Object3D, x: number, z: number) {
+    this.sculpt(parent, x, .1, z, .95, .2, .82, '#43656d', .09);
+    this.sculpt(parent, x, .46, z, .72, .6, .58, '#b9c4b4', .2);
+    this.sculpt(parent, x, .79, z, 1.04, .13, .85, '#dfd4b7', .06);
+  }
+
+  document(parent: THREE.Object3D, height = .86) {
+    this.sculpt(parent, 0, height, 0, .42, .06, .32, '#d6c4a3', .029);
+    this.sculpt(parent, 0, height + .045, 0, .36, .04, .27, '#ece2c6', .018);
+    this.box(parent, -.08, height + .07, 0, .045, .018, .28, '#789793');
+    this.oval(parent, -.08, height + .087, .035, .045, .017, .045, '#a46e5e');
+  }
+
   cover(level: Level, parent: THREE.Object3D, width: number, depth: number, index: number) {
-    const style = setting(level), look = sceneLook(level);
+    const style = setting(level), look = sceneLook(level), w = width * .96, d = depth * .96;
     if (style === 'museum') { this.exhibit(parent, width, depth, index); return true; }
-    if (style === 'archive' || style === 'station') return false;
-    const w = width * 0.96, d = depth * 0.96;
+    this.sculpt(parent, 0, .1, 0, w, .2, d, look.panel, .095);
     if (style === 'gala') {
-      this.box(parent, 0, 0.1, 0, w, 0.2, d, '#3e3540');
-      this.box(parent, 0, 0.64, 0, w * 0.92, 0.94, d * 0.92, '#785b63');
-      this.box(parent, 0, 1.16, 0, w, 0.11, d, '#d2c19a');
-      const sculpture = new THREE.Group(); sculpture.position.y = 1.4; parent.add(sculpture);
-      const piece = this.box(sculpture, 0, 0, 0, Math.min(w, d) * 0.37, 0.36, Math.min(w, d) * 0.37, '#b29b64', 0.65); piece.rotation.set(0.2, Math.PI / 4, 0.3);
-    } else if (style === 'records') {
-      for (const x of [-0.3, 0.3]) this.box(parent, x * w, 0.09, 0, w * 0.16, 0.18, d, '#62523f');
-      this.box(parent, 0, 0.24, 0, w, 0.1, d, '#a99069');
-      for (let i = 0; i < 2; i++) {
-        this.box(parent, 0, 0.57 + i * 0.57, 0, w * 0.94, 0.55, d * 0.94, i ? '#a18e66' : '#7d8168');
-        this.box(parent, 0, 0.57 + i * 0.57, d * 0.48, w * 0.17, 0.55, 0.02, '#d4be87');
-        this.box(parent, w * 0.23, 0.6 + i * 0.57, d * 0.49, w * 0.23, 0.17, 0.02, '#e6d8b1');
-      }
+      this.sculpt(parent, 0, .59, 0, w * .85, .86, d * .85, look.cap, .22);
+      const fold = this.oval(parent, 0, 1.18, 0, Math.min(w,d) * .25, .38, Math.min(w,d) * .12, '#d9c5a8'); fold.rotation.z = -.4;
+      this.ring(parent, 0, 1.33, 0, Math.min(w,d) * .24, look.trim);
+    } else if (style === 'station' || style === 'records' || style === 'archive') {
+      this.sculpt(parent, 0, .67, 0, w * .93, 1.13, d * .93, look.cap, .24);
+      this.sculpt(parent, 0, .62, d * .47, w * .74, .67, .07, look.panel, .03);
+      // Two broad archive drawers / cargo ribs keep their purpose without tiny fittings.
+      for (const y of [.43, .79]) this.sculpt(parent, 0, y, d * .52, w * .64, .17, .08, look.plaster, .035);
+      if (style === 'records' || style === 'archive') this.document(parent, 1.25);
+    } else if (style === 'power' || style === 'retention') {
+      this.sculpt(parent, 0, .84, 0, w * .94, 1.46, d * .94, look.panel, .28);
+      for (const side of [-1, 1]) this.sculpt(parent, side * w * .31, .84, d * .35, w * .24, 1.27, d * .25, look.cap, .12);
+      this.oval(parent, 0, .92, d * .48, w * .18, .43, .08, look.plaster);
     } else {
-      this.box(parent, 0, 0.08, 0, w, 0.16, d, '#344349', 0.4);
-      this.box(parent, 0, 0.85, 0, w * 0.96, 1.4, d * 0.96, look.panel, 0.35);
-      this.box(parent, 0, 1.59, 0, w, 0.09, d, look.cap, 0.5);
-      if (style === 'power' || style === 'retention') {
-        for (let i = 0; i < 5; i++) this.box(parent, 0, 0.38 + i * 0.19, d * 0.49, w * 0.79, 0.075, 0.04, style === 'power' ? '#8e9b98' : '#5d6681', 0.3);
-        this.box(parent, w * 0.33, 1.42, d * 0.49, w * 0.12, 0.055, 0.045, look.trim, 0.4);
-      } else if (style === 'civic') {
-        for (let i = 0; i < 3; i++) {
-          this.box(parent, 0, 0.42 + i * 0.41, d * 0.49, w * 0.85, 0.35, 0.035, '#648075');
-          this.box(parent, 0, 0.48 + i * 0.41, d * 0.52, w * 0.26, 0.04, 0.04, look.trim, 0.6);
-        }
-      } else {
-        this.box(parent, 0, 0.87, d * 0.49, w * 0.84, 1.24, 0.035, '#7c949c', 0.65);
-        this.box(parent, 0, 0.88, d * 0.54, w * 0.38, 0.07, 0.08, '#d4bf8a', 0.7);
-        this.box(parent, 0, 0.88, d * 0.54, 0.07, 0.4, 0.08, '#d4bf8a', 0.7);
-      }
+      this.sculpt(parent, 0, .8, 0, w * .94, 1.4, d * .94, look.cap, .25);
+      this.sculpt(parent, 0, .79, d * .47, w * .71, 1.07, .06, look.panel, .029);
+      if (style === 'civic') for (const y of [.43, .75, 1.07]) this.sculpt(parent, 0, y, d * .51, w * .52, .16, .09, look.plaster, .04);
+      else this.ring(parent, 0, .86, d * .52, Math.min(w,d) * .22, look.trim);
     }
     return true;
   }
 
   circuit(parent: THREE.Object3D, level: Level, circuit: Circuit) {
     const look = sceneLook(level), group = new THREE.Group();
-    group.position.set(circuit.x / 32 - 15, 0, circuit.y / 32 - 9 - 0.25); parent.add(group);
-    if (circuit.mechanical) {
-      // Open bronze linkage, visibly distinct from an electrical cabinet.
-      this.box(group, 0, 0.07, 0, 0.72, 0.14, 0.58, '#50483c', 0.4);
-      for (const x of [-0.23, 0.23]) this.box(group, x, 0.48, 0, 0.09, 0.82, 0.14, '#ad8d55', 0.7);
-      this.box(group, 0, 0.83, 0, 0.64, 0.12, 0.15, '#8e7149', 0.7);
-      const lever = new THREE.Group(); lever.position.set(0, 0.72, 0.07); group.add(lever);
-      this.box(lever, 0, 0.2, 0.1, 0.065, 0.47, 0.065, '#c8aa72', 0.7);
-      this.box(lever, 0, 0.43, 0.1, 0.34, 0.095, 0.095, '#704536');
-      const lamp = this.box(group, 0, 0.35, 0.12, 0.24, 0.12, 0.035, '#c7b386');
-      lamp.material = new THREE.MeshStandardMaterial({ color: '#c7b386', roughness: 0.7 }); lamp.userData.ownedMaterial = true;
-      return { lamp, lever };
-    }
+    group.position.set(circuit.x / 32 - 15, 0, circuit.y / 32 - 9 - .25); parent.add(group);
+    this.sculpt(group, 0, .09, 0, .8, .18, .66, look.panel, .08);
+    const bone = '#d3cfb3';
     if (circuit.feed) {
-      this.box(group, 0, 0.08, 0, 0.74, 0.16, 0.62, '#354b4e', 0.5);
-      this.box(group, 0, 0.56, 0, 0.64, 0.8, 0.48, '#476572', 0.4);
-      this.box(group, 0, 0.58, 0.25, 0.5, 0.59, 0.045, '#243c44', 0.5);
-      for (const x of [-0.15, 0.15]) {
-        this.box(group, x, 0.58, 0.285, 0.075, 0.39, 0.06, '#c7a66d', 0.7);
-        for (const y of [0.42, 0.57, 0.72]) this.box(group, x, y, 0.32, 0.16, 0.06, 0.06, '#778e8a', 0.4);
-      }
-      const lamp = this.box(group, 0, 0.89, 0.285, 0.42, 0.07, 0.05, '#b8d78e');
-      lamp.material = new THREE.MeshStandardMaterial({ color: '#b8d78e', emissive: '#b8d78e', emissiveIntensity: 0.8 }); lamp.userData.ownedMaterial = true;
-      return { lamp, lever: undefined };
+      this.sculpt(group, 0, .47, 0, .58, .66, .48, look.panel, .18);
+      for (const side of [-1, 1]) this.oval(group, side * .2, .67, .07, .11, .43, .19, bone);
+      this.ring(group, 0, .62, .28, .17, look.cap);
+      const lamp = this.oval(group, 0, .62, .3, .11, .11, .035, '#b8d78e', .8);
+      return {lamp, lever: undefined};
     }
-    this.box(group, 0, 0.08, 0, 0.7, 0.16, 0.65, '#354b4e', 0.4);
-    this.box(group, 0, 0.52, 0, 0.62, 0.76, 0.48, look.panel, 0.4);
-    this.box(group, 0, 0.64, 0.25, 0.49, 0.44, 0.045, '#aaa98c', 0.45);
-    this.box(group, 0, 0.61, 0.28, 0.06, 0.28, 0.03, '#293d41');
-    const lever = new THREE.Group(); lever.position.set(0, 0.59, 0.29); group.add(lever);
-    this.box(lever, 0, 0.11, 0.09, 0.045, 0.23, 0.045, '#ded4ad', 0.6);
-    this.box(lever, 0, 0.23, 0.09, 0.19, 0.09, 0.09, '#825444');
-    const lamp = this.box(group, 0, 0.93, 0, 0.2, 0.05, 0.2, '#b8d78e');
-    lamp.material = new THREE.MeshStandardMaterial({ color: '#b8d78e', emissive: '#b8d78e', emissiveIntensity: 0.8 }); lamp.userData.ownedMaterial = true;
-    return { lamp, lever };
+    if (circuit.mechanical) {
+      // Exposed bridge and jaws distinguish a physical latch from the sealed power pod.
+      for (const side of [-1, 1]) this.sculpt(group, side * .26, .5, .02, .16, .76, .33, bone, .075);
+      this.sculpt(group, 0, .86, .02, .65, .15, .32, bone, .07);
+    } else {
+      this.sculpt(group, 0, .48, 0, .63, .73, .47, bone, .21);
+      this.sculpt(group, 0, .5, .24, .35, .4, .07, look.panel, .03);
+    }
+    const lever = new THREE.Group(); lever.position.set(0, .62, .26); group.add(lever);
+    this.sculpt(lever, 0, .13, .065, .07, .3, .09, look.cap, .034);
+    this.oval(lever, 0, .28, .07, .16, .067, .067, '#9a7360');
+    const lamp = this.oval(group, 0, .87, -.03, .12, .045, .105, '#b8d78e', .8);
+    return {lamp, lever};
   }
 
   field(parent: THREE.Object3D, area: { x: number; y: number; w: number; h: number }, color: string) {
@@ -361,11 +361,10 @@ export class SetDressing {
   }
 
   core(parent: THREE.Object3D) {
-    this.box(parent, 0, 0.87, 0, 0.54, 0.13, 0.4, '#3b5359', 0.6);
-    this.box(parent, 0, 1.11, 0, 0.35, 0.36, 0.3, '#95c1bb', 0.4);
-    for (const x of [-0.22, 0.22]) this.box(parent, x, 1.09, 0, 0.07, 0.38, 0.35, '#b7ac83', 0.7);
-    this.box(parent, 0, 1.32, 0, 0.53, 0.09, 0.4, '#d4be8b', 0.6);
-    for (const y of [1.02, 1.18]) this.box(parent, 0, y, 0.16, 0.24, 0.04, 0.015, '#d2e4c2');
+    this.ring(parent, 0, .89, 0, .26, '#bcb699', true);
+    this.oval(parent, 0, 1.12, 0, .19, .29, .19, '#a4d8c9', .24);
+    for (const side of [-1, 1]) this.oval(parent, side * .2, 1.09, 0, .07, .3, .17, '#ddd2b1');
+    this.ring(parent, 0, 1.12, 0, .24, '#648782');
   }
 
   watch(parent: THREE.Object3D, height: number, scale = 1) {
@@ -380,92 +379,32 @@ export class SetDressing {
   }
 
   terminal(parent: THREE.Object3D, terminal: Terminal, station: boolean) {
-    const group = new THREE.Group(), at = { x: terminal.x / 32 - 15, z: terminal.y / 32 - 9 - 0.38 }; group.position.set(at.x, 0, at.z); parent.add(group);
-    if (terminal.appearance === 'review') {
-      this.box(group, 0, 0.09, 0, 0.96, 0.18, 0.75, '#aeb29d');
-      this.box(group, 0, 0.45, 0, 0.74, 0.64, 0.56, '#355e59');
-      for (const x of [-0.33, 0.33]) this.box(group, x, 0.46, 0.28, 0.045, 0.59, 0.035, '#bfaa74', 0.5);
-      this.box(group, 0, 0.81, 0, 1.06, 0.13, 0.82, '#d0c6a8');
-      this.box(group, 0, 0.39, 0.3, 0.48, 0.13, 0.045, '#152f35');
-      this.box(group, 0, 0.3, 0.33, 0.58, 0.04, 0.13, '#c1a974', 0.5);
-      this.box(group, -0.19, 0.9, 0.08, 0.32, 0.028, 0.39, '#e5dac0');
-      for (let i = 0; i < 3; i++) this.box(group, -0.19, 0.916, -0.03 + i * 0.07, 0.21, 0.006, 0.011, '#8c9b8b');
-      if (terminal.kind === 'lock') {
-        this.box(group, 0.27, 0.92, -0.1, 0.24, 0.07, 0.25, '#3d4b46', 0.4);
-        this.box(group, 0.27, 1.02, -0.16, 0.045, 0.25, 0.045, '#bc9a61', 0.6);
-        this.box(group, 0.27, 1.13, -0.08, 0.18, 0.045, 0.21, '#bc9a61', 0.6);
-      } else for (let i = 0; i < 2; i++) this.box(group, 0.25, 0.9 + i * 0.045, -0.1, 0.28, 0.035, 0.35, i ? '#94aba0' : '#b9a06e');
-      this.batchFixed(group);
-      const ticket = this.box(group, 0, 0.4, 0.33, 0.32, 0.07, 0.045, '#ffe0a0'); ticket.visible = false;
-      const screen = this.box(group, 0, 0.9, -0.32, 0.37, 0.035, 0.13, '#78bfc2');
-      screen.material = new THREE.MeshStandardMaterial({ color: '#78bfc2', emissive: '#78bfc2', emissiveIntensity: 0.35 }); screen.userData.ownedMaterial = true;
-      return { screen, ticket };
-    }
-    if (terminal.appearance) {
-      const old = terminal.appearance === 'legacy', casing = old ? '#664833' : '#385668', trim = old ? '#bd9956' : '#9aadb5';
-      this.box(group, 0, 0.08, 0, 0.93, 0.16, 0.64, '#263b40', 0.25);
-      this.box(group, 0, 0.47, 0, 0.86, 0.68, 0.55, casing, old ? 0 : 0.35);
-      this.box(group, 0, 0.84, 0, 1.04, 0.1, 0.73, trim, 0.4);
-      this.box(group, 0, 0.55, 0.29, 0.62, 0.27, 0.025, '#142c35');
-      this.box(group, 0, 0.41, 0.36, 0.48, 0.04, 0.15, trim, 0.6);
-      for (const x of [-0.37, 0.37]) {
-        this.box(group, x, 0.48, 0.295, old ? 0.055 : 0.085, 0.62, 0.055, trim, 0.4);
-        if (!old) for (const y of [0.21, 0.75]) this.box(group, x, y, 0.34, 0.035, 0.035, 0.025, '#283a43', 0.5);
-      }
-      const sign = new THREE.Group(); sign.position.set(0, 0.23, 0.22); group.add(sign);
-      this.panel(sign, 0.59, 0.19, c => {
-        c.fillStyle = old ? '#503c28' : '#213f52'; c.fillRect(0, 0, 512, 384);
-        c.fillStyle = '#e4d1a2'; c.textAlign = 'center'; c.font = 'bold 130px serif'; c.fillText(old ? '旧班' : '人工', 256, 244);
-      });
-      if (old) {
-        this.box(group, 0, 0.965, -0.23, 0.72, 0.16, 0.12, casing);
-        this.box(group, 0, 1.06, -0.23, 0.79, 0.04, 0.16, trim, 0.4);
-      }
-      this.batchFixed(group);
-      const ticket = this.box(group, 0, 0.54, 0.325, 0.32, 0.07, 0.045, '#ffe0a0'); ticket.visible = false;
-      const screen = this.box(group, 0, 0.9, -0.05, 0.4, 0.045, 0.23, '#78bfc2');
-      screen.material = new THREE.MeshStandardMaterial({ color: '#78bfc2', emissive: '#78bfc2', emissiveIntensity: 0.35 }); screen.userData.ownedMaterial = true;
-      return { screen, ticket };
-    }
+    const group = new THREE.Group(); group.position.set(terminal.x / 32 - 15, 0, terminal.y / 32 - 9 - .38); parent.add(group);
     if (station && ['FAST', 'SERVICE'].includes(terminal.id)) {
-      const west = terminal.x < 448; group.position.set(terminal.x / 32 - 15 + (west ? 0.38 : -0.38), 0, terminal.y / 32 - 9);
+      const west = terminal.x < 448; group.position.set(terminal.x / 32 - 15 + (west ? .38 : -.38), 0, terminal.y / 32 - 9);
       group.rotation.y = west ? -Math.PI / 2 : Math.PI / 2;
     }
-    const cabinet = station && ['FAST', 'SERVICE', 'ARCHIVE', 'RETURN'].includes(terminal.id);
-    const tint = terminal.id === 'SERVICE' ? '#a77e45' : terminal.id === 'FAST' ? '#437e82' : '#48616a';
-    const width = cabinet ? .88 : .74, body = cabinet ? tint : station ? '#3e5d59' : '#5e5646';
-    this.box(group, 0, .07, 0, width + .05, .14, .61, '#253d40');
-    this.box(group, 0, .44, 0, width, .65, .55, body);
-    this.box(group, 0, .76, 0, width + .09, .045, .62, '#b69a66', .65);
-    this.box(group, 0, .825, 0, cabinet ? 1 : .86, .09, .71, '#b9b09a');
-    this.box(group, 0, .405, .286, width - .16, .42, .025, '#263f40');
-    for (const side of [-1, 1]) {
-      this.box(group, side * (width / 2 - .045), .43, .3, .035, .57, .045, '#a78e61', .65);
-      this.box(group, side * (width / 2 - .07), .16, .313, .065, .042, .025, '#d0ba78', .65);
-    }
-    this.box(group, 0, .64, .31, width - .18, .075, .035, body);
-    this.box(group, 0, .53, .325, .22, .03, .045, '#d0ba78', .65);
-    // A bound register and a seal belong to the desk, distinct from the one
-    // luminous credential which appears only in its actual holder's slot.
-    const register = new THREE.Group(); register.position.set(-.2, .882, .14); register.rotation.y = -.16; group.add(register);
-    this.box(register, 0, .016, 0, .25, .032, .29, '#384f47');
-    this.box(register, 0, .039, .005, .215, .018, .25, '#c7bda1');
-    this.box(register, 0, .055, 0, .25, .017, .29, '#384f47');
-    this.box(register, -.07, .065, 0, .011, .005, .25, '#b89d67', .5); this.batchFixed(register);
+    const shell = terminal.appearance === 'legacy' ? '#c4a27d' : terminal.appearance === 'manual' ? '#b8c0c8' : '#d8d3b9';
+    const lining = terminal.id === 'SERVICE' ? '#91725f' : terminal.appearance === 'review' ? '#567772' : '#42656e';
+    this.sculpt(group, 0, .09, 0, .86, .18, .69, lining, .08);
+    this.sculpt(group, 0, .48, -.025, .73, .69, .57, shell, .22);
+    this.sculpt(group, 0, .58, .24, .52, .35, .08, lining, .035);
+    this.sculpt(group, 0, .385, .33, .61, .055, .24, shell, .026);
     if (terminal.kind === 'lock') {
-      this.box(group, .26, .89, .12, .17, .035, .17, '#a08761', .5);
-      this.box(group, .26, .975, .12, .065, .14, .065, '#3d4440');
+      // Upright seal ring identifies authorisation, rather than a second storage slot.
+      this.ring(group, 0, 1.07, -.1, .25, shell);
+      this.sculpt(group, 0, .87, -.1, .07, .26, .09, lining, .034);
+    } else if (terminal.kind === 'source') {
+      this.oval(group, 0, .87, -.055, .37, .15, .25, shell);
+      this.sculpt(group, 0, .9, .14, .48, .06, .09, lining, .028);
+    } else {
+      for (const side of [-1, 1]) this.oval(group, side * .26, .81, -.04, .09, .24, .22, shell);
     }
-    if (cabinet) {
-      this.box(group, 0, 0.52, 0.29, 0.69, 0.28, 0.03, '#1d3b42');
-      this.box(group, 0, 0.39, 0.34, 0.28, 0.035, 0.06, '#d0ba78', 0.65);
-      this.box(group, -0.3, 0.13, 0.29, 0.12, 0.05, 0.035, '#d0ba78', 0.65);
-      this.box(group, 0.3, 0.13, 0.29, 0.12, 0.05, 0.035, '#d0ba78', 0.65);
-    }
-    this.batchFixed(group);
-    const ticket = this.box(group, 0, 0.57, 0.34, 0.32, 0.07, 0.045, '#ffe0a0'); ticket.visible = false;
-    const screen = this.box(group, 0, 0.875, -0.1, 0.4, 0.045, 0.23, '#78bfc2');
-    screen.material = new THREE.MeshStandardMaterial({ color: '#78bfc2', emissive: '#78bfc2', emissiveIntensity: 0.35 }); screen.userData.ownedMaterial = true;
-    return { screen, ticket };
+    if (terminal.appearance === 'legacy') this.ring(group, -.39, .58, .04, .14, '#a37f5c');
+    if (terminal.appearance === 'manual') this.sculpt(group, .34, .56, .22, .08, .31, .12, lining, .035);
+    if (terminal.appearance === 'review') for (const side of [-1, 1]) this.sculpt(group, side * .32, .24, .05, .085, .25, .47, lining, .04);
+    const ticket = this.sculpt(group, 0, .57, .308, .32, .075, .04, '#ffe0a0', .018); ticket.visible = false;
+    const screen = this.oval(group, 0, .83, .12, .16, .04, .09, '#94d7cd', .45);
+    return {screen, ticket};
   }
 }

@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-import {clock,advance,move,routeAction} from './helpers.ts';
+import {clock,advance,move,routeAction,preview} from './helpers.ts';
 import {MISSIONS} from '../../src/campaign-content.ts';
 import {contractById} from '../../src/contract-content.ts';
 import {Game} from '../../src/engine.ts';
@@ -50,7 +50,7 @@ test('a real contract records one echo, freezes through reload, settles once and
   await page.keyboard.press('r');await advance(page);
   await expect(page.locator('#echo-count')).toHaveText('1 / 1');
   const checkpoint=await page.evaluate(()=>localStorage.getItem('echo-heist-contracts-v1'));
-  await page.locator('#preview-button').click();
+  await preview(page);
   await page.locator('#preview-frame').fill('720');await page.locator('#preview-frame').dispatchEvent('input');await advance(page);
   await page.locator('#contracts-button').click();
   await expect(page.locator('#contracts-refresh')).toBeDisabled();
