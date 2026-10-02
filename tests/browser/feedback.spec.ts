@@ -12,17 +12,22 @@ test('the introductory plate cues recording only after real pressure, then expla
   await expect(page.locator('#record-button')).not.toHaveClass(/lesson-ready/);
   for (const action of stage.witness.slice(0, 2)) await routeAction(page, model, action);
   await expect(page.locator('#record-button')).toHaveClass(/lesson-ready/);
-  await page.locator('.arena').screenshot({path:'.local/feedback-plate.png'});
-  await openPlanning(page); await advance(page,60);
+  // Full-scene GPU readbacks took 91s + 57s on the CI software renderer.
+  // Keep the actual 3D interaction and assert its outcomes here; visual-review
+  // captures are separate, and Playwright still attaches images on failure.
+  await openPlanning(page); await advance(page,30);
   await expect(page.locator('#record-button')).not.toHaveClass(/lesson-ready/);
   await closePlanning(page); await advance(page);
   await expect(page.locator('#record-button')).toHaveClass(/lesson-ready/);
   await routeAction(page, model, stage.witness[2]);
   await expect(page.locator('#record-button')).not.toHaveClass(/lesson-ready/);
-  await advance(page,160);
-  await page.locator('.arena').screenshot({path:'.local/feedback-held.png'});
+  await advance(page,model.echoes[0].frames.length + 10);
+  await expect(page.locator('[data-echo-state="0"]')).toHaveText('守住 A 开关');
   await page.setViewportSize({width:390,height:844}); await advance(page);
-  await page.screenshot({path:'.local/feedback-phone.png'});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await openPlanning(page); await advance(page);
+  await expect(page.locator('[data-echo-state="0"]')).toBeVisible();
+  await expect(page.locator('[data-echo-state="0"]')).toHaveText('守住 A 开关');
   expect(errors).toEqual([]);
 });
 
