@@ -33,18 +33,6 @@
     "bundled": "src/assets/music/pynchon.mp3"
   },
   {
-    "title": "Kenney Furniture Kit",
-    "author": "Kenney Vleugels",
-    "sourcePage": "https://kenney.nl/assets/furniture-kit",
-    "download": "https://kenney.nl/media/pages/assets/furniture-kit/440e0608a4-1677580847/kenney_furniture-kit.zip",
-    "license": "CC0-1.0",
-    "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
-    "verifiedDate": "2026-10-01",
-    "originalSHA256": "e67652d0932cee41683f74711c03d3e192a2af9979ef8e6b237711f5482d46b0",
-    "bundled": "src/assets/models/*.glb",
-    "modifications": "Original files unchanged; furniture is rescaled and recolored at runtime. Additional architecture and display cases are built in project code."
-  },
-  {
     "title": "Kenney Animated Characters Protagonists",
     "author": "Kenney Vleugels",
     "sourcePage": "https://kenney.nl/assets/animated-characters-protagonists",

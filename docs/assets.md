@@ -1,5 +1,7 @@
 # 声画素材 / v0.28.0
 
+v0.28 之后的资源清理：删除 8 个已不在场景中显示的 Kenney Furniture Kit GLB，以及对应的加载代码、GLB 打包规则、家具许可文本和游戏内鸣谢。可见的家具、柜台、展台与陈设全部由本项目代码建模。同时删除自 0.16 起已无对应素材的 Top-down Shooter 许可文本。构建 JS 减小约 211 KB，场景画面不变。
+
 0.28 的八章背景建筑、台基与墙体由 `src/environment-art.ts` 原创建模；状态光路、时段圆环和操作反馈由 `src/scene-feedback.ts` / `src/scene3d.ts` 在本地绘制。沿用 v0.27 的原创人物外观与统一设备。没有新增外部图片、模型、字体或许可；既有骨架、动画与内嵌素材继续保留来源和许可。
 
 0.23 的失物柜由 `src/set-dressing.ts` 原创建模：木材、黄铜框、分格抽屉、回执槽与双状态姓名铭牌；铭牌纹理由本地 Canvas 生成。序章和终章使用同一模型、位置与旧馆空间，铭牌和纸张读取实际凭据持有状态。没有新增外部素材、许可或运行时请求。
@@ -16,7 +18,7 @@
 
 0.16 使用真实 3D 家具与人物模型、骨骼动画、物理材质和实时阴影。固定正交镜头形成 2.5D 视角。建筑墙面、铜框窗、门禁、地板纹理、灯光和交互提示由项目代码生成，家具与人物来自下表列出的 CC0 资源。旧的 Top-down Shooter 平面精灵与场景绘制代码已移除。
 
-模型、贴图、动画与音乐均内嵌在本地构建中。GLB 与 FBX 原文件不改，运行时调整尺寸与材质；家具木材统一调色，人物骨架来自 criminalMaleA，0.22 可见网格为项目原创，Idle / Run 动画按模拟时间播放，回声透明着色。模型包中的 Targeting Pose 不作为跑步动作使用。3D 渲染库 Three.js 使用 MIT 许可，全文见 [Three-MIT.txt](../licenses/Three-MIT.txt)。
+模型、贴图、动画与音乐均内嵌在本地构建中。FBX 原文件不改，运行时调整尺寸与材质；人物骨架来自 criminalMaleA，0.22 可见网格为项目原创，Idle / Run 动画按模拟时间播放，回声透明着色。模型包中的 Targeting Pose 不作为跑步动作使用。3D 渲染库 Three.js 使用 MIT 许可，全文见 [Three-MIT.txt](../licenses/Three-MIT.txt)。
 
 0.15 的观察窗、街区灯窗、留守回声标记为 Canvas 原创绘制，复用已有房间材质与角色图。CIV 重接后的远处电车铃由 Web Audio 合成，不新增第三方素材或网络请求。
 
@@ -28,13 +30,12 @@
 
 | 内容 | 作者 | 原始页面 | 采用许可 | 使用与修改 |
 | --- | --- | --- | --- | --- |
-| Furniture Kit | Kenney Vleugels | [Kenney 家具](https://kenney.nl/assets/furniture-kit) | CC0 1.0 | 8 个 GLB：档案柜、书架、抽屉柜、桌子、壁灯、书、植物和收音机；运行时缩放、调整高度与材质 |
 | Animated Characters Protagonists | Kenney Vleugels | [Kenney 人物](https://kenney.nl/assets/animated-characters-protagonists) | CC0 1.0 | characterMedium 模型、criminalMaleA 皮肤、Idle / Run 动画；保持原文件，运行时着色与骨骼播放 |
 | Espionage | brandon75689，HaelDB 上传 | [OpenGameArt](https://opengameart.org/content/espionage) | CC0 1.0（从页面列出的许可中选用） | 旧馆、夜场与转运场景配乐；从 OGG 转为 MP3，统一响度 |
 | Strange Experiments | Alexander Ehlers / tricksntraps | [OpenGameArt](https://opengameart.org/content/t-t-free-cyberpunk-pack-2) | CC0 1.0 | 工业与核验场景配乐；从 OGG 转为 MP3，统一响度 |
 | PYNCHON | James Gargette / cinameng | [OpenGameArt](https://opengameart.org/content/pynchon) | CC0 1.0 | 旧渡口结局配乐；重新编码并统一响度 |
 
-2026-10-01 核对原始发布页面。许可全文保留在 [CC0-1.0.txt](../licenses/CC0-1.0.txt)，模型包许可保留在 [家具许可](../licenses/Kenney-Furniture-CC0.txt) 和 [人物许可](../licenses/Kenney-Characters-CC0.txt)。来源、下载地址、原始包 SHA-256 见 [asset-sources.json](../licenses/asset-sources.json)，实际打包文件的大小和 SHA-256 见 [asset-hashes.json](../licenses/asset-hashes.json)。CC0 不要求署名，本项目仍保留作者鸣谢。
+2026-10-01 核对原始发布页面。许可全文保留在 [CC0-1.0.txt](../licenses/CC0-1.0.txt)，人物模型包许可保留在 [人物许可](../licenses/Kenney-Characters-CC0.txt)。来源、下载地址、原始包 SHA-256 见 [asset-sources.json](../licenses/asset-sources.json)，实际打包文件的大小和 SHA-256 见 [asset-hashes.json](../licenses/asset-hashes.json)。CC0 不要求署名，本项目仍保留作者鸣谢。
 
 音乐转换使用 FFmpeg：`loudnorm=I=-23:TP=-3:LRA=9`，44.1 kHz、112 kbit/s MP3；保留整曲，不加速或重编旋律。原始文件留在被 Git 忽略的 `.local/asset-sources`，运行时只使用仓库内的成品。未采用候选 Night Club，发布包也不包含它。
 

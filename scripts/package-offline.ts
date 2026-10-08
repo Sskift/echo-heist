@@ -112,6 +112,6 @@ C3-6《最后一盏灯》：配电室布置、隔窗取核心、回原处恢复�
 构建对应：${commit}
 `);
 const sources: { title: string; author: string; sourcePage: string; license: string }[] = JSON.parse(readFileSync('licenses/asset-sources.json', 'utf8'));
-writeFileSync(join(target, '素材鸣谢.txt'), `回声劫案 / 免费素材鸣谢\n\n${sources.map(s => `${s.title}\n${s.author}\n${s.license}\n${s.sourcePage}`).join('\n\n')}\n\n音乐统一响度并转为 MP3；家具、人物和动画原文件未修改，运行时缩放与调色。\n建筑、地板、门禁和交互提示由本项目绘制与建模。\n3D 渲染：Three.js / MIT，见 Three-MIT.txt。\n所有运行资源已包含在 HTML 中，外部链接仅用于查看作者页面。\n许可全文：CC0-1.0.txt；Kenney-Furniture-CC0.txt；Kenney-Characters-CC0.txt。\n`);
-for (const file of ['CC0-1.0.txt', 'Kenney-Furniture-CC0.txt', 'Kenney-Characters-CC0.txt', 'Three-MIT.txt']) copyFileSync(join('licenses', file), join(target, file));
+writeFileSync(join(target, '素材鸣谢.txt'), `回声劫案 / 免费素材鸣谢\n\n${sources.map(s => `${s.title}\n${s.author}\n${s.license}\n${s.sourcePage}`).join('\n\n')}\n\n音乐统一响度并转为 MP3；人物骨架和动画原文件未修改，运行时缩放并驱动本项目建模的角色外观。\n建筑、家具、地板、门禁和交互提示由本项目绘制与建模。\n3D 渲染：Three.js / MIT，见 Three-MIT.txt。\n所有运行资源已包含在 HTML 中，外部链接仅用于查看作者页面。\n许可全文：CC0-1.0.txt；Kenney-Characters-CC0.txt。\n`);
+for (const file of ['CC0-1.0.txt', 'Kenney-Characters-CC0.txt', 'Three-MIT.txt']) copyFileSync(join('licenses', file), join(target, file));
 console.log(JSON.stringify({ target: join(target, filename), bytes: Buffer.byteLength(html), version, commit, embeddedAssets: assets.length }));
